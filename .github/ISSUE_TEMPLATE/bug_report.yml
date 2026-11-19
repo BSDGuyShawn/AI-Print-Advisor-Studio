@@ -1,0 +1,40 @@
+name: Something isn't working
+description: The app shows an error, crashes, or doesn't do what you expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please **don't paste your API key** or other secrets here.
+        A failed *print* (not the app)? Try the app's troubleshooter first: Print history → Troubleshoot…
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you click, what did you expect, and what happened instead?
+      placeholder: I opened a model from MakerWorld, clicked "Get recommended settings" and got the error "…"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Settings (gear icon) → the line at the bottom, or the name of the zip you downloaded.
+      placeholder: "2.17.0"
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Which app?
+      options:
+        - Full app
+        - Demo
+  - type: textarea
+    id: log
+    attributes:
+      label: Log (optional)
+      description: Help → Open Log Folder, then attach or paste app.log. Check it doesn't contain anything you'd rather not share.
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot (optional)
+      description: Drag a screenshot here.

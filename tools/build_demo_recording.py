@@ -50,7 +50,8 @@ def main():
             k['r'] = [x for x in k['r'] if x.get('id') != 'as-printed']
     kept = [k for k in kept if not (k['m'] == 'slice-variants' and not k['r'])]
     text = scrub(json.dumps(kept, ensure_ascii=False))
-    for bad in ('jamis', 'sk-ant', 'scratchpad', 'AppData'):
+    import os
+    for bad in [b for b in (os.environ.get('USERNAME', ''), 'sk-ant', 'scratchpad', 'AppData') if b]:   # your Windows user name, keys, temp paths
         if bad.lower() in text.lower(): print(f'WARNING: "{bad}" still appears in the recording');
     open(out, 'w', encoding='utf-8').write(text)
     print(f'{out}: {len(kept)} answers, {len(text) / 1e6:.2f} MB')

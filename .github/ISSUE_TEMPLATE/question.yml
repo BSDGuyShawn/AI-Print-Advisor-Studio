@@ -1,0 +1,14 @@
+name: Question or idea
+description: Ask how something works, or suggest a feature.
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Many answers are already in the [FAQ](https://github.com/jtroberts83/AI-Print-Advisor-Studio/blob/main/docs/FAQ.md) and the [user guide](https://github.com/jtroberts83/AI-Print-Advisor-Studio/blob/main/docs/USER-GUIDE.md).
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question or idea
+    validations:
+      required: true

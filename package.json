@@ -4,11 +4,18 @@
   "version": "2.17.0",
   "description": "Free desktop helper for the Snapmaker U1: checks your .3mf, recommends Snapmaker Orca settings with AI, compares real slices, sends to your printers and troubleshoots failed prints.",
   "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
   "author": "Jamison",
   "license": "AGPL-3.0-only",
   "dependencies": {
     "jszip": "3.10.1",
+    "meshoptimizer": "0.22.0",
     "ws": "8.18.0"
+  },
+  "devDependencies": {
+    "electron": "33.2.1"
   },
   "homepage": "https://github.com/jtroberts83/AI-Print-Advisor-Studio",
   "repository": {

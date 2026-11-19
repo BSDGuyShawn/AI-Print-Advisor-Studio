@@ -82,7 +82,7 @@ def demo_data(args, demo_dir, exe):
         for f in files:
             if f.endswith('.json'):
                 t = open(os.path.join(root, f), encoding='utf-8').read()
-                for bad in ('sk-ant', 'jamis', 'amazon.com/gp/your-account', 'apiKey'):
+                for bad in [b for b in ('sk-ant', os.environ.get('USERNAME', ''), 'amazon.com/gp/your-account', 'apiKey') if b]:   # keys, your Windows user name, order links
                     if bad in t: sys.exit(f'Stopped: "{bad}" found in {os.path.join(root, f)}')
 
 def main():

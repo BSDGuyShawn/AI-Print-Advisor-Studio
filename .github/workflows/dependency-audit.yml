@@ -1,0 +1,62 @@
+# Checks the libraries the app uses against known vulnerabilities (CVEs): npm audit and Google's OSV-Scanner.
+# The app's own libraries (jszip, meshoptimizer, ws) must be clean. The Electron runtime is reported separately:
+# see "Known limitations" in SECURITY.md.
+name: Dependency audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "41 4 * * 1"   # every Monday
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  app-libraries:
+    name: App libraries (npm audit + OSV-Scanner)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Resolve exact versions (lockfile, no install scripts)
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: npm audit (libraries shipped in the app)
+        run: npm audit --omit=dev --audit-level=low
+      - name: OSV-Scanner
+        run: |
+          curl -sSfL -o osv-scanner https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64
+          chmod +x osv-scanner
+          ./osv-scanner scan source --lockfile package-lock.json --format table | tee osv-report.txt
+      - name: Keep the lockfile and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit
+          path: |
+            package-lock.json
+            osv-report.txt
+          if-no-files-found: ignore
+
+  electron-runtime:
+    name: Electron runtime (report only)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: npm audit including Electron
+        run: |
+          npm audit --audit-level=low | tee audit.txt
+          echo '### Electron runtime audit' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat audit.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

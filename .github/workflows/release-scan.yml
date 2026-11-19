@@ -1,0 +1,49 @@
+# When a release is published: virus-scan every zip with ClamAV (the zips and everything inside them), work out
+# SHA-256 checksums, and attach SHA256SUMS.txt and the scan report to the release so anyone can check a download.
+name: Release scan
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to scan (for example v2.17.0)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  scan:
+    name: ClamAV scan and checksums
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: Download the release zips
+        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.zip' --dir assets
+      - name: SHA-256 checksums
+        working-directory: assets
+        run: sha256sum *.zip | tee ../SHA256SUMS.txt
+      - name: Install ClamAV and update its virus database
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clamav
+          sudo systemctl stop clamav-freshclam || true
+          sudo freshclam
+      - name: Scan the zips and their contents
+        run: |
+          mkdir extracted
+          for z in assets/*.zip; do unzip -q "$z" -d "extracted/$(basename "$z" .zip)"; done
+          {
+            echo "ClamAV scan of release $TAG ($(date -u +%Y-%m-%dT%H:%MZ))"
+            clamscan --version
+            echo
+            clamscan -r --infected --max-filesize=1000M --max-scansize=4000M --max-files=200000 --max-recursion=30 assets extracted
+          } | tee clamav-report.txt
+          grep -q "Infected files: 0" clamav-report.txt
+      - name: Attach checksums and report to the release
+        if: always()
+        run: gh release upload "$TAG" SHA256SUMS.txt clamav-report.txt --repo "$GITHUB_REPOSITORY" --clobber
