@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self'">
+  <title>AI 3D Print Advisor Studio</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 28 28" aria-hidden="true">
+        <rect x="4" y="19" width="20" height="3" rx="1.5"></rect>
+        <rect x="6" y="15" width="16" height="3" rx="1.5"></rect>
+        <rect x="8" y="11" width="12" height="3" rx="1.5"></rect>
+        <rect x="10" y="7" width="8" height="3" rx="1.5"></rect>
+      </svg>
+      <span>AI 3D Print Advisor Studio</span>
+    </div>
+    <div class="file-title" id="fileTitle">No file open</div>
+    <div class="print-name hidden" id="printNameBox" title="The name used for saved files and on the printer, which voice assistants read out. Click to change.">
+      <span class="pn-label">Prints as</span> <button class="pn-value" id="printNameBtn"></button>
+      <input type="text" id="printNameInput" class="hidden" maxlength="48" aria-label="Print name">
+    </div>
+    <div class="top-actions">
+      <button class="btn ghost" id="guideBtn" title="Step-by-step guide">Guide</button>
+      <button class="btn ghost" id="openBtn">Open 3MF</button>
+      <button class="btn ghost icon" id="settingsBtn" aria-label="Settings" title="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm7.4-2.5.1-1-.1-1 2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3h-4l-.4 2.5c-.6.3-1.2.6-1.7 1l-2.4-1-2 3.4 2 1.6-.1 1 .1 1-2 1.6 2 3.4 2.4-1c.5.4 1.1.7 1.7 1L11 21h4l.4-2.5c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.4-2-1.6Z"/></svg>
+      </button>
+    </div>
+  </header>
+  <div class="busy" id="busyBar" role="status" aria-live="polite">
+    <div class="busy-track"><span id="busyFill"></span></div>
+    <span class="busy-label" id="busyLabel">Starting…</span>
+  </div>
+
+  <main class="layout">
+    <!-- Left: file, plate, materials, preference -->
+    <aside class="panel left" id="leftPanel">
+      <section class="drop" id="dropZone" tabindex="0">
+        <div class="drop-inner">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 31V11m0 0-7 7m7-7 7 7M10 33v4a2 2 0 0 0 2 2h24a2 2 0 0 0 2-2v-4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <p class="drop-title">Drop a .3mf file here</p>
+          <p class="drop-sub">or <button class="link" id="browseBtn">browse your files</button>. MakerWorld downloads and Orca projects both work.</p>
+        </div>
+      </section>
+
+      <div class="heavy-offer block-top hidden" id="heavyRow" role="alert">
+        <b id="heavyTitle">This model will be very slow to slice</b>
+        <div id="heavyText" class="heavy-text"></div>
+        <div class="row-btns"><button class="btn primary" id="heavyFixBtn">Fix model</button> <button class="link hidden" id="heavyUndoBtn">Undo the fix</button></div>
+      </div>
+      <section class="block hidden" id="thumbBlock">
+        <h2>Pictures in this file</h2>
+        <div class="thumbs" id="thumbs"></div>
+      </section>
+
+      <section class="block hidden" id="plateBlock">
+        <h2>Plate</h2>
+        <select id="plateSelect"></select>
+      </section>
+
+      <section class="block hidden" id="materialBlock">
+        <h2>Toolheads and materials <button class="tip-btn" data-tip="toolheads" aria-label="What is this?">?</button></h2>
+        <div id="materials"></div>
+        <button class="link small" id="addSlotBtn">Add a toolhead</button>
+        <button class="btn wide remix-btn" id="remixBtn">Color remix…</button>
+        <div class="shop hidden" id="shop" aria-live="polite"></div>
+        <p class="hint" id="prepStatus"></p>
+      </section>
+
+      <section class="block hidden" id="orientBlock">
+        <h2>Orientation <button class="tip-btn" data-tip="orientation" aria-label="What is this?">?</button></h2>
+        <select id="orientObject" class="hidden" aria-label="Object"></select>
+        <div class="orient-list" id="orientList" role="radiogroup" aria-label="Orientation options"></div>
+      </section>
+
+      <section class="block hidden" id="prefBlock">
+        <h2>What matters more? <button class="tip-btn" data-tip="goal" aria-label="What is this?">?</button></h2>
+        <div class="tradeoff">
+          <div class="layers" id="layerPreview" aria-hidden="true"></div>
+          <div class="tradeoff-control">
+            <div class="ends"><span>Quality</span><span>Speed</span></div>
+            <input type="range" id="slider" min="0" max="100" step="5" value="50" aria-label="Quality to speed preference">
+            <p class="slider-note" id="sliderNote"></p>
+            <p class="recipe-line" id="recipeLine"></p>
+          </div>
+        </div>
+        <label class="field">
+          <span>What is this part for? <em>Optional</em></span>
+          <textarea id="purpose" rows="2" placeholder="e.g. outdoor planter, needs to be watertight; display piece for the patio"></textarea>
+          <div class="blocker-offer hidden" id="blockRow">
+            <label class="fit-check"><input type="checkbox" id="blockInside"><span><b>Block supports inside the model</b><br><small id="blockText"></small></span></label>
+          </div>
+          <label class="fit-check hidden" id="fitRow"><input type="checkbox" id="fitTogether"><span><b>These parts fit together</b> (snap, peg, slide or glue to other pieces, on this plate or others)<br><small>Keeps walls, line widths and sizes exactly as the designer set them, so the pieces still fit. Untick only for standalone items.</small></span></label>
+        </label>
+        <button class="btn primary wide" id="analyzeBtn">Get recommended settings</button>
+        <small class="cost-line" id="analyzeCost"></small>
+        <button class="btn wide quick-save" id="quickSaveBtn" title="Convert this model for your printer with the automatic safety fixes and save it, without AI">Convert &amp; save as 3MF (no AI)</button>
+        <button class="btn wide orca-btn" id="orcaBtn">Open in Snapmaker Orca</button>
+        <p class="hint" id="keyHint"></p>
+      </section>
+    </aside>
+
+    <!-- Center: viewer and measurements -->
+    <section class="center">
+      <div class="viewer" id="viewer">
+        <div class="guide hidden" id="guide" role="dialog" aria-label="Step-by-step guide">
+          <div class="guide-head"><span class="guide-step" id="guideStep"></span><button class="link" id="guideHide">Hide guide</button></div>
+          <h3 id="guideTitle"></h3>
+          <p id="guideText"></p>
+          <div class="guide-foot"><div class="guide-dots" id="guideDots"></div><div><button class="btn ghost" id="guideBack">Back</button> <button class="btn primary" id="guideNext">Next</button></div></div>
+        </div>
+        <div class="tip-pop hidden" id="tipPop" role="tooltip"></div>
+        <div class="viewer-empty" id="viewerEmpty">
+          <p>Open a 3MF file to see the model, measure overhangs and get settings for your printer.</p>
+        </div>
+        <div class="viewer-tools hidden" id="viewerTools">
+          <div class="segmented" role="radiogroup" aria-label="Color mode">
+            <button role="radio" aria-checked="true" data-mode="colors">Filament colors</button>
+            <button role="radio" aria-checked="false" data-mode="overhang">Overhangs</button>
+          </div>
+          <div class="segmented" aria-label="Camera">
+            <button data-view="iso">3D</button>
+            <button data-view="front">Front</button>
+            <button data-view="top">Top</button>
+            <button data-view="bottom">Underside</button>
+          </div>
+        </div>
+        <div class="legend hidden" id="legend">
+          <span><i style="background:var(--danger)"></i>Steeper than 45°: needs support</span>
+          <span><i style="background:var(--warn)"></i>45–55°: borderline</span>
+          <span><i style="background:var(--ok)"></i>On the bed</span>
+        </div>
+        <div class="viewer-note hidden" id="viewerNote"></div>
+      </div>
+      <div class="stats hidden" id="stats"></div>
+    </section>
+
+    <!-- Right: results, slicing, history -->
+    <aside class="panel right" id="results">
+      <nav class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-tab="recs">Recommendations</button>
+        <button role="tab" aria-selected="false" data-tab="compare">Compare slices</button>
+        <button role="tab" aria-selected="false" data-tab="history">Print history</button>
+      </nav>
+      <div class="tabpane" id="tab-recs">
+        <div class="results-empty" id="resultsEmpty">
+          <h2>Recommended settings</h2>
+          <p>Set your toolheads and slide toward quality or speed, then choose <strong>Get recommended settings</strong>.</p>
+          <p id="emptyFlow">Claude reviews the model's shape and overhangs, a real slice of the original, your past prints, and the current Orca settings, then lists what to change.</p>
+        </div>
+        <div class="hidden" id="resultsBody"></div>
+      </div>
+      <div class="tabpane hidden" id="tab-compare">
+        <div class="compare-controls">
+          <p class="hint" id="compareHint">Slice variants with Snapmaker Orca and compare real print time, filament and flow.</p>
+          <div class="checks-row" id="variantPicks"></div>
+          <button class="btn primary" id="sliceBtn">Slice and compare</button>
+        </div>
+        <div id="compareBody"></div>
+      </div>
+      <div class="tabpane hidden" id="tab-history">
+        <div class="history-head"><p class="hint" id="historyHint">Prints from your U1s. Rate them so future recommendations learn what worked.</p><button class="btn" id="historyRefresh">Refresh</button></div>
+        <div id="historyBody"></div>
+      </div>
+    </aside>
+  </main>
+
+  <dialog id="settingsDialog" class="settings">
+    <form method="dialog" id="settingsForm">
+      <h2>Settings</h2>
+      <label class="field">
+        <span>Filament inventory (optional)</span>
+        <div class="row"><input type="text" id="inventoryPath" placeholder="Your Filament Inventory folder, or its file:///…/index.html link"><button type="button" class="btn" id="browseInventory">Browse</button></div>
+        <small id="inventoryStatus">Lets Color remix use the filaments you actually have.</small>
+      </label>
+      <label class="field">
+        <span>Your 3D printing experience</span>
+        <select id="experienceSelect">
+          <option value="0">Brand new: guide me through everything</option>
+          <option value="1">A little: some guidance and tips</option>
+          <option value="2">Comfortable: tips only</option>
+          <option value="3">Experienced: no tips, technical details first</option>
+        </select>
+      </label>
+      <fieldset class="ai-mode">
+        <legend>How should the app get AI advice?</legend>
+        <label><input type="radio" name="aiMode" value="api"><span><b>Claude API key</b> (automatic). Pay-as-you-go from platform.claude.com; no subscription needed.</span></label>
+        <label><input type="radio" name="aiMode" value="chat"><span><b>Free chatbot</b> (copy and paste). Use ChatGPT, Claude or Gemini in your browser, free plans included.</span></label>
+      </fieldset>
+      <label class="field" id="apiKeyField">
+        <span>Anthropic API key</span>
+        <input type="password" id="apiKey" autocomplete="off" placeholder="sk-ant-…">
+        <small id="keyStatus"></small>
+      </label>
+      <label class="field">
+        <span>Claude model</span>
+        <select id="modelSelect">
+          <option value="claude-sonnet-5-5">Claude Sonnet 5.5: recommended, best balance</option>
+          <option value="claude-opus-5-5">Claude Opus 5.5: best results</option>
+          <option value="claude-haiku-5-5">Claude Haiku 5.5: cheapest, good results</option>
+          <option value="custom">Other model ID…</option>
+        </select>
+        <input type="text" id="customModel" class="hidden" placeholder="model id">
+        <div class="model-card" id="modelCard" aria-live="polite"></div>
+      </label>
+      <p class="hint">The key is stored encrypted on this computer and only sent to api.anthropic.com.</p>
+      <label class="field">
+        <span>Snapmaker Orca program</span>
+        <div class="inline"><input type="text" id="slicerPath" placeholder="Detected automatically"><button class="btn" type="button" id="browseSlicer">Browse</button></div>
+        <small id="slicerStatus"></small>
+      </label>
+      <fieldset class="printers">
+        <legend>Your printers</legend>
+        <small>For sending prints and print history. Use the address you’d type to open Fluidd or Mainsail in a browser, e.g. 192.168.1.50 (add :7125 if that doesn’t work).</small>
+        <div id="printerRows"></div>
+        <div class="row-btns printer-actions">
+          <button type="button" class="btn" id="addPrinterBtn">Add a printer</button>
+          <button type="button" class="btn" id="discoverBtn">Find printers on my network</button>
+          <span class="hint" id="discoverStatus"></span>
+        </div>
+        <div id="discoverResults"></div>
+      </fieldset>
+      <p class="hint about" id="aboutLine"></p>
+      <div class="dialog-actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" id="saveSettings" value="save">Save settings</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="lightbox" class="lightbox">
+    <form method="dialog"><button class="btn ghost close" aria-label="Close">Close</button></form>
+    <img id="lightboxImg" alt="">
+    <p id="lightboxLabel"></p>
+  </dialog>
+
+  <dialog id="sendDialog" class="send">
+    <div class="sd-head"><h2>Send to printer</h2><button class="btn ghost" id="sdClose" aria-label="Close">Close</button></div>
+    <section class="sd-row">
+      <h3>Model information</h3>
+      <div class="sd-model">
+        <img id="sdThumb" alt="Plate preview">
+        <dl class="sd-info">
+          <dt>Filename</dt><dd><input type="text" id="sdName" aria-label="File name on the printer"></dd>
+          <dt>Estimated time</dt><dd id="sdTime">—</dd>
+          <dt>Estimated materials</dt><dd id="sdGrams">—</dd>
+          <dt>Version</dt><dd id="sdVariant">—</dd>
+        </dl>
+      </div>
+    </section>
+    <section class="sd-row">
+      <h3>Select printer</h3>
+      <div class="sd-printers" id="sdPrinters" role="radiogroup" aria-label="Printer"></div>
+    </section>
+    <section class="sd-row">
+      <h3>Configure filaments</h3>
+      <div>
+        <div class="sd-fils" id="sdFilaments"></div>
+        <p class="sd-note" id="sdFilNote"></p>
+      </div>
+    </section>
+    <section class="sd-row">
+      <h3>Print preferences</h3>
+      <div class="sd-prefs">
+        <label><input type="checkbox" id="sdFlow"> Extrusion flow calibration <small>Calibrates flow before printing. Recommended after each filament change.</small></label>
+        <label><input type="checkbox" id="sdTimelapse"> Time-lapse camera</label>
+        <label><input type="checkbox" id="sdLevel"> Auto leveling</label>
+      </div>
+    </section>
+    <div class="sd-foot">
+      <div class="sd-progress"><div class="busy-track"><span id="sdFill"></span></div><span id="sdStatus"></span></div>
+      <button class="btn primary" id="sdStart">Start print</button>
+    </div>
+  </dialog>
+
+  <dialog id="tsDialog" class="ts">
+    <div class="sd-head"><h2>Print issue troubleshooter</h2><button class="btn ghost" id="tsClose">Close</button></div>
+    <div class="ts-body">
+      <div class="ts-left">
+        <div class="ts-tools" id="tsTools">
+          <div class="segmented" role="radiogroup" aria-label="Tool">
+            <button role="radio" aria-checked="true" data-tool="rotate">Rotate</button>
+            <button role="radio" aria-checked="false" data-tool="paint">Paint failure</button>
+            <button role="radio" aria-checked="false" data-tool="paint-supports" class="hidden" id="tsPaintSupports">Paint supports</button>
+            <button role="radio" aria-checked="false" data-tool="erase">Erase</button>
+          </div>
+          <label class="ts-supports hidden" id="tsSupportsRow"><input type="checkbox" id="tsShowSupports"> Show printed supports</label>
+          <label class="ts-brush">Brush <input type="range" id="tsBrush" min="2" max="25" value="6"> <span id="tsBrushV">6 mm</span></label>
+          <button class="btn" id="tsClear">Clear</button>
+        </div>
+        <div class="ts-viewer" id="tsViewer"><div class="ts-empty" id="tsEmpty"><p>Loading the print…</p></div></div>
+        <div class="ts-map hidden" id="tsMap"></div>
+        <p class="hint" id="tsLeftHint"></p>
+      </div>
+      <div class="ts-right">
+        <section class="ts-sec" id="tsJob"></section>
+        <section class="ts-sec">
+          <h3>What went wrong?</h3>
+          <div class="chips" id="tsIssues"></div>
+          <textarea id="tsDesc" rows="3" placeholder="Describe what you saw, e.g. “the cap started drooping about halfway up, then strings everywhere”"></textarea>
+          <label class="fit-check hidden" id="tsFitRow"><input type="checkbox" id="tsFitTogether"><span><b>These parts fit together</b><br><small>Fixes won’t change walls, line widths or sizes, so parts still fit.</small></span></label>
+        </section>
+        <section class="ts-sec">
+          <h3>Where on the part?</h3>
+          <p class="hint" id="tsRegionText">Paint the area on the model, or pick the part on the plate map.</p>
+          <div class="ts-z">
+            <label>Failed between <input type="number" id="tsZmin" step="0.1" min="0"> and <input type="number" id="tsZmax" step="0.1" min="0"> mm height</label>
+            <button class="link small" id="tsFirstLayers">It failed in the first layers</button>
+          </div>
+        </section>
+        <section class="ts-sec">
+          <h3>Photos <em>optional</em></h3>
+          <div class="ts-photos" id="tsPhotos"></div>
+          <label class="btn ts-add">Add photos<input type="file" id="tsPhotoInput" accept="image/*" multiple hidden></label>
+        </section>
+        <div class="ts-go"><button class="btn primary wide" id="tsRun">Troubleshoot with Claude</button><small class="cost-line" id="tsCost"></small></div>
+        <div id="tsResult"></div>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="chatDialog" class="chat">
+    <div class="sd-head"><h2 id="chatTitle">Ask a free chatbot</h2><button class="btn ghost" id="chatClose">Close</button></div>
+    <div class="chat-body">
+      <ol class="chat-steps">
+        <li><b>Copy the prompt.</b> It contains everything the app measured, in one message.
+          <div class="row-btns"><button class="btn primary" id="chatCopy">Copy prompt</button> <span class="hint" id="chatSize"></span></div></li>
+        <li><b>Open a chatbot, paste, and attach the pictures</b> (optional but helpful).
+          <div class="row-btns"><button class="btn" data-open="https://chatgpt.com/">Open ChatGPT</button> <button class="btn" data-open="https://claude.ai/new">Open Claude</button> <button class="btn" data-open="https://gemini.google.com/app">Open Gemini</button> <button class="btn" id="chatImages">Show the pictures</button></div>
+          <p class="hint" id="chatImgHint"></p></li>
+        <li><b>Copy the chatbot’s whole reply and paste it here.</b>
+          <textarea id="chatReply" rows="8" placeholder="Paste the reply here. It should start with { and end with }"></textarea>
+          <p class="error hidden" id="chatError"></p>
+          <div class="row-btns"><button class="btn primary" id="chatUse">Use this answer</button></div></li>
+      </ol>
+      <p class="hint">The answer goes through the same checks as Claude API answers: invalid values are flagged, and safety checks and automatic fixes still apply.</p>
+    </div>
+  </dialog>
+
+  <dialog id="welcomeDialog" class="welcome">
+    <div class="welcome-body">
+      <h2>Welcome to AI 3D Print Advisor Studio</h2>
+      <p>This app checks a 3D model, suggests good settings for your printer, shows you how different choices will look and how strong they’ll be, and helps you print it.</p>
+      <h3>How much 3D printing experience do you have?</h3>
+      <div class="xp-options" role="radiogroup" aria-label="Experience">
+        <button class="xp" data-xp="0" role="radio"><b>Brand new</b><span>I’ve never 3D printed, or just unboxed my printer. Guide me through everything.</span></button>
+        <button class="xp" data-xp="1" role="radio"><b>A little</b><span>I’ve printed a few things with the default settings.</span></button>
+        <button class="xp" data-xp="2" role="radio"><b>Comfortable</b><span>I change slicer settings now and then.</span></button>
+        <button class="xp" data-xp="3" role="radio"><b>Experienced</b><span>I know slicers and troubleshooting well. Skip the tips.</span></button>
+      </div>
+      <p class="hint">This only changes how much help you see. Change it anytime in Settings.</p>
+    </div>
+  </dialog>
+
+  <dialog id="bambuDialog" class="bambu">
+    <div class="sd-head"><h2>Export for Bambu Lab printers</h2><button class="btn ghost" id="bxClose">Close</button></div>
+    <div class="bx-body">
+      <p>Makes a Bambu Studio project of this model for sharing on MakerWorld. It uses Bambu's own printer, quality and filament presets, keeps your tuned choices (walls, infill, supports, layer height, colors, orientation), and <b>Bambu Studio itself writes the final file</b>, so MakerWorld accepts it.</p>
+      <label class="field"><span>Bambu printer</span><select id="bxPrinter"></select></label>
+      <label class="field"><span>Version</span><select id="bxVersion"><option value="recommended">Recommended (the checked settings)</option><option value="original">Original</option></select></label>
+      <p class="hint" id="bxStatus"></p>
+      <p class="hint">Not test-printed on that printer? Say so in your MakerWorld description (e.g. “converted from a tested Snapmaker U1 profile”).</p>
+      <div class="row-btns"><button class="btn primary" id="bxExport">Export</button> <button class="btn hidden" id="bxLocate">Locate Bambu Studio…</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="remixDialog" class="remix">
+    <div class="sd-head"><h2>Color remix</h2>
+      <div class="rx-steps" role="tablist"><button type="button" role="tab" id="rxStep1" aria-selected="true"><b>1</b> Parts</button><button type="button" role="tab" id="rxStep2" aria-selected="false" disabled><b>2</b> Colors</button></div>
+      <div><button class="btn ghost hidden" id="rxUndo">Undo remix</button> <button class="btn ghost" id="rxClose">Close</button></div></div>
+    <div class="rx-parts" id="rxPartsPane">
+      <div class="rx-parts-view" id="rxPartsView"><div class="rx-hover hidden" id="rxHover"></div></div>
+      <div class="rx-parts-side">
+        <p class="hint" id="rxPartsInfo">The model is cut into patches along its grooves and creases. The AI groups them into parts (shell, skin, eyes…); you check them and fix anything it got wrong.</p>
+        <label class="field"><span>What is it? <small>optional, helps the AI</small></span><input type="text" id="rxHint" placeholder="e.g. a sea turtle bust on a wooden board"></label>
+        <div class="row-btns"><button class="btn primary" id="rxIdentify">Identify parts with AI</button> <span class="cost-line" id="rxIdCost"></span></div>
+        <div class="rx-subject hidden" id="rxSubject"></div>
+        <ul class="rx-part-list" id="rxParts"></ul>
+        <div class="row-btns"><button class="link" id="rxAddPart">+ Add a part</button></div>
+        <div class="rx-edit">
+          <span class="hint">Fix a part: pick it in the list, then</span>
+          <div class="seg-btns" role="group" aria-label="Editing tool">
+            <button type="button" data-ptool="rotate" aria-pressed="true">Rotate</button><button type="button" data-ptool="part-patch" aria-pressed="false">Click patches</button><button type="button" data-ptool="part-brush" aria-pressed="false">Brush</button>
+          </div>
+          <label class="rx-brush hidden" id="rxBrushRow">Brush size <input type="range" id="rxBrush" min="1" max="20" step="0.5" value="4"> <span id="rxBrushVal">4 mm</span></label>
+          <p class="hint">Right-drag still rotates while editing. <button class="link" id="rxUndoEdit" disabled>Undo last edit</button></p>
+        </div>
+        <label class="fit-check"><input type="checkbox" id="rxPupils" checked><span><b>Paint pupils on the eyes</b><br><small>A round dark pupil where each eye looks out (parts of the kind “Eyes”).</small></span></label>
+        <label class="field"><span>Patch detail</span><select id="rxDetail"><option value="45">Coarse (about 45 patches)</option><option value="80" selected>Normal (about 80)</option><option value="140">Fine (about 140)</option></select></label>
+        <div class="row-btns"><button class="btn primary" id="rxConfirm" disabled>Confirm parts →</button></div>
+        <p class="hint" id="rxPartsStatus"></p>
+      </div>
+    </div>
+    <div class="rx-body hidden" id="rxColorsPane">
+      <div class="rx-controls">
+        <div class="field"><span>Styles <small>pick one or more, and how many of each</small></span><div class="rx-styles" id="rxStyles" role="group"></div></div>
+        <label class="field"><span>Anything you’d like? <small>optional</small></span><input type="text" id="rxCustom" placeholder="e.g. a darker shell; or: school colors, blue and gold"></label>
+        <div class="rx-row rx-row2">
+          <label class="field"><span>Material</span><select id="rxMaterial"><option value="pla" selected>PLA</option><option value="petg">PETG / PCTG</option><option value="abs">ABS / ASA</option><option value="any">Any</option></select></label>
+          <div class="field"><span>Parts</span><button class="link" id="rxBackParts">← Edit parts</button></div>
+        </div>
+        <label class="fit-check"><input type="checkbox" id="rxExtras"><span><b>Allow more colors than toolheads</b><br><small>Up to 2 extra colors, where a color is only used higher up: the print pauses at that height so you can swap a spool, then resume.</small></span></label>
+        <p class="hint" id="rxInfo"></p>
+        <div class="row-btns"><button class="btn primary" id="rxGo">Generate</button> <span class="cost-line" id="rxCost"></span></div>
+        <p class="hint" id="rxStatus"></p>
+      </div>
+      <div class="rx-results" id="rxResults"></div>
+      <div class="rx-big hidden" id="rxBig">
+        <div class="rx-big-head"><button class="btn ghost" id="rxBigBack">← All schemes</button><h3 id="rxBigTitle"></h3><span class="hint">Drag to rotate, scroll to zoom</span></div>
+        <div class="rx-big-body"><div class="rx-big-view" id="rxBigView"></div><div class="rx-big-side" id="rxBigSide"></div></div>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="batchDialog" class="batch">
+    <div class="sd-head"><h2>Batch convert to your printer</h2><button class="btn ghost" id="bcClose">Close</button></div>
+    <div class="bc-body">
+      <p class="hint">Each file is converted for your printer with the automatic safety fixes (no AI, no cost) and saved as a ready-to-print 3MF with a clean, speakable name. Files are done one after another.</p>
+      <div class="row-btns"><button class="btn" id="bcAdd">Add files…</button> <button class="btn ghost" id="bcClear">Clear list</button></div>
+      <ul class="bc-list" id="bcList"></ul>
+      <fieldset class="bc-where"><legend>Save converted files</legend>
+        <label><input type="radio" name="bcWhere" value="next" checked> Next to each original</label>
+        <label><input type="radio" name="bcWhere" value="folder"> In a folder: <button class="link" id="bcPick">choose…</button> <span class="hint" id="bcFolder"></span></label>
+      </fieldset>
+      <div class="row-btns"><button class="btn primary" id="bcStart">Convert</button> <button class="btn hidden" id="bcStop">Stop after this file</button> <span class="hint" id="bcSummary"></span></div>
+    </div>
+  </dialog>
+
+  <div class="toast hidden" id="toast" role="status"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

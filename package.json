@@ -1,0 +1,18 @@
+{
+  "name": "ai-3d-print-advisor-studio",
+  "productName": "AI 3D Print Advisor Studio",
+  "version": "2.16.1",
+  "description": "Free desktop helper for the Snapmaker U1: checks your .3mf, recommends Snapmaker Orca settings with AI, compares real slices, sends to your printers and troubleshoots failed prints.",
+  "main": "main.js",
+  "author": "Jamison",
+  "license": "AGPL-3.0-only",
+  "dependencies": {
+    "jszip": "3.10.1",
+    "ws": "8.18.0"
+  },
+  "homepage": "https://github.com/jtroberts83/AI-Print-Advisor-Studio",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jtroberts83/AI-Print-Advisor-Studio.git"
+  }
+}
