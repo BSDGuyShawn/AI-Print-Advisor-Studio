@@ -20,10 +20,10 @@ jobs:
     name: App libraries (npm audit + OSV-Scanner)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
       - name: Resolve exact versions (lockfile, no install scripts)
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
       - name: npm audit (libraries shipped in the app)
@@ -35,7 +35,7 @@ jobs:
           ./osv-scanner scan source --lockfile package-lock.json --format table | tee osv-report.txt
       - name: Keep the lockfile and report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dependency-audit
           path: |
@@ -48,10 +48,10 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
       - run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
       - name: npm audit including Electron
         run: |
