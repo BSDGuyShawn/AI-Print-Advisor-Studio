@@ -523,7 +523,7 @@ async function openRemix() {
   const inv = await api.inventoryStatus().catch(() => ({ set: false }));
   if (!inv.set || !inv.ok) {
     toast(inv.set ? `Couldn’t read your filament inventory: ${inv.error}` : 'Color remix picks from the filament you have. Add yours here first.', 7000);
-    if (inv.set) openSettings(); else showFilament(true);
+    showFilament(true);
     return;
   }
   $('rxUndo').classList.toggle('hidden', !state.remixApplied);
@@ -607,6 +607,7 @@ $('rxResults').onclick = async (e) => {
     toast(`Applied “${r.name}”. The colors are painted into the model and the toolheads are set to your filaments.${r.swaps.length ? ' ' + r.swaps.join(' ') : ''} Save it with Save as 3MF.`, r.swaps.length ? 16000 : 8000);
     // the parts stay remembered for this shape, so another remix starts from them
     resetRemix();
+    guideEvent('remixed');
   } catch (err) { $('rxStatus').textContent = cleanErr(err); }
 };
 $('rxUndo').onclick = async () => {
@@ -625,21 +626,11 @@ function showFilament(on) {
   document.body.classList.toggle('filament-open', on);
   $('filamentBtn').textContent = on ? 'Back to model' : 'Filament';
   $('filamentBtn').setAttribute('aria-pressed', String(on));
-  if (on) view.querySelector('iframe').focus();
+  if (on) { view.querySelector('iframe').focus(); guideEvent('filament'); }
   else { SHOP.key = ''; renderShopping(); }   // what's on hand may have changed
 }
 $('filamentBtn').onclick = () => showFilament(!document.body.classList.contains('filament-open'));
 
-// ---------- filament inventory in Settings ----------
-async function showInventoryStatus() {
-  const s = await api.inventoryStatus().catch(() => null);
-  $('inventoryStatus').textContent = !s || !s.set ? 'Only needed until you import it on the Filament screen.'
-    : s.builtin ? `Not needed any more: Color remix uses the Filament screen (${s.count} filaments, ${s.spools} spools on hand).`
-    : !s.ok ? s.error
-    : `Found ${s.count} filaments${s.onHand ? ` on hand (${s.spools} spools), updated ${s.updated ? new Date(s.updated).toLocaleString() : 'recently'}` : ` (${s.spools} spools bought)`}.${s.note ? ' ' + s.note : ''}`;
-}
-$('browseInventory').onclick = async () => { const p = await api.inventoryBrowse(); if (p) { $('inventoryPath').value = p; await api.setConfig({ inventoryPath: p }); showInventoryStatus(); } };
-$('inventoryPath').addEventListener('change', async () => { await api.setConfig({ inventoryPath: $('inventoryPath').value }); showInventoryStatus(); });
 
 // rough cost of getting recommendations, shown under the button
 function showAnalyzeCost() {
@@ -1027,6 +1018,7 @@ function renderOrientation() {
   $('orientList').querySelectorAll('input').forEach(inp => inp.onchange = () => {
     const o = obj.orientationOptions.find(x => x.id === inp.value);
     setRotation(obj.itemIndex, o.isCurrent ? null : o.rotation);
+    guideEvent('oriented');
   });
 }
 $('orientObject').onchange = e => { state.orientObj = Number(e.target.value); renderOrientation(); };
@@ -1050,7 +1042,8 @@ document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => viewer.f
 const fmt = n => (Math.round(n * 10) / 10).toLocaleString();
 const inch = mm => (mm / 25.4).toFixed(2);
 const compact = n => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(0)}k` : String(n);
-const hm = s => { if (!s && s !== 0) return '—'; const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60); return h ? `${h}h ${m}m` : `${m}m`; };
+// rounded to whole minutes first, so 1 h 59.6 min shows as 2h 0m, not 1h 60m
+const hm = s => { if (!s && s !== 0) return '—'; const t = Math.round(s / 60), h = Math.floor(t / 60), m = t % 60; return h ? `${h}h ${m}m` : `${m}m`; };
 function renderStats() {
   const t = state.analysis.totals, objs = state.analysis.objects;
   const footprint = objs.reduce((s, o) => s + (o.sizeMm.x * o.sizeMm.y) / 100, 0);
@@ -1290,7 +1283,8 @@ async function runCompare(ids) {
       // a quality preset plus the AI's other recommendations (supports, cooling…), so picking "Fast" doesn't
       // drop what the model needs; the preset decides layer height and speeds
       const r = await api.recipePreview(RECIPE_SLIDER[id]);
-      const presetKeys = new Set(r.changes.map(c => `${c.key}#${c.slot || 0}`));
+      // keys the recipe decides (even ones it leaves as they are) aren't overridden by the AI's values
+      const presetKeys = new Set([...r.changes.map(c => `${c.key}#${c.slot || 0}`), ...(r.governs || []).map(k => `${k}#0`)]);
       const extra = state.result ? selectedChanges().filter(c => c.source !== 'recipe' && !presetKeys.has(`${c.key}#${c.slot || 0}`)).map(c => ({ key: c.key, value: c.value, slot: c.slot })) : [];
       variants.push({ id, name: state.result ? VARIANT_NAMES[id].replace(' recipe', ' + recommendations') : VARIANT_NAMES[id], changes: [...r.changes, ...extra] });
     }
@@ -1733,7 +1727,7 @@ $('tsRun').onclick = async () => {
       out = await askChatbot(out);
       if (!out) { $('tsResult').innerHTML = ''; return; }
     }
-    TS.result = out; renderTsResult();
+    TS.result = out; renderTsResult(); guideEvent('troubleshot');
     $('tsResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
     state.history = null; // refresh to show the saved diagnosis
   } catch (e) { $('tsResult').innerHTML = `<div class="error"><b>Couldn’t troubleshoot.</b><p>${esc(cleanErr(e))}</p></div>`; }
@@ -1852,6 +1846,24 @@ const GUIDE_STEPS = [
   { id: 'finish', title: 'Save it or print it', text: 'Happy with a version? Click “Save as 3MF” to keep the model with these settings (open it in your slicer and print), or “Send to printer…” to print right away.', target: () => $('useButtons') || $('saveBtn'), until: 'saved' },
   { id: 'done', title: 'You’re all set!', text: 'That’s the whole workflow. If a print goes wrong, open Print history and click “Troubleshoot…”: you can paint where it failed and get fixes. Reopen this guide anytime with the Guide button at the top.' },
 ];
+// The demo (api.demo) has its own tour: the sample rocket through every feature, with recorded results.
+const DEMO_STEPS = [
+  { id: 'open', title: 'Welcome to the demo!', text: 'This tour walks through the app with a sample model. Everything is recorded from the real app: nothing is sliced, printed or sent to the AI. Click Open 3MF and choose “Demo Rocket”.', target: () => $('openBtn'), until: 'opened', skipIf: () => !!state.file },
+  { id: 'inspect', title: 'Spot the problem', text: 'This rocket was saved lying on its side. Click “Overhangs” above the model: red areas would be printed over thin air and need supports. Drag to rotate, scroll to zoom.', target: () => $('viewerTools') },
+  { id: 'orient', title: 'Stand it up', text: 'The Orientation list scores every way to place the model. Pick “Stood upright · lowest risk”: overhangs drop from about 34 cm² to under 1 cm², so it needs no supports.', target: () => sectionOf('orientation'), until: 'oriented' },
+  { id: 'toolheads', title: 'Four colors, four toolheads', text: 'Each toolhead (T1–T4) prints one filament: white body, red nose and fins, blue windows, grey nozzle. In the full app you set these to the spools you load.', target: () => sectionOf('toolheads') },
+  { id: 'goal', title: 'Choose quality or speed', text: 'Slide toward Quality or Speed and say what the part is for. The advice takes both into account.', target: () => sectionOf('goal') },
+  { id: 'ask', title: 'Get recommended settings', text: 'Click “Get recommended settings”. In the full app your model is sliced and Claude reviews it (about a minute, a few cents with your API key). Here the answer was recorded.', target: () => $('analyzeBtn'), until: 'analyzed', skipIf: () => !!state.result },
+  { id: 'review', title: 'Read the recommendations', text: 'This file had 0.08 mm layers (6½ hours), 1 wall, 5% infill and no brim. Each row says what changes and why, in plain words. Untick anything you don’t want.', target: () => $('tab-recs') },
+  { id: 'compare', title: 'Compare versions', text: 'Open “Compare slices”, click “Slice and compare”, then click a version to see how it will look, how strong it is and how long it takes.', target: () => document.querySelector('[data-tab=compare]'), until: 'compare-picked' },
+  { id: 'finish', title: 'Save it or print it', text: 'In the full app, “Save as 3MF” keeps the model with these settings and “Send to printer…” prints it on your U1. In the demo they explain instead. Try “Send to printer…” to see the printer picker.', target: () => $('useButtons') || $('saveBtn') },
+  { id: 'remix', title: 'Color remix', text: 'Click “Color remix…”: Identify parts with AI, Confirm parts, then Generate. Each scheme uses filament from your library. Apply “Deep Space Cruiser” to repaint the rocket.', target: () => $('remixBtn'), until: 'remixed' },
+  { id: 'filament', title: 'Your filament library', text: 'Click “Filament” at the top right: the library Color remix picks from, with photos, spools, locations and print settings. Click a filament, try Spools and Dashboard. Changes last until you close the demo.', target: () => $('filamentBtn'), until: 'filament' },
+  { id: 'history', title: 'When a print fails', text: 'Click “Back to model”, open “Print history” and click “Troubleshoot…” on the cancelled “Demo Rocket” print, then run it. The AI explains what went wrong and what to change.', target: () => document.querySelector('[data-tab=history]'), until: 'troubleshot' },
+  { id: 'makerworld', title: 'MakerWorld files on a U1 (optional)', text: 'Using a Snapmaker U1 or another non-Bambu printer? Click Open 3MF and choose “Demo Rocket (MakerWorld version)” to see the app convert a Bambu Lab file. Bambu Lab owners open MakerWorld files as they are.', target: () => $('openBtn') },
+  { id: 'done', title: 'That’s the tour!', text: 'Install the full AI 3D Print Advisor Studio to use all of this with your own models, printers and filament. You’ll need your own Anthropic API key, or use the free chatbot mode. Reopen this tour anytime with the Guide button.' },
+];
+if (api.demo) GUIDE_STEPS.splice(0, GUIDE_STEPS.length, ...DEMO_STEPS);
 const GUIDE = { i: 0, on: false };
 let guideFocusEl = null;
 function startGuide(from = 0) { GUIDE.on = true; GUIDE.i = from; while (GUIDE_STEPS[GUIDE.i] && GUIDE_STEPS[GUIDE.i].skipIf && GUIDE_STEPS[GUIDE.i].skipIf()) GUIDE.i++; renderGuide(); }
@@ -1868,7 +1880,7 @@ function renderGuide() {
   $('guide').classList.remove('hidden');
   $('guideStep').textContent = st.id === 'done' ? 'Done' : `Step ${GUIDE.i + 1} of ${GUIDE_STEPS.length - 1}`;
   $('guideTitle').textContent = st.title;
-  $('guideText').innerHTML = esc(st.text) + (st.until ? `<br><span class="waiting">${{ opened: 'Waiting for you to open a model…', analyzed: 'Click the highlighted button to continue.', 'compare-picked': 'Click a version in the table to continue.', saved: 'Save or send it to finish.' }[st.until]}</span>` : '');
+  $('guideText').innerHTML = esc(st.text) + (st.until ? `<br><span class="waiting">${{ opened: 'Waiting for you to open a model…', analyzed: 'Click the highlighted button to continue.', 'compare-picked': 'Click a version in the table to continue.', saved: 'Save or send it to finish.', oriented: 'Pick an orientation to continue.', remixed: 'Apply a scheme to continue.', filament: 'Open Filament to continue.', troubleshot: 'Run the troubleshooter to continue.' }[st.until]}</span>` : '');
   $('guideDots').innerHTML = GUIDE_STEPS.slice(0, -1).map((_, k) => `<span class="${k <= GUIDE.i ? 'on' : ''}"></span>`).join('');
   $('guideBack').disabled = GUIDE.i === 0;
   $('guideNext').textContent = st.id === 'done' ? 'Finish' : st.until ? 'Skip step' : 'Next';
@@ -1879,19 +1891,22 @@ function renderGuide() {
 function guideEvent(name) {
   if (!GUIDE.on) return;
   const st = GUIDE_STEPS[GUIDE.i];
-  if (st && st.until === name) { GUIDE.i++; while (GUIDE_STEPS[GUIDE.i] && GUIDE_STEPS[GUIDE.i].skipIf && GUIDE_STEPS[GUIDE.i].skipIf()) GUIDE.i++; renderGuide(); }
-  else if (name === 'analyzed' && GUIDE.i < 5) { GUIDE.i = 5; renderGuide(); }
+  if (st && st.until === name) { GUIDE.i++; while (GUIDE_STEPS[GUIDE.i] && GUIDE_STEPS[GUIDE.i].skipIf && GUIDE_STEPS[GUIDE.i].skipIf()) GUIDE.i++; renderGuide(); return; }
+  // done a step or two early (before pressing Next): move on past it
+  const ahead = GUIDE_STEPS.findIndex((x, k) => k > GUIDE.i && k <= GUIDE.i + 2 && x.until === name);
+  if (ahead > 0) { GUIDE.i = ahead + 1; renderGuide(); }
+  else if (name === 'analyzed') { const review = GUIDE_STEPS.findIndex(x => x.id === 'review'); if (GUIDE.i < review) { GUIDE.i = review; renderGuide(); } }
 }
 $('guideNext').onclick = () => { if (GUIDE_STEPS[GUIDE.i].id === 'done') { stopGuide(true); return; } GUIDE.i++; renderGuide(); };
 $('guideBack').onclick = () => { if (GUIDE.i > 0) { GUIDE.i--; renderGuide(); } };
 $('guideHide').onclick = () => { stopGuide(); toast('Guide hidden. Click “Guide” at the top to bring it back.', 4000); };
-$('guideBtn').onclick = () => (GUIDE.on ? stopGuide() : startGuide(state.result ? 5 : state.file ? 1 : 0));
+$('guideBtn').onclick = () => (GUIDE.on ? stopGuide() : startGuide(state.result ? GUIDE_STEPS.findIndex(x => x.id === 'review') : state.file ? 1 : 0));
 
 // first launch: ask about experience once
 function maybeWelcome() {
   applyLevel();
   if (state.config.experience != null) {
-    if (level() <= 1 && !state.config.guideDone && !GUIDE.on) startGuide(state.result ? 5 : state.file ? 1 : 0);
+    if ((level() <= 1 || api.demo) && !state.config.guideDone && !GUIDE.on) startGuide(state.result ? GUIDE_STEPS.findIndex(x => x.id === 'review') : state.file ? 1 : 0);
     return Promise.resolve();
   }
   return new Promise((resolve) => {
@@ -1901,7 +1916,7 @@ function maybeWelcome() {
       state.config.experience = xp;
       await api.setConfig({ experience: xp }).catch(() => {});
       applyLevel(); dlg.close();
-      if (xp <= 1) startGuide(state.file ? 1 : 0);
+      if (xp <= 1 || api.demo) startGuide(state.file ? 1 : 0);
       else toast(xp === 3 ? 'Expert mode: tips are hidden and technical details shown. Change it anytime in Settings.' : 'Tips are on (the “?” buttons). Click “Guide” at the top for a step-by-step walkthrough anytime.', 6000);
       resolve();
     });
@@ -1954,7 +1969,6 @@ function openSettings() {
     : `No key saved yet. Create one at ${keysLink} (pay-as-you-go; a Claude subscription isn’t needed, but the account needs a little prepaid credit).`;
   document.querySelectorAll('input[name=aiMode]').forEach(r => { r.checked = r.value === (state.config.aiMode || 'api'); });
   $('experienceSelect').value = String(level());
-  $('inventoryPath').value = state.config.inventoryPath || ''; showInventoryStatus();
   const syncMode = () => { const chat = document.querySelector('input[name=aiMode]:checked').value === 'chat'; $('apiKeyField').classList.toggle('hidden', chat); $('modelSelect').closest('.field').classList.toggle('hidden', chat); };
   document.querySelectorAll('input[name=aiMode]').forEach(r => { r.onchange = syncMode; });
   syncMode();
@@ -2024,7 +2038,7 @@ $('settingsDialog').addEventListener('close', async () => {
   if ($('settingsDialog').returnValue !== 'save') return;
   const model = $('modelSelect').value === 'custom' ? $('customModel').value : $('modelSelect').value;
   const printers = [...document.querySelectorAll('.printer-row')].map(r => ({ name: r.querySelector('.p-name').value.trim(), url: r.querySelector('.p-url').value.trim(), apiKey: r.querySelector('.p-key').value.trim() })).filter(p => p.url);
-  const patch = { model, printers, slicerPath: $('slicerPath').value.trim(), aiMode: (document.querySelector('input[name=aiMode]:checked') || {}).value || 'api', experience: Number($('experienceSelect').value), inventoryPath: $('inventoryPath').value };
+  const patch = { model, printers, slicerPath: $('slicerPath').value.trim(), aiMode: (document.querySelector('input[name=aiMode]:checked') || {}).value || 'api', experience: Number($('experienceSelect').value) };
   if ($('apiKey').value.trim()) patch.apiKey = $('apiKey').value;
   const before = state.info.available;
   await api.setConfig(patch);

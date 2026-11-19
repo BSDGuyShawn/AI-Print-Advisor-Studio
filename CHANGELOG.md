@@ -10,6 +10,16 @@
     backup) every spool.
   - **📷 From screenshot** and **Find missing photos online** use the API key from Settings. The key stays in the
     app; store pages and photos are fetched by the app, so browser restrictions no longer apply.
+- No separate Filament Inventory web page any more: the "inventory folder" setting and its import are gone
+  (tools/import_filament_inventory.js remains for a one-time move of old data).
+- **Demo app** (built by tools/build_release.py --demo): a guided tour with a sample 4-color rocket
+  (tools/make_demo_rocket.py, CC0) and a MakerWorld/Bambu version of it, replaying results recorded from the real
+  app (preload-demo.js). Nothing is sliced, saved, sent or asked of the AI; a banner says so.
+- Orientation options are named by what happens to the model ("Stood upright", "Laid down") instead of "On its
+  side" for a model saved lying down.
+- Compare slices: "Finest/Fine/Fast/Fastest + recommendations" keep the recipe's own layer height and speeds; the
+  AI's layer height no longer overrides them (Finest could come out the same as Recommended).
+- Times round correctly (2h 0m, not 1h 60m).
 - **Get recommended settings** slices only the original model (the AI needs it). It no longer also slices the
   recommended version for Compare slices; do that in Compare slices when you want it. Sending a print still
   slices on demand.

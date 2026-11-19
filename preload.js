@@ -1,5 +1,20 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
+// Recording for the demo app (tools only, never in normal use): with AIPA_RECORD=<file>, every call the window
+// makes to the app is written to that file (one JSON line each: method, arguments, answer or error), so the demo
+// can replay real results without the slicer or AI. Volatile inputs like screenshots are kept as-is.
+if (process.env.AIPA_RECORD) {
+  const fs = require('fs');
+  const { encode } = require('./src/demo-codec');
+  const real = ipcRenderer.invoke.bind(ipcRenderer);
+  const write = (rec) => { try { fs.appendFileSync(process.env.AIPA_RECORD, JSON.stringify(encode(rec)) + '\n'); } catch {} };
+  ipcRenderer.invoke = async (channel, ...args) => {
+    const t0 = Date.now();
+    try { const r = await real(channel, ...args); write({ m: channel, args, r, ms: Date.now() - t0 }); return r; }
+    catch (e) { write({ m: channel, args, err: String(e && e.message || e), ms: Date.now() - t0 }); throw e; }
+  };
+}
+
 contextBridge.exposeInMainWorld('advisor', {
   choose3mf: () => ipcRenderer.invoke('choose-3mf'),
   openPath: (p) => ipcRenderer.invoke('open-path', p),
@@ -50,16 +65,12 @@ contextBridge.exposeInMainWorld('advisor', {
   batchConvert: (a) => ipcRenderer.invoke('batch-convert', a),
   batchCancel: () => ipcRenderer.invoke('batch-cancel'),
   onBatchProgress: (cb) => ipcRenderer.on('batch-progress', (_e, p) => cb(p)),
-  inventoryBrowse: () => ipcRenderer.invoke('inventory-browse'),
   // the Filament screen (renderer/filament/)
   filamentLoad: () => ipcRenderer.invoke('filament-load'),
   filamentSave: (d) => ipcRenderer.invoke('filament-save', d),
   filamentHasKey: () => ipcRenderer.invoke('filament-has-key'),
   filamentClaude: (body) => ipcRenderer.invoke('filament-claude', body),
   filamentFetch: (a) => ipcRenderer.invoke('filament-fetch', a),
-  filamentCheckFolder: (loc) => ipcRenderer.invoke('filament-check-folder', loc),
-  filamentCheckBackup: () => ipcRenderer.invoke('filament-check-backup'),
-  filamentImport: (a) => ipcRenderer.invoke('filament-import', a),
   filamentOpenFolder: () => ipcRenderer.invoke('filament-open-folder'),
   remixPrepare: (a) => ipcRenderer.invoke('remix-prepare', a),
   partsIdentify: (a) => ipcRenderer.invoke('parts-identify', a),

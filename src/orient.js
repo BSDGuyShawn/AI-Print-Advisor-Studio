@@ -25,8 +25,11 @@ function rotationTo(d) {
   return [Rc[0][0], Rc[1][0], Rc[2][0], Rc[0][1], Rc[1][1], Rc[2][1], Rc[0][2], Rc[1][2], Rc[2][2]];
 }
 
-function describe(d) {
-  const ax = [[0, 0, -1, 'Current orientation'], [0, 0, 1, 'Upside down'], [1, 0, 0, 'On its side (+X face down)'], [-1, 0, 0, 'On its side (−X face down)'], [0, 1, 0, 'On its back (+Y face down)'], [0, -1, 0, 'On its front (−Y face down)']];
+// Named by what happens to the model, not by the file's axes: a model saved lying down that gets turned onto its
+// end is "stood upright", not "on its side". h / h0: height in this orientation / as placed in the file.
+function describe(d, h, h0) {
+  const turned = h0 && h > h0 * 1.3 ? 'Stood upright' : h0 && h < h0 * 0.77 ? 'Laid down' : 'Turned onto a side';
+  const ax = [[0, 0, -1, 'Current orientation'], [0, 0, 1, 'Upside down'], [1, 0, 0, `${turned} (+X face down)`], [-1, 0, 0, `${turned} (−X face down)`], [0, 1, 0, `${turned} (+Y face down)`], [0, -1, 0, `${turned} (−Y face down)`]];
   for (const [x, y, z, label] of ax) if (dot(d, [x, y, z]) > 0.996) return label;
   const tilt = Math.round(Math.acos(Math.max(-1, Math.min(1, -d[2]))) * 180 / Math.PI);
   return `Tilted ${tilt}° onto a flat face`;
@@ -98,11 +101,13 @@ function candidates(tris) {
 
 // tris: array of Float32Array world triangles for one object. Returns options sorted best first.
 function orientObject(tris) {
-  const results = candidates(tris).map((d, i) => {
+  const dirs = candidates(tris);
+  const h0 = evaluate(tris, dirs[0]).heightMm;
+  const results = dirs.map((d, i) => {
     const e = evaluate(tris, d);
     return {
       id: i === 0 ? 'current' : `o${i}`,
-      label: describe(d), isCurrent: i === 0, down: d.map(v => +v.toFixed(4)),
+      label: describe(d, e.heightMm, h0), isCurrent: i === 0, down: d.map(v => +v.toFixed(4)),
       rotation: rotationTo(d).map(v => +v.toFixed(6)),
       overhangCm2: +e.overhangCm2.toFixed(2), overhang30Cm2: +e.overhang30Cm2.toFixed(2),
       contactCm2: +e.contactCm2.toFixed(2), heightMm: e.heightMm, size: e.size, fits: e.fits, unstable: e.unstable, score: +e.score.toFixed(3),

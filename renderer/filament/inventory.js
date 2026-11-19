@@ -373,7 +373,6 @@ function renderInventory(fil) {
       <div class="actions" style="margin-top:14px">
         <button class="btn primary" data-start="shot">📷 From a screenshot of your orders</button>
         <button class="btn" data-start="add">+ Add filament by hand</button>
-        <button class="btn" data-import-old>Import the Filament Inventory web page…</button>
       </div>
       <p class="muted" style="font-size:13px;margin:10px 0 0">Screenshots work from Amazon or any store's order history, a receipt or a product page; Claude reads them with the API key from Settings.</p></div>`;
     return;
@@ -594,10 +593,6 @@ function renderSettings(fil) {
       <div class="setrow"><span class="grow">${hasKey ? '<b style="color:var(--petg)">✓ API key set</b>' : '<span class="muted">No API key set yet</span>'}</span>
         <button class="btn small" data-app-settings>Open Settings</button></div>
     </div>
-    <div class="panel"><h3>Bring in your Filament Inventory web page</h3>
-      <p class="muted" style="margin:0 0 8px;font-size:13px">Used the separate Filament Inventory page before? Import its orders, product photos and spools here once. Afterwards you only need this screen.</p>
-      <div class="actions" style="margin-top:0"><button class="btn" data-import-old>Import from Filament Inventory…</button></div>
-    </div>
     <div class="panel"><h3>Storage locations</h3>
       <p class="muted" style="margin:0 0 8px;font-size:13px">Tick <b>Printer</b> for toolheads or AMS slots. Moving a spool into one marks it <i>Loaded</i>.</p>
       ${state.locations.map(l => `<div class="setrow"><input type="text" class="grow" value="${esc(l.name)}" data-locname="${l.id}">
@@ -733,7 +728,6 @@ function subPanel(s, f) {
 function closeModal() {
   $('#overlay').classList.remove('open'); openFid = null; openPanel = null;
   if (shot) { shot.urls.forEach(u => URL.revokeObjectURL(u)); shot = null; }
-  imp = null;
   render();
 }
 
@@ -936,55 +930,12 @@ function advisorStock() {
   return { app: 'filament-inventory', kind: 'print-advisor-stock', version: 1, updated: nowISO(), total: Object.keys(state.spools).length, filaments: out };
 }
 
-// ---------- Settings links into the app, and importing the old Filament Inventory web page ----------
+// ---------- Links from this screen into the app ----------
 document.addEventListener('click', e => {
   if (e.target.closest('[data-app-settings]')) { e.preventDefault(); return window.parent.document.getElementById('settingsBtn')?.click(); }
   if (e.target.closest('[data-open-backups]')) { e.preventDefault(); return api.filamentOpenFolder().catch(err => toast(ipcMessage(err))); }
-  if (e.target.closest('[data-import-old]')) return openImport();
   const start = e.target.closest('[data-start]');
   if (start) return start.dataset.start === 'shot' ? openShot() : openForm();
-});
-let imp = null;   // the open import window: { folder, backup, busy, err }
-function openImport() {
-  imp = { folder: null, backup: null, busy: false, err: '' };
-  shot = null; openFid = null;
-  $('#overlay').classList.add('open');
-  renderImport();
-  if (BOOT.oldFolder) api.filamentCheckFolder(BOOT.oldFolder).then(r => { if (imp && !imp.folder && r) { imp.folder = r; renderImport(); } }, () => {});
-}
-function renderImport() {
-  if (!imp) return;
-  const f = imp.folder, b = imp.backup, have = Object.keys(state.spools).length;
-  $('#modal').innerHTML = `<button class="x" data-close>×</button><div class="shot">
-    <h2>Import from the Filament Inventory web page</h2>
-    <p class="muted" style="margin:0 0 12px">Brings in your orders, product photos and every spool with its status, weight, location and history. The old page isn't changed.</p>
-    <div class="mfr"><strong>1. The Filament Inventory folder</strong> (the one with index.html and data.js)
-      <div class="actions" style="margin-top:6px;align-items:center"><button class="btn small" data-imp-folder>${f ? 'Choose another folder' : 'Choose folder…'}</button>
-      <span class="muted" style="font-size:13px">${f ? `${esc(f.path)}<br>${f.orders} order lines · ${f.photos} product photos` : 'Not chosen yet'}</span></div></div>
-    <div class="mfr" style="margin-top:10px"><strong>2. A backup of your spools</strong> (recommended)
-      <div class="muted" style="font-size:13px;margin-top:2px">Spool statuses, weights and locations are kept in the browser, not in the folder. In the old page open <b>Settings → Download backup</b>, then choose that file here. Without it, every ordered spool comes in as sealed.</div>
-      <div class="actions" style="margin-top:6px;align-items:center"><button class="btn small" data-imp-backup>${b ? 'Choose another file' : 'Choose backup file…'}</button>
-      <span class="muted" style="font-size:13px">${b ? `${esc(b.name)}<br>${b.spools} spools · ${b.custom} filaments you added yourself${b.exported ? ' · saved ' + fmtDT(b.exported) : ''}` : 'Not chosen'}</span></div></div>
-    ${have ? `<p style="font-size:13px;color:var(--warn);margin:12px 0 0">This replaces the ${have} spool${have === 1 ? '' : 's'} on this screen now. A copy of them is kept in the backups folder.</p>` : ''}
-    <div class="actions" style="align-items:center">
-      <button class="btn primary" data-imp-go ${f && !imp.busy ? '' : 'disabled'}>${imp.busy ? '<span class="spin"></span> Importing…' : 'Import'}</button>
-      ${imp.err ? `<span style="color:var(--danger);font-size:14px">${esc(imp.err)}</span>` : ''}
-    </div></div>`;
-}
-$('#overlay').addEventListener('click', async e => {
-  if (!imp) return;
-  const t = e.target;
-  try {
-    if (t.closest('[data-imp-folder]')) { const r = await api.filamentCheckFolder(null); if (r) { imp.folder = r; imp.err = ''; } return renderImport(); }
-    if (t.closest('[data-imp-backup]')) { const r = await api.filamentCheckBackup(); if (r) { imp.backup = r; imp.err = ''; } return renderImport(); }
-    if (t.closest('[data-imp-go]')) {
-      imp.busy = true; imp.err = ''; renderImport();
-      clearTimeout(saveTimer); saveTimer = null;   // a save still waiting must not overwrite the import
-      const r = await api.filamentImport({ folder: imp.folder.path, backup: imp.backup && imp.backup.path });
-      sessionStorage.setItem('fil.imported', JSON.stringify(r));
-      return location.reload();
-    }
-  } catch (err) { imp.busy = false; imp.err = ipcMessage(err); renderImport(); }
 });
 
 function backup() {
@@ -1287,7 +1238,6 @@ function openShot(files = []) {
   if (shot) shot.urls.forEach(u => URL.revokeObjectURL(u));
   shot = { files:[], urls:[], busy:false, err:'', result:null };
   openFid = null;
-  imp = null;
   addShotFiles(files);
   $('#overlay').classList.add('open');
   renderShot();
@@ -1467,8 +1417,3 @@ document.addEventListener('keydown', e => {
 });
 
 render();
-// after an import the page reloads; say what came in
-try {
-  const r = JSON.parse(sessionStorage.getItem('fil.imported') || 'null');
-  if (r) { sessionStorage.removeItem('fil.imported'); setTimeout(() => toast(`Imported ${r.orders} order lines, ${r.photos} photos${r.spools != null ? ` and ${r.spools} spools` : ''}`, 6000), 300); }
-} catch {}

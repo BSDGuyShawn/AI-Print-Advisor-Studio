@@ -37,6 +37,23 @@ function recipeFor(slider, lib = null) {
 }
 
 // Changes (relative to the base project settings) that apply the recipe.
+// The settings a quality recipe decides (layer height, layer-dependent values and speeds), whether or not they
+// differ from the model's own. A version like "Finest + recommendations" keeps these from the recipe even when the
+// model already matched it, so the AI's own layer height or speeds don't override the recipe.
+function recipeGoverns(recipe, lib) {
+  const keys = new Set(['layer_height']);
+  if (recipe.layer && lib && lib.available) {
+    try {
+      for (const k of Object.keys(lib.flatten('process', lib.processForLayer(recipe.layer)))) {
+        const meta = BY_KEY[k];
+        if (meta && meta.scope === 'process' && (meta.group === 'Speed' || LAYER_DEPENDENT.test(k))) keys.add(k);
+      }
+    } catch {}
+  }
+  for (const k of [...Object.keys(recipe.scale || {}), ...Object.keys(recipe.tweaks || {})]) keys.add(k);
+  return [...keys];
+}
+
 function recipeChanges(recipe, baseSettings, lib) {
   const out = new Map();
   if (recipe.layer) {
@@ -64,4 +81,4 @@ function recipeChanges(recipe, baseSettings, lib) {
   return [...out.entries()].map(([key, value]) => ({ key, value, source: 'recipe' }));
 }
 
-module.exports = { RECIPES, recipesFor, recipeFor, recipeChanges };
+module.exports = { RECIPES, recipesFor, recipeFor, recipeChanges, recipeGoverns };

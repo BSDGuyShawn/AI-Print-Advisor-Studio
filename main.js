@@ -13,7 +13,7 @@ const { buildChatPrompt, saveImages, parseChatAnswer } = require('./src/chatmode
 const { ProfileLibrary, candidateExecutables, orcaSingleInstance } = require('./src/profiles');
 const { spawn } = require('child_process');
 const { Slicer } = require('./src/slicer');
-const { recipeFor, recipesFor, recipeChanges, RECIPES } = require('./src/recipes');
+const { recipeFor, recipesFor, recipeChanges, recipeGoverns, RECIPES } = require('./src/recipes');
 const { runChecks } = require('./src/checks');
 const { withCompat } = require('./src/compat');
 const { PLACEHOLDER_BASE64 } = require('./src/thumbs');
@@ -30,6 +30,11 @@ const JSZip = require('jszip');
 const fss = require('fs');
 const { fetchJobs, PrintLog, historyForPrompt } = require('./src/history');
 
+// The demo build ships a demo/ folder (made by tools/build_demo.py). Its window then uses preload-demo.js, which
+// replays recorded answers: nothing is sliced, saved, sent or asked of the AI. It has its own data folder, so it
+// never touches the real app's settings or filament.
+const DEMO = require('fs').existsSync(path.join(__dirname, 'demo', 'recording.json'));
+if (DEMO) app.setPath('userData', path.join(app.getPath('appData'), 'AI 3D Print Advisor Studio DEMO'));
 // For testing only: run against a separate data folder so a test never touches your settings or filament.
 if (process.env.AIPA_USER_DATA) app.setPath('userData', process.env.AIPA_USER_DATA);
 
@@ -60,7 +65,7 @@ function migrateFromOldName() {
     S.migratedFromOldName = true;
   } catch {}
 }
-if (!process.env.AIPA_USER_DATA) migrateFromOldName();   // a test data folder starts empty
+if (!process.env.AIPA_USER_DATA && !DEMO) migrateFromOldName();   // a test data folder starts empty
 
 const CONFIG_PATH = () => path.join(app.getPath('userData'), 'config.json');
 async function readConfig() { try { return JSON.parse(await fs.readFile(CONFIG_PATH(), 'utf8')); } catch { return {}; } }
@@ -74,7 +79,11 @@ async function getApiKey() {
   if (cfg.apiKey) { try { return cfg.apiKeyEncrypted ? safeStorage.decryptString(Buffer.from(cfg.apiKey, 'base64')) : cfg.apiKey; } catch { return ''; } }
   return process.env.ANTHROPIC_API_KEY || '';
 }
+// For recording the demo only: AIPA_FAKE_PRINTER=<folder> stands in for a printer. Its jobs.json is the print
+// history, and the G-code of a job is <folder>/<file name>, so the troubleshooter can run on sample prints.
+const FAKE_PRINTER = process.env.AIPA_FAKE_PRINTER || null;
 async function getPrinters() {
+  if (FAKE_PRINTER) return [{ name: 'U1 #1', url: 'http://demo-printer.invalid', apiKey: '' }];
   const cfg = await readConfig();
   return (cfg.printers || []).map(p => ({ name: p.name, url: p.url, apiKey: dec(p.apiKey) }));
 }
@@ -104,11 +113,17 @@ function slicerInfo() {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1500, height: 940, minWidth: 1150, minHeight: 720, title: 'AI 3D Print Advisor Studio', backgroundColor: '#E9ECEE', autoHideMenuBar: false,
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
+    width: 1500, height: 940, minWidth: 1150, minHeight: 720, title: DEMO ? 'AI 3D Print Advisor Studio (DEMO)' : 'AI 3D Print Advisor Studio', backgroundColor: '#E9ECEE', autoHideMenuBar: false,
+    webPreferences: { preload: path.join(__dirname, DEMO ? 'preload-demo.js' : 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
   win.loadURL('app://bundle/renderer/index.html');
-  win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    // the demo's stand-in shop links go nowhere: the window explains instead
+    if (DEMO && /^https?:\/\/demo\.invalid(\/|$)/i.test(url)) win.webContents.send('demo-notice', 'link');
+    else if (/^https?:/i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  if (DEMO) win.on('page-title-updated', (e) => e.preventDefault());
   const fileArg = process.argv.slice(1).find(a => /\.(3mf|aipsession)$/i.test(a));
   if (fileArg) win.webContents.once('did-finish-load', () => win.webContents.send('open-from-os', fileArg));
 }
@@ -419,7 +434,7 @@ ipcMain.handle('analyze-plate', async (_e, { plateIndex, rotations }) => { await
 
 ipcMain.handle('recipe-preview', async (_e, slider) => { await S.ready;
   const r = recipeFor(slider, S.lib);
-  return { recipe: { id: r.id, name: r.name, about: r.about }, changes: S.base ? recipeChanges(r, S.base.settings, S.lib) : [] };
+  return { recipe: { id: r.id, name: r.name, about: r.about }, changes: S.base ? recipeChanges(r, S.base.settings, S.lib) : [], governs: recipeGoverns(r, S.lib) };
 });
 
 ipcMain.handle('run-checks', async (_e, { plateIndex, changes, rotations }) => { await S.ready;
@@ -557,7 +572,7 @@ ipcMain.handle('run-claude', async (_e, args) => { await S.ready;
   if (printers.some(p => p.url)) {
     progress('Reading print history from your printers…');
     try {
-      const { jobs } = await fetchJobs(printers);
+      const { jobs } = FAKE_PRINTER ? { jobs: JSON.parse(await fs.readFile(path.join(FAKE_PRINTER, 'jobs.json'), 'utf8')) } : await fetchJobs(printers);
       history = historyForPrompt(S.printLog.decorate(jobs), path.basename(S.filePath));
     } catch {}
   }
@@ -978,52 +993,25 @@ const Parts = require('./src/parts');
 const GcodeCompat = require('./src/gcodecompat');
 const { FilamentStore } = require('./src/filament');
 const Fil = new FilamentStore(app.getPath('userData'));
-// The filaments Color remix and the shopping check choose from: the built-in inventory (the Filament screen) once it
-// has spools, otherwise the old Filament Inventory web page's folder set in Settings, until it's imported.
+// The filaments Color remix and the shopping check choose from: what's on hand on the Filament screen.
 async function inventory() {
-  const own = Fil.stock();
-  if (own) return own;
-  const cfg = await readConfig();
-  if (cfg.inventoryPath) return Inv.loadInventory(cfg.inventoryPath);
-  return { ok: false, error: 'You haven’t added any filament yet. Open Filament (top right) to add yours.' };
+  return Fil.stock() || { ok: false, error: 'You haven’t added any filament yet. Open Filament (top right) to add yours.' };
 }
 ipcMain.handle('inventory-status', async () => {
-  const cfg = await readConfig();
   const own = Fil.stock();
-  if (own) return { set: true, builtin: true, ok: true, onHand: true, updated: own.updated, count: own.filaments.length, spools: own.filaments.reduce((t, f) => t + (f.spools || 0), 0) };
-  if (!cfg.inventoryPath) return { set: false };
-  const inv = Inv.loadInventory(cfg.inventoryPath);
-  return { set: true, path: cfg.inventoryPath, ok: inv.ok, error: inv.error, onHand: inv.onHand, updated: inv.updated, count: inv.ok ? inv.filaments.length : 0, spools: inv.ok ? inv.filaments.reduce((t, f) => t + (f.spools || 0), 0) : 0, note: inv.note };
+  if (!own) return { set: false };
+  return { set: true, builtin: true, ok: true, onHand: true, updated: own.updated, count: own.filaments.length, spools: own.filaments.reduce((t, f) => t + (f.spools || 0), 0) };
 });
 
 // ---------- the Filament screen (renderer/filament/) ----------
 ipcMain.handle('filament-load', async () => {
   const cfg = await readConfig();
   return { ...Fil.load(), imagesBase: 'app://filament/images/', hasKey: !!(await getApiKey()),
-    printers: (cfg.printers || []).map(p => p.name).filter(Boolean), oldFolder: cfg.inventoryPath || '' };
+    printers: (cfg.printers || []).map(p => p.name).filter(Boolean) };
 });
 ipcMain.handle('filament-save', (_e, data) => Fil.save(data));
 ipcMain.handle('filament-has-key', async () => !!(await getApiKey()));
 ipcMain.handle('filament-open-folder', async () => { await fs.mkdir(Fil.backupsDir, { recursive: true }); return shell.openPath(Fil.backupsDir); });
-ipcMain.handle('filament-check-folder', async (_e, loc) => {
-  if (!loc) {
-    const cfg = await readConfig();
-    const r = await dialog.showOpenDialog(win, { title: 'Choose your Filament Inventory folder (the one with index.html and data.js)', defaultPath: Inv.resolveFolder(cfg.inventoryPath) || undefined, properties: ['openDirectory'] });
-    if (r.canceled || !r.filePaths[0]) return null;
-    loc = r.filePaths[0];
-  }
-  return Fil.checkFolder(loc);
-});
-ipcMain.handle('filament-check-backup', async () => {
-  const r = await dialog.showOpenDialog(win, { title: 'Choose the backup you downloaded from the Filament Inventory page', defaultPath: app.getPath('downloads'), properties: ['openFile'], filters: [{ name: 'Filament Inventory backup', extensions: ['json'] }] });
-  if (r.canceled || !r.filePaths[0]) return null;
-  return Fil.checkBackup(r.filePaths[0]);
-});
-ipcMain.handle('filament-import', async (_e, { folder, backup }) => {
-  const r = await Fil.importOld({ folder, backup });
-  logLine(`filament: imported ${r.orders} order lines, ${r.photos} photos, ${r.spools == null ? 'no backup' : r.spools + ' spools'} from ${folder}`);
-  return r;
-});
 // Claude for the Filament screen (reading screenshots, finding product pages). The screen builds the request;
 // the key is added here and never goes to the page.
 ipcMain.handle('filament-claude', async (_e, body) => {
@@ -1070,10 +1058,6 @@ ipcMain.handle('filament-fetch', async (_e, { url, as }) => {
     return { type, base64: buf.toString('base64') };
   }
   return JSON.parse(buf.toString('utf8'));
-});
-ipcMain.handle('inventory-browse', async () => {
-  const r = await dialog.showOpenDialog(win, { title: 'Choose your Filament Inventory folder (the one with index.html)', properties: ['openDirectory'] });
-  return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
 });
 
 // Color remix, step 1: cut the plate into patches along its grooves; the window shows them, the AI groups them
@@ -1199,7 +1183,7 @@ ipcMain.handle('remix-undo', async () => { await S.ready;
 const Shop = require('./src/shopping');
 ipcMain.handle('shopping-check', async (_e, { slots }) => {
   const cfg = await readConfig();
-  if (!Fil.stock() && !cfg.inventoryPath) return { set: false };   // no inventory of any kind: the check stays hidden
+  if (!Fil.stock()) return { set: false };   // no filament yet: the check stays hidden
   const inv = await inventory();
   if (!inv.ok) return { set: true, ok: false, error: inv.error };
   const rows = Shop.check(slots || [], inv.filaments);
@@ -1474,7 +1458,11 @@ ipcMain.handle('ts-load', async (_e, { jobId, modelPath }) => { await S.ready;
     const dir = path.join(app.getPath('userData'), 'gcode-cache'); await fs.mkdir(dir, { recursive: true });
     const file = path.join(dir, crypto.createHash('sha1').update(`${job.printer}|${job.filename}|${job.start}`).digest('hex') + '.gcode');
     try {
-      if (!fss.existsSync(file)) { progress('Downloading the printed G-code from the printer…'); await new U1Printer(pconf).download(job.filename, file); }
+      if (!fss.existsSync(file)) {
+        progress('Downloading the printed G-code from the printer…');
+        if (FAKE_PRINTER) await fs.copyFile(path.join(FAKE_PRINTER, path.basename(job.filename)), file);
+        else await new U1Printer(pconf).download(job.filename, file);
+      }
       S.ts.gcode = await fs.readFile(file, 'utf8');
     } catch (e) { S.ts.gcodeError = e.message; fs.unlink(file).catch(() => {}); }
   } else S.ts.gcodeError = 'That printer isn’t in Settings anymore.';
@@ -1588,7 +1576,7 @@ ipcMain.handle('rows-for', async (_e, settings) => { await S.ready; return build
 ipcMain.handle('history-list', async () => { await S.ready;
   const printers = await getPrinters();
   if (!printers.some(p => p.url)) return { configured: false, jobs: [], errors: [] };
-  const { jobs, errors } = await fetchJobs(printers);
+  const { jobs, errors } = FAKE_PRINTER ? { jobs: JSON.parse(await fs.readFile(path.join(FAKE_PRINTER, 'jobs.json'), 'utf8')), errors: [] } : await fetchJobs(printers);
   S.lastJobs = S.printLog.decorate(jobs);
   return { configured: true, jobs: S.lastJobs, errors };
 });
@@ -1606,7 +1594,6 @@ ipcMain.handle('get-config', async () => { await S.ready;
     model: cfg.model || DEFAULT_MODEL, hasKey: !!(await getApiKey()), keyNeedsReentry: !!cfg.apiKey && !(await getApiKey()), aiMode: cfg.aiMode || 'api',
     experience: Number.isInteger(cfg.experience) ? cfg.experience : null, guideDone: !!cfg.guideDone,
     slicerPath: cfg.slicerPath || '', detectedSlicer: candidateExecutables()[0] || '',
-    inventoryPath: cfg.inventoryPath || '',
     printers: (cfg.printers || []).map(p => ({ name: p.name, url: p.url, hasKey: !!p.apiKey })),
     slicer: slicerInfo(),
     version: require('./package.json').version, homepage: /YOUR-GITHUB-USERNAME/.test(require('./package.json').homepage || '') ? null : require('./package.json').homepage,
@@ -1618,7 +1605,6 @@ ipcMain.handle('set-config', async (_e, patch) => { await S.ready;
   if (patch.aiMode === 'api' || patch.aiMode === 'chat') cfg.aiMode = patch.aiMode;
   if (Number.isInteger(patch.experience) && patch.experience >= 0 && patch.experience <= 3) cfg.experience = patch.experience;
   if (typeof patch.guideDone === 'boolean') cfg.guideDone = patch.guideDone;
-  if (typeof patch.inventoryPath === 'string') cfg.inventoryPath = patch.inventoryPath.trim();
   if (typeof patch.apiKey === 'string') {
     const key = patch.apiKey.trim();
     if (!key) delete cfg.apiKey; else cfg.apiKey = enc(key);
@@ -1688,7 +1674,7 @@ else {
         const firstRun = !require('fs').existsSync(path.join(app.getPath('userData'), 'profile-index.json'));
         startup(firstRun ? 'Loading Snapmaker U1 profiles (first run builds an index)…' : 'Loading Snapmaker U1 profiles…', 60);
         await new Promise(r => setImmediate(r));
-        await setupSlicer();
+        if (!DEMO) await setupSlicer();   // the demo slices nothing
         const info = slicerInfo();
         startup(info.available ? `Ready. Snapmaker Orca found with ${info.filaments.length} U1 filament presets.` : 'Ready. Snapmaker Orca wasn’t found, so slicing is off until you set it in Settings.', 100, true, !info.available);
         setTimeout(() => pruneOldFiles().catch(() => {}), 15000); // housekeeping, after startup
