@@ -1,0 +1,40 @@
+{
+    "filament_notes": [
+        "Made by Filament Inventory from the manufacturer's numbers (JAYO website (PLA line; Rapid PLA isn't listed separately)): nozzle 210–235 °C, bed 55–65 °C."
+    ],
+    "filament_settings_id": [
+        "JAYO Rapid PLA @Snapmaker U1"
+    ],
+    "filament_vendor": [
+        "JAYO"
+    ],
+    "from": "User",
+    "hot_plate_temp": [
+        "60"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "60"
+    ],
+    "inherits": "Generic PLA High Speed",
+    "is_custom_defined": "0",
+    "name": "JAYO Rapid PLA @Snapmaker U1",
+    "nozzle_temperature": [
+        "220"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "220"
+    ],
+    "nozzle_temperature_range_high": [
+        "235"
+    ],
+    "nozzle_temperature_range_low": [
+        "210"
+    ],
+    "textured_plate_temp": [
+        "60"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "60"
+    ],
+    "version": "2.4.0.1"
+}

@@ -1,0 +1,40 @@
+{
+    "filament_notes": [
+        "Made by Filament Inventory from the manufacturer's numbers (Polymaker Panchroma PLA TDS): nozzle 190–230 °C, bed 25–60 °C, drying 55 °C · 6 h."
+    ],
+    "filament_settings_id": [
+        "Polymaker Panchroma Crystal @Snapmaker U1"
+    ],
+    "filament_vendor": [
+        "Polymaker"
+    ],
+    "from": "User",
+    "hot_plate_temp": [
+        "55"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "55"
+    ],
+    "inherits": "Polymaker General PLA Family @U1",
+    "is_custom_defined": "0",
+    "name": "Polymaker Panchroma Crystal @Snapmaker U1",
+    "nozzle_temperature": [
+        "220"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "220"
+    ],
+    "nozzle_temperature_range_high": [
+        "230"
+    ],
+    "nozzle_temperature_range_low": [
+        "190"
+    ],
+    "textured_plate_temp": [
+        "55"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "55"
+    ],
+    "version": "2.4.0.1"
+}

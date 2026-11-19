@@ -1,0 +1,40 @@
+{
+    "filament_notes": [
+        "Made by Filament Inventory from the manufacturer's numbers (Amazon listing): nozzle 205–235 °C, bed 50–60 °C."
+    ],
+    "filament_settings_id": [
+        "SUNLU Silk PLA 2.0 @Snapmaker U1"
+    ],
+    "filament_vendor": [
+        "SUNLU"
+    ],
+    "from": "User",
+    "hot_plate_temp": [
+        "55"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "55"
+    ],
+    "inherits": "Generic PLA Silk",
+    "is_custom_defined": "0",
+    "name": "SUNLU Silk PLA 2.0 @Snapmaker U1",
+    "nozzle_temperature": [
+        "220"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "220"
+    ],
+    "nozzle_temperature_range_high": [
+        "235"
+    ],
+    "nozzle_temperature_range_low": [
+        "205"
+    ],
+    "textured_plate_temp": [
+        "55"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "55"
+    ],
+    "version": "2.4.0.1"
+}

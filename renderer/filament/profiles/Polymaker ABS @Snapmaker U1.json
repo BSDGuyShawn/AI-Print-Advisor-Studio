@@ -1,0 +1,40 @@
+{
+    "filament_notes": [
+        "Made by Filament Inventory from the manufacturer's numbers (Amazon listing): nozzle 245–265 °C, bed 90–100 °C, drying 80 °C · 6 h. Keep the U1 enclosure closed; ABS warps in drafts."
+    ],
+    "filament_settings_id": [
+        "Polymaker ABS @Snapmaker U1"
+    ],
+    "filament_vendor": [
+        "Polymaker"
+    ],
+    "from": "User",
+    "hot_plate_temp": [
+        "95"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "95"
+    ],
+    "inherits": "Generic ABS",
+    "is_custom_defined": "0",
+    "name": "Polymaker ABS @Snapmaker U1",
+    "nozzle_temperature": [
+        "255"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "255"
+    ],
+    "nozzle_temperature_range_high": [
+        "265"
+    ],
+    "nozzle_temperature_range_low": [
+        "245"
+    ],
+    "textured_plate_temp": [
+        "95"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "95"
+    ],
+    "version": "2.4.0.1"
+}

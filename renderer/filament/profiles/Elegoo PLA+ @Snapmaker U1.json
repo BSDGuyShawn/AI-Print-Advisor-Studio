@@ -1,0 +1,40 @@
+{
+    "filament_notes": [
+        "Made by Filament Inventory from the manufacturer's numbers (Amazon listing (nozzle); bed is a typical PLA range): nozzle 200–230 °C, bed 50–60 °C."
+    ],
+    "filament_settings_id": [
+        "Elegoo PLA+ @Snapmaker U1"
+    ],
+    "filament_vendor": [
+        "Elegoo"
+    ],
+    "from": "User",
+    "hot_plate_temp": [
+        "60"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "60"
+    ],
+    "inherits": "Generic PLA",
+    "is_custom_defined": "0",
+    "name": "Elegoo PLA+ @Snapmaker U1",
+    "nozzle_temperature": [
+        "215"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "215"
+    ],
+    "nozzle_temperature_range_high": [
+        "230"
+    ],
+    "nozzle_temperature_range_low": [
+        "200"
+    ],
+    "textured_plate_temp": [
+        "60"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "60"
+    ],
+    "version": "2.4.0.1"
+}

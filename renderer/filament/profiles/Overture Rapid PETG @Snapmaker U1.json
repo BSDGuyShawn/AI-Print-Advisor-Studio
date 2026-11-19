@@ -1,0 +1,40 @@
+{
+    "filament_notes": [
+        "Made by Filament Inventory from the manufacturer's numbers (Amazon listing): nozzle 230–260 °C, bed 65–70 °C."
+    ],
+    "filament_settings_id": [
+        "Overture Rapid PETG @Snapmaker U1"
+    ],
+    "filament_vendor": [
+        "Overture"
+    ],
+    "from": "User",
+    "hot_plate_temp": [
+        "70"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "70"
+    ],
+    "inherits": "Generic PETG HF",
+    "is_custom_defined": "0",
+    "name": "Overture Rapid PETG @Snapmaker U1",
+    "nozzle_temperature": [
+        "245"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "245"
+    ],
+    "nozzle_temperature_range_high": [
+        "260"
+    ],
+    "nozzle_temperature_range_low": [
+        "230"
+    ],
+    "textured_plate_temp": [
+        "70"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "70"
+    ],
+    "version": "2.4.0.1"
+}

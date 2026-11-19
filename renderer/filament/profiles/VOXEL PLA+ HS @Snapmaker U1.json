@@ -1,0 +1,40 @@
+{
+    "filament_notes": [
+        "Made by Filament Inventory from the manufacturer's numbers (voxelpla.com): nozzle 200–220 °C, bed 45–60 °C. The spool label says 200–230 °C."
+    ],
+    "filament_settings_id": [
+        "VOXEL PLA+ HS @Snapmaker U1"
+    ],
+    "filament_vendor": [
+        "VOXEL"
+    ],
+    "from": "User",
+    "hot_plate_temp": [
+        "55"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "55"
+    ],
+    "inherits": "Generic PLA High Speed",
+    "is_custom_defined": "0",
+    "name": "VOXEL PLA+ HS @Snapmaker U1",
+    "nozzle_temperature": [
+        "215"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "215"
+    ],
+    "nozzle_temperature_range_high": [
+        "220"
+    ],
+    "nozzle_temperature_range_low": [
+        "200"
+    ],
+    "textured_plate_temp": [
+        "55"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "55"
+    ],
+    "version": "2.4.0.1"
+}
