@@ -1,8 +1,20 @@
+// Filament inventory, built into AI 3D Print Advisor Studio (it began as a separate web page).
+// boot.js fetches the saved data from the app before this script runs: window.__FIL =
+//   { catalog: { orders, prices }, state, imagesBase, hasKey }.
+// Everything is saved by the app in its data folder (filament\state.json), not in browser storage. Each change
+// also saves what's on hand (filament\stock.json), which Color remix and the shopping check use.
+// Only view preferences (filters, sort, current tab) stay in this page's localStorage.
+const api = window.parent.advisor;
+const BOOT = window.__FIL;
+const ORDERS = BOOT.catalog.orders || [];   // purchase history imported from the old page's data.js
+const PRICES = BOOT.catalog.prices || {};
+let saveTimer = null, saveErr = false;   // see persist()
+// An error from the app arrives as "Error invoking remote method 'x': Error: <message>"; keep the message.
+const ipcMessage = e => String(e && e.message || e).replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, '');
+
 // ======================================================================
 // Constants
 // ======================================================================
-const STORE_KEY = 'filamentInventory.v2';
-const V1_KEY = 'filamentInventory.v1';
 const UI_KEY = 'filamentInventory.ui.v2';
 const FAMS = [
   ['Red','#d32f2f'],['Orange','#fb8c00'],['Yellow','#fdd835'],['Gold','linear-gradient(135deg,#f5e08a,#b8860b)'],
@@ -15,8 +27,6 @@ const FAM_INDEX = Object.fromEntries(FAMS.map(([f], i) => [f, i]));
 const SYNONYMS = { Grey:'gray', Clear:'transparent translucent see-through', Pink:'magenta rose', Purple:'violet lavender', Multicolor:'gradient rainbow dual multi', Silver:'metallic chrome', Gold:'metallic', Teal:'cyan aqua turquoise', Beige:'tan cream natural' };
 const FINISHES = ['Standard','Matte','Silk','Translucent','Gradient','Metallic','Galaxy','Carbon Fiber','Wood','Color Change'];
 const FIL_TYPES = ['PLA','PETG','PCTG','TPU','ABS','ASA','PLA-CF','PETG-CF','Nylon','Other'];
-// The copy for sharing (made by tools/make_friends_zip.py) sets EDITION = 'shared' in its empty data.js.
-const SHARED = typeof EDITION !== 'undefined' && EDITION === 'shared';
 // Spool lifecycle, modeled on FilaMan's statuses plus "On order" for undelivered purchases.
 const STATUSES = [
   { k:'ordered',  l:'On order', c:'#b7791f' },
@@ -52,13 +62,10 @@ const TYPICAL = {
   ABS:  { nozzle:'240–260', bed:'90–110', dry:'80 °C · 4 h' },
   ASA:  { nozzle:'240–260', bed:'90–110', dry:'80 °C · 4 h' },
 };
-const DEFAULT_LOCATIONS = SHARED ? [
-  ['Shelf', false], ['Dry box', false], ...[1, 2, 3, 4].map(t => [`Printer 1 · Slot ${t}`, true]),
-] : [
-  ['Filament rack (6-tier)', false], ['Filament rack (9-tier)', false], ['SpacePi X4 dryer 1', false], ['SpacePi X4 dryer 2', false], ['PolyDryer', false],
-  ['Vacuum storage bag', false],
-  ['PopStation Mini 1', false], ['PopStation Mini 2', false], ['PopStation Mini 3', false],
-  ...[1, 2, 3].flatMap(p => [1, 2, 3, 4].map(t => [`Snapmaker U1 #${p} · Toolhead ${t}`, true])),
+// A new inventory starts with a shelf, a dry box and a slot per toolhead of each printer set up in the app's Settings.
+const DEFAULT_LOCATIONS = [
+  ['Shelf', false], ['Dry box', false],
+  ...(BOOT.printers.length ? BOOT.printers : ['Printer 1']).flatMap(p => [1, 2, 3, 4].map(t => [`${p} · Toolhead ${t}`, true])),
 ];
 // Bring saved location lists up to date without touching anything the user renamed or added.
 // Each version step only adds what was new in that version, so locations the user deleted stay deleted.
@@ -108,7 +115,7 @@ const specFor = (brand, line, finish) => (typeof SPECS !== 'undefined' && (SPECS
 function load(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
 function save(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { toast('Could not save: ' + e.message); } }
 let toastTimer;
-function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2000); }
+function toast(msg, ms = 2000) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms); }
 function swatchBg(hex) { return Array.isArray(hex) ? `linear-gradient(135deg,${hex.join(',')})` : (hex || '#ccc'); }
 function famBg(f) { const v = FAMS[FAM_INDEX[f]]?.[1]; return v == null ? '' : `background:${v}`; }
 const famDot = f => `<span class="dot ${f === 'Clear' ? 'clearpat' : ''}" style="${famBg(f)}"></span>`;
@@ -138,7 +145,7 @@ function buildBase() {
               spec: specFor(o.brand, o.line, o.finish) };
         map.set(id, f);
       }
-      if (!f.img || (f.imgFromBundle && !o.bundle)) { f.img = `images/${o.asin}.jpg`; f.imgFromBundle = o.bundle; }
+      if (!f.img || (f.imgFromBundle && !o.bundle)) { f.img = `${BOOT.imagesBase}${o.asin}.jpg`; f.imgFromBundle = o.bundle; }
       const srcs = [];
       for (let i = 0; i < n; i++) srcs.push(`${o.asin}|${o.date}|${color}|${o.grams}|${i}`);
       f.sources.push({ asin:o.asin, date:o.date, store:o.store || "Amazon", url:o.url || `https://www.amazon.com/dp/${o.asin}`, n, pending:!!o.pending, bundle:o.bundle, price:perSpool, srcs });
@@ -151,8 +158,8 @@ const BASE = buildBase();
 // ======================================================================
 // State: per-spool tracking (status, remaining grams, location, history)
 // ======================================================================
-let state = load(STORE_KEY, null);
-if (!state) state = migrateV1(load(V1_KEY, null));
+let state = BOOT.state;
+if (!state) state = migrateV1(null);   // first start: a spool for every imported order line (none for a new user)
 upgradeLocations();
 syncSources();
 persist();
@@ -199,7 +206,17 @@ function migrateV1(v1) {
   }
   return state;
 }
-function persist() { save(STORE_KEY, state); if (window.__advisorReady) advisorSync(); }
+// Saved by the app a moment after the last change (typing in a note doesn't save on every key), and right away
+// when the page goes away. Each save also sends what's on hand, for Color remix and the shopping check.
+function persist() { clearTimeout(saveTimer); saveTimer = setTimeout(flushSave, 300); }
+function flushSave() {
+  clearTimeout(saveTimer); saveTimer = null;
+  return api.filamentSave({ state, stock: advisorStock() }).then(() => {
+    if (saveErr) { saveErr = false; toast('Saved'); }
+  }, e => { saveErr = true; toast('Couldn’t save your filament: ' + ipcMessage(e), 8000); });
+}
+window.addEventListener('pagehide', () => { if (saveTimer) flushSave(); });
+
 function logEv(s, type, data = {}) { s.log.push({ t:nowISO(), type, ...data }); }
 
 const spoolsOf = fid => Object.values(state.spools).filter(s => s.fid === fid);
@@ -349,6 +366,18 @@ function renderFilters(fil) {
 function renderInventory(fil) {
   const list = fil.filter(f => filPass(f)).sort(sorter);
   const el = $('#view-inventory');
+  if (!allFilaments().length) {   // nothing added yet: how to start
+    el.innerHTML = `<div class="empty" style="max-width:620px;margin:0 auto;text-align:left;line-height:1.55">
+      <h2 style="margin:0 0 6px;color:var(--text)">Add the filament you have</h2>
+      Color remix picks from it, and the app tells you which colors a model needs that you don't have yet.
+      <div class="actions" style="margin-top:14px">
+        <button class="btn primary" data-start="shot">📷 From a screenshot of your orders</button>
+        <button class="btn" data-start="add">+ Add filament by hand</button>
+        <button class="btn" data-import-old>Import the Filament Inventory web page…</button>
+      </div>
+      <p class="muted" style="font-size:13px;margin:10px 0 0">Screenshots work from Amazon or any store's order history, a receipt or a product page; Claude reads them with the API key from Settings.</p></div>`;
+    return;
+  }
   if (!list.length) { el.innerHTML = `<div class="empty">No filament matches.<br><br><button class="btn" data-clear>Clear filters</button></div>`; return; }
   el.innerHTML = groupBy(list).map(g => `
     <div class="section">
@@ -560,17 +589,14 @@ function renderSettings(fil) {
   const brands = [...new Set(fil.map(f => f.brand))].sort((a, b) => a.localeCompare(b));
   const all = Object.values(state.spools);
   $('#view-settings').innerHTML = `<div class="setgrid">
-    <div class="panel" style="grid-column:1/-1"><h3>Anthropic API key <small>· for adding filament from screenshots</small></h3>
-      <p class="muted" style="margin:0 0 8px;font-size:13px"><b>📷 From screenshot</b> sends your screenshots to Claude (Anthropic) with your own API key, so it's billed to your Anthropic account, usually a few cents per screenshot.
-        Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> (add a little credit under Billing).
-        The key is encrypted and kept in this browser on this computer only. It's never put in backups or exports, and it's only ever sent to Anthropic.</p>
-      <div class="setrow">
-        <span style="min-width:190px">${apiKeyInfo ? `<b style="color:var(--petg)">✓ Saved</b> <span class="muted">${esc(apiKeyInfo.hint)}</span>` : '<span class="muted">No key saved yet</span>'}</span>
-        <input type="password" class="grow" id="apiKeyIn" placeholder="${apiKeyInfo ? 'Paste a new key to replace it' : 'Paste your key: sk-ant-…'}" autocomplete="off" spellcheck="false">
-        <button class="btn small primary" data-keysave>Save &amp; test</button>
-        ${apiKeyInfo ? '<button class="btn small danger" data-keydel>Remove</button>' : ''}
-      </div>
-      <div class="muted" style="font-size:13px;min-height:18px" id="keyMsg"></div>
+    <div class="panel"><h3>Claude <small>· for adding filament from screenshots</small></h3>
+      <p class="muted" style="margin:0 0 8px;font-size:13px"><b>📷 From screenshot</b> and <b>Find missing photos online</b> use the Anthropic API key from the app's Settings (the gear at the top right), billed to your Anthropic account: usually a few cents per screenshot.</p>
+      <div class="setrow"><span class="grow">${hasKey ? '<b style="color:var(--petg)">✓ API key set</b>' : '<span class="muted">No API key set yet</span>'}</span>
+        <button class="btn small" data-app-settings>Open Settings</button></div>
+    </div>
+    <div class="panel"><h3>Bring in your Filament Inventory web page</h3>
+      <p class="muted" style="margin:0 0 8px;font-size:13px">Used the separate Filament Inventory page before? Import its orders, product photos and spools here once. Afterwards you only need this screen.</p>
+      <div class="actions" style="margin-top:0"><button class="btn" data-import-old>Import from Filament Inventory…</button></div>
     </div>
     <div class="panel"><h3>Storage locations</h3>
       <p class="muted" style="margin:0 0 8px;font-size:13px">Tick <b>Printer</b> for toolheads or AMS slots. Moving a spool into one marks it <i>Loaded</i>.</p>
@@ -593,21 +619,14 @@ function renderSettings(fil) {
         <option value="roll" ${state.settings.label === 'roll' ? 'selected' : ''}>Label printer (2¼ × 1¼ in)</option></select></div>
     </div>
     <div class="panel"><h3>Backup &amp; data</h3>
-      <p class="muted" style="margin:0 0 8px;font-size:13px">Everything is saved in this browser only. Download a backup now and then, especially before clearing browser data.</p>
+      <p class="muted" style="margin:0 0 8px;font-size:13px">Everything is saved by the app on this computer, with a copy kept each day for two weeks (<a href="#" data-open-backups>open that folder</a>). Download a backup to move your filament to another computer.</p>
       <div class="actions" style="margin-top:0">
         <button class="btn" data-backup>Download backup</button>
         <button class="btn" data-restore>Restore backup…</button>
         <button class="btn" data-export-csv>Export spools CSV</button>
         <button class="btn" data-labels-all>Print labels for all in-stock spools</button>
       </div>
-      <div class="actions"><button class="btn danger" data-resetall>${SHARED ? 'Erase everything and start over' : 'Reset everything to the original order data'}</button></div>
-    </div>
-    <div class="panel" ${SHARED ? 'hidden' : ''}><h3>Print Advisor sync</h3>
-      <p class="muted" style="margin:0 0 8px;font-size:13px">Saves what you have on hand to <b>print-advisor-stock.json</b> in this folder every time something changes, so AI 3D Print Advisor Studio can suggest colors you actually have. Link once: pick this inventory's folder (the one with index.html).</p>
-      <div class="actions" style="margin-top:0">
-        <button class="btn" data-advisor-link>${window.__advisorReady && advisorState.linked ? 'Re-link folder' : 'Link to Print Advisor'}</button>
-        <span class="muted" style="font-size:13px" id="advisorStatus">${window.__advisorReady ? advisorState.msg : ''}</span>
-      </div>
+      <div class="actions"><button class="btn danger" data-resetall>${ORDERS.length ? 'Reset everything to the imported order data' : 'Erase everything and start over'}</button></div>
     </div>
   </div>`;
 }
@@ -714,6 +733,7 @@ function subPanel(s, f) {
 function closeModal() {
   $('#overlay').classList.remove('open'); openFid = null; openPanel = null;
   if (shot) { shot.urls.forEach(u => URL.revokeObjectURL(u)); shot = null; }
+  imp = null;
   render();
 }
 
@@ -899,19 +919,9 @@ $('#view-settings').addEventListener('click', e => {
     backup(); state = blankState(); syncSources(); persist(); toast('Reset. A backup of the old data was downloaded'); render();
   }
 });
-// ---------- Print Advisor sync: on-hand filaments as print-advisor-stock.json in this folder ----------
-const advisorState = { linked: false, msg: 'Not linked yet.' };
-function advisorDb() {
-  return new Promise((res, rej) => { const r = indexedDB.open('print-advisor-sync', 1); r.onupgradeneeded = () => r.result.createObjectStore('h'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
-}
-async function advisorHandle(set) {
-  const db = await advisorDb();
-  return new Promise((res, rej) => {
-    const tx = db.transaction('h', set ? 'readwrite' : 'readonly'), st = tx.objectStore('h');
-    const r = set ? st.put(set, 'dir') : st.get('dir');
-    r.onsuccess = () => res(set || r.result || null); r.onerror = () => rej(r.error);
-  });
-}
+// ---------- What's on hand, for the rest of the app (Color remix, the shopping check) ----------
+// Saved with every change as filament\stock.json. total = all spools ever tracked, so the app can tell an
+// inventory that's in use but has nothing on hand from one that was never set up.
 function advisorStock() {
   const out = [];
   for (const f of [...BASE, ...state.custom]) {
@@ -923,35 +933,59 @@ function advisorStock() {
       loaded: [...new Set(sp.filter(s => s.status === 'active' || isPrinterLoc(s.loc)).map(s => locName(s.loc)).filter(Boolean))],
       preset: spec.preset || null, nozzle: spec.nz || null, bed: spec.bd || null });
   }
-  return { app: 'filament-inventory', kind: 'print-advisor-stock', version: 1, updated: nowISO(), filaments: out };
+  return { app: 'filament-inventory', kind: 'print-advisor-stock', version: 1, updated: nowISO(), total: Object.keys(state.spools).length, filaments: out };
 }
-let advisorTimer = null;
-function advisorSync() { clearTimeout(advisorTimer); advisorTimer = setTimeout(() => advisorWrite(false), 400); }
-async function advisorWrite(interactive) {
-  try {
-    if (!window.showDirectoryPicker) { advisorState.msg = 'This browser can’t save files for the Print Advisor (use Chrome or Edge).'; return; }
-    let dir = await advisorHandle();
-    if (!dir) { advisorState.linked = false; advisorState.msg = 'Not linked yet.'; return; }
-    let perm = await dir.queryPermission({ mode: 'readwrite' });
-    if (perm !== 'granted' && interactive) perm = await dir.requestPermission({ mode: 'readwrite' });
-    if (perm !== 'granted') { advisorState.linked = true; advisorState.msg = 'Linked. Click "Re-link folder" once to allow saving again in this browser session.'; return; }
-    const fh = await dir.getFileHandle('print-advisor-stock.json', { create: true });
-    const w = await fh.createWritable(); await w.write(JSON.stringify(advisorStock(), null, 1)); await w.close();
-    advisorState.linked = true; advisorState.msg = 'Saved for the Print Advisor at ' + new Date().toLocaleTimeString() + '.';
-  } catch (e) { advisorState.msg = 'Couldn’t save for the Print Advisor: ' + e.message; }
-  const el = document.getElementById('advisorStatus'); if (el) el.textContent = advisorState.msg;
-}
-document.addEventListener('click', async e => {
-  if (!e.target.closest('[data-advisor-link]')) return;
-  try {
-    let dir = await advisorHandle();
-    if (dir && (await dir.requestPermission({ mode: 'readwrite' })) === 'granted' && !e.shiftKey) { await advisorWrite(true); toast('Print Advisor sync is on'); return render(); }
-    dir = await window.showDirectoryPicker({ id: 'filament-inventory', mode: 'readwrite' });
-    await advisorHandle(dir); await advisorWrite(true); toast('Linked to the Print Advisor'); render();
-  } catch (err) { if (err.name !== 'AbortError') toast('Couldn’t link: ' + err.message); }
+
+// ---------- Settings links into the app, and importing the old Filament Inventory web page ----------
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-app-settings]')) { e.preventDefault(); return window.parent.document.getElementById('settingsBtn')?.click(); }
+  if (e.target.closest('[data-open-backups]')) { e.preventDefault(); return api.filamentOpenFolder().catch(err => toast(ipcMessage(err))); }
+  if (e.target.closest('[data-import-old]')) return openImport();
+  const start = e.target.closest('[data-start]');
+  if (start) return start.dataset.start === 'shot' ? openShot() : openForm();
 });
-window.__advisorReady = true;
-advisorHandle().then(d => { if (d) { advisorState.linked = true; advisorWrite(false); } }).catch(() => {});
+let imp = null;   // the open import window: { folder, backup, busy, err }
+function openImport() {
+  imp = { folder: null, backup: null, busy: false, err: '' };
+  shot = null; openFid = null;
+  $('#overlay').classList.add('open');
+  renderImport();
+  if (BOOT.oldFolder) api.filamentCheckFolder(BOOT.oldFolder).then(r => { if (imp && !imp.folder && r) { imp.folder = r; renderImport(); } }, () => {});
+}
+function renderImport() {
+  if (!imp) return;
+  const f = imp.folder, b = imp.backup, have = Object.keys(state.spools).length;
+  $('#modal').innerHTML = `<button class="x" data-close>×</button><div class="shot">
+    <h2>Import from the Filament Inventory web page</h2>
+    <p class="muted" style="margin:0 0 12px">Brings in your orders, product photos and every spool with its status, weight, location and history. The old page isn't changed.</p>
+    <div class="mfr"><strong>1. The Filament Inventory folder</strong> (the one with index.html and data.js)
+      <div class="actions" style="margin-top:6px;align-items:center"><button class="btn small" data-imp-folder>${f ? 'Choose another folder' : 'Choose folder…'}</button>
+      <span class="muted" style="font-size:13px">${f ? `${esc(f.path)}<br>${f.orders} order lines · ${f.photos} product photos` : 'Not chosen yet'}</span></div></div>
+    <div class="mfr" style="margin-top:10px"><strong>2. A backup of your spools</strong> (recommended)
+      <div class="muted" style="font-size:13px;margin-top:2px">Spool statuses, weights and locations are kept in the browser, not in the folder. In the old page open <b>Settings → Download backup</b>, then choose that file here. Without it, every ordered spool comes in as sealed.</div>
+      <div class="actions" style="margin-top:6px;align-items:center"><button class="btn small" data-imp-backup>${b ? 'Choose another file' : 'Choose backup file…'}</button>
+      <span class="muted" style="font-size:13px">${b ? `${esc(b.name)}<br>${b.spools} spools · ${b.custom} filaments you added yourself${b.exported ? ' · saved ' + fmtDT(b.exported) : ''}` : 'Not chosen'}</span></div></div>
+    ${have ? `<p style="font-size:13px;color:var(--warn);margin:12px 0 0">This replaces the ${have} spool${have === 1 ? '' : 's'} on this screen now. A copy of them is kept in the backups folder.</p>` : ''}
+    <div class="actions" style="align-items:center">
+      <button class="btn primary" data-imp-go ${f && !imp.busy ? '' : 'disabled'}>${imp.busy ? '<span class="spin"></span> Importing…' : 'Import'}</button>
+      ${imp.err ? `<span style="color:var(--danger);font-size:14px">${esc(imp.err)}</span>` : ''}
+    </div></div>`;
+}
+$('#overlay').addEventListener('click', async e => {
+  if (!imp) return;
+  const t = e.target;
+  try {
+    if (t.closest('[data-imp-folder]')) { const r = await api.filamentCheckFolder(null); if (r) { imp.folder = r; imp.err = ''; } return renderImport(); }
+    if (t.closest('[data-imp-backup]')) { const r = await api.filamentCheckBackup(); if (r) { imp.backup = r; imp.err = ''; } return renderImport(); }
+    if (t.closest('[data-imp-go]')) {
+      imp.busy = true; imp.err = ''; renderImport();
+      clearTimeout(saveTimer); saveTimer = null;   // a save still waiting must not overwrite the import
+      const r = await api.filamentImport({ folder: imp.folder.path, backup: imp.backup && imp.backup.path });
+      sessionStorage.setItem('fil.imported', JSON.stringify(r));
+      return location.reload();
+    }
+  } catch (err) { imp.busy = false; imp.err = ipcMessage(err); renderImport(); }
+});
 
 function backup() {
   download(`filament-backup-${today()}.json`, JSON.stringify({ app:'filament-inventory', version:2, exported:nowISO(), state }, null, 2), 'application/json');
@@ -1036,75 +1070,24 @@ $('#overlay').addEventListener('keydown', e => {
 });
 
 // ======================================================================
-// Claude: the Anthropic API key (encrypted on this device) and "add filament from a screenshot"
+// Claude: "add filament from a screenshot" and "find missing photos online"
+// The requests go through the app, which adds the API key from its Settings. The key never reaches this page.
 // ======================================================================
 const CLAUDE_MODEL = 'claude-opus-5-5';
 const CLAUDE_PRICE = { in: 4, out: 20 };   // $ per million tokens for CLAUDE_MODEL, only for the cost shown after a read
-// Official Anthropic JavaScript SDK, exact version, loaded only when Claude is used (reading needs internet anyway).
-const SDK_URL = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@1.4.0/+esm';
-
-// The key is encrypted with AES-GCM. The AES key is created by the browser as non-extractable, so its bytes can
-// never be read out or copied, and it is kept in IndexedDB next to the encrypted API key. Copying the browser's
-// files to another computer gives an unreadable blob. Nothing about the key goes into state, backups or exports.
-let apiKeyInfo = null;   // { hint, saved } for the Settings panel; the key itself is decrypted only when used
-function secretDb() {
-  return new Promise((res, rej) => { const r = indexedDB.open('filament-inventory-secrets', 1); r.onupgradeneeded = () => r.result.createObjectStore('s'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
-}
-async function secretOp(mode, fn) {
-  const db = await secretDb();
-  return new Promise((res, rej) => { const tx = db.transaction('s', mode), r = fn(tx.objectStore('s')); tx.oncomplete = () => res(r.result); tx.onerror = () => rej(tx.error); });
-}
-const secretGet = k => secretOp('readonly', s => s.get(k));
-const secretPut = (k, v) => secretOp('readwrite', s => s.put(v, k));
-const secretDel = k => secretOp('readwrite', s => s.delete(k));
-async function deviceKey() {
-  let k = await secretGet('deviceKey');
-  if (!k) { k = await crypto.subtle.generateKey({ name:'AES-GCM', length:256 }, false, ['encrypt', 'decrypt']); await secretPut('deviceKey', k); }
-  return k;
-}
-async function storeApiKey(key) {
-  if (!window.crypto?.subtle) throw new Error('This browser can’t encrypt the key here. Open the app in Chrome, Edge or Firefox.');
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const data = await crypto.subtle.encrypt({ name:'AES-GCM', iv }, await deviceKey(), new TextEncoder().encode(key));
-  const info = { hint: 'sk-ant-…' + key.slice(-4), saved: nowISO() };
-  await secretPut('apiKey', { iv, data, ...info });
-  apiKeyInfo = info;
-}
-async function readApiKey() {
-  const rec = await secretGet('apiKey'), k = rec && await secretGet('deviceKey');
-  if (!rec || !k) return null;
-  try { return new TextDecoder().decode(await crypto.subtle.decrypt({ name:'AES-GCM', iv:rec.iv }, k, rec.data)); } catch { return null; }
-}
-async function forgetApiKey() { await secretDel('apiKey'); apiKeyInfo = null; }
-secretGet('apiKey').then(r => { if (r) { apiKeyInfo = { hint:r.hint, saved:r.saved }; if (ui.view === 'settings') render(); } }).catch(() => {});
-
-let sdkPromise = null;
-function loadSdk() {
-  return sdkPromise ||= import(SDK_URL).then(m => m.default, () => {
-    sdkPromise = null;
-    throw Object.assign(new Error('Couldn’t load the Claude library. Reading screenshots needs an internet connection.'), { offline:true });
-  });
-}
-function claudeError(Anthropic, e) {
-  if (!(e instanceof Anthropic.APIError)) return e.message || String(e);
-  if (e instanceof Anthropic.AuthenticationError) return 'Anthropic didn’t accept this API key. Check it in Settings.';
-  if (e instanceof Anthropic.PermissionDeniedError) return 'This API key isn’t allowed to use Claude. Check it in the Anthropic Console.';
-  if (e instanceof Anthropic.RateLimitError) return 'Anthropic is limiting requests on this key right now. Wait a minute and try again.';
-  if (e instanceof Anthropic.APIConnectionError) return 'Couldn’t reach Anthropic. Check your internet connection.';
-  if (e instanceof Anthropic.BadRequestError) return 'Anthropic turned the request down: ' + (e.error?.error?.message || e.message);
-  return `Anthropic error${e.status ? ' ' + e.status : ''}: ${e.error?.error?.message || e.message}`;
-}
-async function testKey(key) {   // listing models is free and proves the key works
-  const Anthropic = await loadSdk();
-  try { await new Anthropic({ apiKey:key, dangerouslyAllowBrowser:true }).models.list({ limit:1 }); }
-  catch (e) { throw Object.assign(new Error(claudeError(Anthropic, e)), { offline: e instanceof Anthropic.APIConnectionError }); }
+let hasKey = !!BOOT.hasKey;
+// the key can be added or removed in Settings while this screen is open
+async function refreshKey() { try { hasKey = await api.filamentHasKey(); } catch {} return hasKey; }
+async function callClaude(body) {
+  try { return await api.filamentClaude(body); }
+  catch (e) { throw new Error(ipcMessage(e)); }
 }
 
 // Screenshots are cut into pieces Claude reads at full detail: at most 1568 px wide, tall pages split into
 // overlapping 1568 px slices (a long order-history page stays readable instead of being shrunk to a blur).
 const TILE = 1568, OVERLAP = 120, MAX_TILES = 10;
-// Product photos are kept in browser storage (about 5 MB for the whole app), so they're stored small: ~15-25 KB each.
-const PHOTO_PX = 300;
+// Product photos are kept with the filament (about 30-50 KB each at this size).
+const PHOTO_PX = 480;
 async function imageTiles(file) {
   const bmp = await createImageBitmap(file);
   const n = k => Math.max(1, Math.ceil((bmp.height * k - OVERLAP) / (TILE - OVERLAP)));
@@ -1172,10 +1155,7 @@ Skip everything that isn't filament (printers, nozzles, dryers, tools). When the
 When a brand and product line match one in the known list in the message, use exactly that spelling.`;
 
 async function readScreenshots(files) {
-  const key = await readApiKey();
-  if (!key) throw new Error('Add your Anthropic API key in Settings first.');
-  const Anthropic = await loadSdk();
-  const client = new Anthropic({ apiKey:key, dangerouslyAllowBrowser:true });
+  if (!await refreshKey()) throw new Error('Add your Anthropic API key in Settings first (the gear at the top right).');
   const content = [], sent = [];   // sent[n - 1] = where "Image n" came from, for cutting out product photos
   for (const [i, f] of files.entries()) {
     const { k, W, tiles } = await imageTiles(f);
@@ -1189,15 +1169,12 @@ async function readScreenshots(files) {
     ...allFilaments().map(f => `${f.brand} | ${f.line}`)])].sort();
   content.push({ type:'text', text: 'List the filament in these screenshots.' + (known.length ? '\n\nKnown brand | product line names:\n' + known.join('\n') : '') });
   const t0 = performance.now();
-  let resp;
-  try {
-    resp = await client.beta.messages.create({
-      model: CLAUDE_MODEL, max_tokens: 16000,
-      betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',   // if a safety check declines, another model retries
-      output_config: { effort: 'medium', format: { type: 'json_schema', schema: SHOT_SCHEMA } },
-      system: SHOT_SYSTEM, messages: [{ role:'user', content }],
-    });
-  } catch (e) { throw new Error(claudeError(Anthropic, e)); }
+  const resp = await callClaude({
+    model: CLAUDE_MODEL, max_tokens: 16000,
+    betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',   // if a safety check declines, another model retries
+    output_config: { effort: 'medium', format: { type: 'json_schema', schema: SHOT_SCHEMA } },
+    system: SHOT_SYSTEM, messages: [{ role:'user', content }],
+  });
   if (resp.stop_reason === 'refusal') throw new Error('Claude declined to read these screenshots.');
   if (resp.stop_reason === 'max_tokens') throw new Error('Too much to read in one go. Try fewer screenshots at a time.');
   let out;
@@ -1223,8 +1200,8 @@ async function readScreenshots(files) {
 
 // ---------- "Find missing photos online": Claude finds the brand's own store page, the app takes the photo from it ----------
 // Claude (web search) only finds the product page. The photo itself comes from the store: most filament brands'
-// shops run on Shopify, which publishes every product with a photo per color at <shop>/products/<name>.js, readable
-// from any web page. The app picks the variant for this color and keeps a small copy, like a screenshot cut-out.
+// shops run on Shopify, which publishes every product with a photo per color at <shop>/products/<name>.js; the app
+// fetches it. The app picks the variant for this color and keeps a small copy, like a screenshot cut-out.
 const SEARCH_PRICE = 0.01;   // $ per web search
 const PAGES_TOOL = {
   name: 'report_product_pages', strict: true,
@@ -1240,23 +1217,18 @@ For each numbered item, use web search to find the page for that exact product l
 store_color is the color as that store names it (for example "Translucent Red"), or null if you can't tell. Give page_url null when you can't find a page on the manufacturer's own store. When you're done, call report_product_pages once with every item.`;
 
 async function findProductPages(list) {
-  const key = await readApiKey();
-  if (!key) throw new Error('Add your Anthropic API key in Settings first.');
-  const Anthropic = await loadSdk();
-  const client = new Anthropic({ apiKey:key, dangerouslyAllowBrowser:true });
-  const messages = [{ role:'user', content: 'Find the manufacturer’s product page for each of these filaments:\n'
+  if (!await refreshKey()) throw new Error('Add your Anthropic API key in Settings first (the gear at the top right).');
+  const messages =[{ role:'user', content: 'Find the manufacturer’s product page for each of these filaments:\n'
     + list.map((it, i) => `${i + 1}. ${it.brand} ${it.line} (${it.type}), color "${it.color}", ${it.grams} g spool`).join('\n') }];
   const lines = new Set(list.map(it => norm(it.brand + it.line))).size;
   let resp, cost = 0;
   for (let turn = 0; turn < 5; turn++) {   // the server pauses long search runs (pause_turn); send its work back to continue
-    try {
-      resp = await client.beta.messages.create({
-        model: CLAUDE_MODEL, max_tokens: 16000,
-        betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
-        output_config: { effort: 'medium' }, system: PAGES_SYSTEM, messages,
-        tools: [{ type:'web_search_20260209', name:'web_search', max_uses: Math.min(15, lines * 2 + 2) }, PAGES_TOOL],
-      });
-    } catch (e) { throw new Error(claudeError(Anthropic, e)); }
+    resp = await callClaude({
+      model: CLAUDE_MODEL, max_tokens: 16000,
+      betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
+      output_config: { effort: 'medium' }, system: PAGES_SYSTEM, messages,
+      tools: [{ type:'web_search_20260209', name:'web_search', max_uses: Math.min(15, lines * 2 + 2) }, PAGES_TOOL],
+    });
     const u = resp.usage || {};
     cost += ((u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0) * 0.1) * CLAUDE_PRICE.in / 1e6
           + (u.output_tokens || 0) * CLAUDE_PRICE.out / 1e6 + (u.server_tool_use?.web_search_requests || 0) * SEARCH_PRICE;
@@ -1272,8 +1244,9 @@ async function findProductPages(list) {
 async function photoFromUrl(src) {
   const u = new URL(src.startsWith('//') ? 'https:' + src : src);
   if (u.hostname.endsWith('shopify.com')) u.searchParams.set('width', '800');
-  const r = await fetch(u.href); if (!r.ok) throw new Error('image ' + r.status);
-  const bmp = await createImageBitmap(await r.blob());
+  const img = await api.filamentFetch({ url: u.href, as: 'image' });   // fetched by the app (no browser CORS limits)
+  const bytes = Uint8Array.from(atob(img.base64), c => c.charCodeAt(0));
+  const bmp = await createImageBitmap(new Blob([bytes], { type: img.type }));
   const s = Math.min(1, PHOTO_PX / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas'); c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
   const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(bmp, 0, 0, c.width, c.height);
@@ -1284,9 +1257,8 @@ async function photoFromUrl(src) {
 async function storePhoto(pageUrl, color, storeColor) {
   let u; try { u = new URL(pageUrl); } catch { return null; }
   const m = u.pathname.match(/\/products\/([^/?#]+)/); if (!m) return null;
-  const r = await fetch(`${u.origin}/products/${m[1]}.js`).catch(() => null);
-  if (!r?.ok) return null;
-  const p = await r.json().catch(() => null); if (!p) return null;
+  const p = await api.filamentFetch({ url: `${u.origin}/products/${m[1]}.js`, as: 'json' }).catch(() => null);
+  if (!p) return null;
   const words = s => String(s || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
   let best = null, bestScore = 0;
   for (const v of p.variants || []) {
@@ -1315,20 +1287,22 @@ function openShot(files = []) {
   if (shot) shot.urls.forEach(u => URL.revokeObjectURL(u));
   shot = { files:[], urls:[], busy:false, err:'', result:null };
   openFid = null;
+  imp = null;
   addShotFiles(files);
   $('#overlay').classList.add('open');
   renderShot();
+  refreshKey().then(() => { if (shot) renderShot(); });   // the key may have been set in Settings meanwhile
 }
 function addShotFiles(files) {
   for (const f of files) if (f.type.startsWith('image/')) { shot.files.push(f); shot.urls.push(URL.createObjectURL(f)); }
 }
 function renderShot() {
   if (!shot) return;
-  const r = shot.result, ready = shot.files.length && !shot.busy && apiKeyInfo;
+  const r = shot.result, ready = shot.files.length && !shot.busy && hasKey;
   $('#modal').innerHTML = `<button class="x" data-close>×</button><div class="shot">
     <h2>Add filament from a screenshot</h2>
     <p class="muted" style="margin:0">Drop, paste (Ctrl+V) or choose screenshots of an order page, receipt, cart or product page. Claude reads them, and you check the list before anything is added.</p>
-    ${apiKeyInfo ? '' : `<div class="mfr" style="margin-top:12px">To read screenshots, first add your Anthropic API key in <a href="#settings" data-go-settings>Settings</a>.</div>`}
+    ${hasKey ? '' : `<div class="mfr" style="margin-top:12px">To read screenshots, first add your Anthropic API key in the app's <a href="#" data-app-settings>Settings</a>.</div>`}
     <div class="drop" data-drop>Drop screenshots here, paste with Ctrl+V, or <u>choose files</u><input type="file" accept="image/*" multiple hidden data-shotfile></div>
     ${shot.files.length ? `<div class="thumbs">${shot.urls.map((u, i) => `<figure><img src="${u}" alt="Screenshot ${i + 1}"><button class="btn small" data-shotdel="${i}" title="Remove this screenshot">✕</button></figure>`).join('')}</div>` : ''}
     <div class="actions" style="margin-top:4px;align-items:center">
@@ -1408,7 +1382,6 @@ $('#shotBtn').addEventListener('click', () => openShot());
 $('#overlay').addEventListener('click', async e => {
   if (!shot) return;
   const t = e.target;
-  if (t.closest('[data-go-settings]')) { e.preventDefault(); closeModal(); return go('settings'); }
   if (t.closest('[data-drop]') && !t.matches('input')) return $('[data-shotfile]').click();
   const del = t.closest('[data-shotdel]');
   if (del) { const i = +del.dataset.shotdel; URL.revokeObjectURL(shot.urls[i]); shot.files.splice(i, 1); shot.urls.splice(i, 1); return renderShot(); }
@@ -1480,32 +1453,6 @@ document.addEventListener('paste', e => {
   e.preventDefault();
   if (shot) { addShotFiles(files); renderShot(); } else openShot(files);
 });
-// Settings: save / test / remove the API key
-async function saveKeyFromSettings() {
-  const input = $('#apiKeyIn'), msg = $('#keyMsg'), btn = $('[data-keysave]');
-  const key = input.value.trim();
-  if (!key) { msg.textContent = 'Paste your key first.'; return; }
-  if (!/^sk-ant-/.test(key)) { msg.textContent = 'That doesn’t look like an Anthropic API key. They start with sk-ant-.'; return; }
-  btn.disabled = true; msg.textContent = 'Checking the key with Anthropic…';
-  let checked = true;
-  try { await testKey(key); }
-  catch (err) {
-    if (!err.offline) { btn.disabled = false; msg.textContent = err.message; return; }
-    checked = false;
-  }
-  try { await storeApiKey(key); }
-  catch (err) { btn.disabled = false; msg.textContent = 'Couldn’t save the key: ' + err.message; return; }
-  render();
-  toast(checked ? 'API key saved and working' : 'API key saved (not checked: no connection)');
-}
-document.addEventListener('click', async e => {
-  if (e.target.closest('[data-keysave]')) return saveKeyFromSettings();
-  const del = e.target.closest('[data-keydel]');
-  if (!del) return;
-  if (!del.dataset.armed) { del.dataset.armed = 1; del.textContent = 'Click again to remove'; return; }
-  await forgetApiKey(); render(); toast('API key removed from this browser');
-});
-document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'apiKeyIn') saveKeyFromSettings(); });
 
 $('#addBtn').addEventListener('click', () => openForm());
 $('#themeBtn').addEventListener('click', () => {
@@ -1520,3 +1467,8 @@ document.addEventListener('keydown', e => {
 });
 
 render();
+// after an import the page reloads; say what came in
+try {
+  const r = JSON.parse(sessionStorage.getItem('fil.imported') || 'null');
+  if (r) { sessionStorage.removeItem('fil.imported'); setTimeout(() => toast(`Imported ${r.orders} order lines, ${r.photos} photos${r.spools != null ? ` and ${r.spools} spools` : ''}`, 6000), 300); }
+} catch {}

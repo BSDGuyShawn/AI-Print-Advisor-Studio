@@ -23,6 +23,7 @@
       <input type="text" id="printNameInput" class="hidden" maxlength="48" aria-label="Print name">
     </div>
     <div class="top-actions">
+      <button class="btn ghost" id="filamentBtn" aria-pressed="false" title="Your filament inventory: what you have, spools, locations and print settings">Filament</button>
       <button class="btn ghost" id="guideBtn" title="Step-by-step guide">Guide</button>
       <button class="btn ghost" id="openBtn">Open 3MF</button>
       <button class="btn ghost icon" id="settingsBtn" aria-label="Settings" title="Settings">
@@ -168,13 +169,15 @@
     </aside>
   </main>
 
+  <section class="filament-view" id="filamentView" aria-label="Filament inventory"></section>
+
   <dialog id="settingsDialog" class="settings">
     <form method="dialog" id="settingsForm">
       <h2>Settings</h2>
       <label class="field">
-        <span>Filament inventory (optional)</span>
+        <span>Old Filament Inventory web page folder (optional)</span>
         <div class="row"><input type="text" id="inventoryPath" placeholder="Your Filament Inventory folder, or its file:///…/index.html link"><button type="button" class="btn" id="browseInventory">Browse</button></div>
-        <small id="inventoryStatus">Lets Color remix use the filaments you actually have.</small>
+        <small id="inventoryStatus">Only needed until you import it on the Filament screen.</small>
       </label>
       <label class="field">
         <span>Your 3D printing experience</span>

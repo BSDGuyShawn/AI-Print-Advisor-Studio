@@ -522,8 +522,9 @@ async function openRemix() {
   if (!state.file) { toast('Open a model first.', 3000); return; }
   const inv = await api.inventoryStatus().catch(() => ({ set: false }));
   if (!inv.set || !inv.ok) {
-    toast(inv.set ? `Couldn’t read your filament inventory: ${inv.error}` : 'Color remix uses your filament inventory. Add its location in Settings first.', 7000);
-    openSettings(); return;
+    toast(inv.set ? `Couldn’t read your filament inventory: ${inv.error}` : 'Color remix picks from the filament you have. Add yours here first.', 7000);
+    if (inv.set) openSettings(); else showFilament(true);
+    return;
   }
   $('rxUndo').classList.toggle('hidden', !state.remixApplied);
   $('remixDialog').showModal();
@@ -612,10 +613,28 @@ $('rxUndo').onclick = async () => {
   if (await api.remixUndo()) { state.remixApplied = false; $('remixDialog').close(); resetRemix(); await prepare(); toast('Remix undone: back to the model’s own colors.', 5000); }
 };
 
+// ---------- Filament: the built-in filament inventory, shown over the whole window ----------
+// renderer/filament/ runs in an iframe (its own page and styles) and talks to the app through window.advisor here.
+function showFilament(on) {
+  const view = $('filamentView');
+  if (on && !view.querySelector('iframe')) {
+    const f = document.createElement('iframe');
+    f.src = 'filament/index.html'; f.title = 'Filament inventory';
+    view.appendChild(f);
+  }
+  document.body.classList.toggle('filament-open', on);
+  $('filamentBtn').textContent = on ? 'Back to model' : 'Filament';
+  $('filamentBtn').setAttribute('aria-pressed', String(on));
+  if (on) view.querySelector('iframe').focus();
+  else { SHOP.key = ''; renderShopping(); }   // what's on hand may have changed
+}
+$('filamentBtn').onclick = () => showFilament(!document.body.classList.contains('filament-open'));
+
 // ---------- filament inventory in Settings ----------
 async function showInventoryStatus() {
   const s = await api.inventoryStatus().catch(() => null);
-  $('inventoryStatus').textContent = !s || !s.set ? 'Lets Color remix use the filaments you actually have.'
+  $('inventoryStatus').textContent = !s || !s.set ? 'Only needed until you import it on the Filament screen.'
+    : s.builtin ? `Not needed any more: Color remix uses the Filament screen (${s.count} filaments, ${s.spools} spools on hand).`
     : !s.ok ? s.error
     : `Found ${s.count} filaments${s.onHand ? ` on hand (${s.spools} spools), updated ${s.updated ? new Date(s.updated).toLocaleString() : 'recently'}` : ` (${s.spools} spools bought)`}.${s.note ? ' ' + s.note : ''}`;
 }
@@ -975,7 +994,7 @@ async function renderShopping() {
       </div></li>`;
     }).join('')}</ul>
     ${!found && d.hasKey ? `<div class="row-btns"><button class="btn small" id="shopFind">Find exact products with AI</button> <span class="cost-line">${d.findCost ? `about ${money(d.findCost.low)}–${money(d.findCost.high)}` : ''}</span></div>` : ''}
-    ${d.onHand ? '' : '<span class="muted">Compared with everything you’ve bought; turn on Print Advisor sync in your inventory for what’s on hand.</span>'}`;
+    ${d.onHand ? '' : '<span class="muted">Compared with everything you’ve bought; import your inventory on the Filament screen to compare with what’s on hand.</span>'}`;
   const b = $('shop').querySelector('#shopFind');
   if (b) b.onclick = async () => {
     b.disabled = true; b.textContent = 'Searching…';
@@ -1080,7 +1099,9 @@ $('analyzeBtn').onclick = async () => {
     setTimeout(() => guideEvent('analyzed'), 50);
     renderResults(); renderStats();
     $('analyzeBtn').textContent = 'Get new recommendations';
-    if (state.info.available) runCompare(['original', 'recommended']);
+    // The recommended version isn't sliced here: the recommendations only need the slice of the original (made
+    // before asking the AI). Slicing it is up to the user in Compare slices; sending a print slices it if needed.
+    renderCompare();
   } catch (e) {
     body.innerHTML = `<div class="error"><b>Analysis failed.</b><p>${esc(cleanErr(e))}</p></div>`;
   } finally { clearInterval(timer); clearBusy('claude'); state.busy = false; $('analyzeBtn').disabled = false; }

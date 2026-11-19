@@ -1,9 +1,9 @@
-const { app, BrowserWindow, ipcMain, dialog, safeStorage, shell, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, safeStorage, shell, protocol, net } = require('electron');
 
 // The UI is served from app:// with explicit content types. Loading it as file:// lets Windows decide the
 // content type from its registry, and a changed .html/.js association can make the page render wrongly.
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' };
 const path = require('path');
 const fs = require('fs/promises');
 const { load3mf, analyzePlate, settingsSummary, buildPresets, applyChanges } = require('./src/threemf');
@@ -29,6 +29,9 @@ const crypto = require('crypto');
 const JSZip = require('jszip');
 const fss = require('fs');
 const { fetchJobs, PrintLog, historyForPrompt } = require('./src/history');
+
+// For testing only: run against a separate data folder so a test never touches your settings or filament.
+if (process.env.AIPA_USER_DATA) app.setPath('userData', process.env.AIPA_USER_DATA);
 
 let win;
 const DEFAULT_MODEL = 'claude-sonnet-5-5';
@@ -57,7 +60,7 @@ function migrateFromOldName() {
     S.migratedFromOldName = true;
   } catch {}
 }
-migrateFromOldName();
+if (!process.env.AIPA_USER_DATA) migrateFromOldName();   // a test data folder starts empty
 
 const CONFIG_PATH = () => path.join(app.getPath('userData'), 'config.json');
 async function readConfig() { try { return JSON.parse(await fs.readFile(CONFIG_PATH(), 'utf8')); } catch { return {}; } }
@@ -973,16 +976,100 @@ const Remix = require('./src/remix');
 const { findPatches } = require('./src/patches');
 const Parts = require('./src/parts');
 const GcodeCompat = require('./src/gcodecompat');
+const { FilamentStore } = require('./src/filament');
+const Fil = new FilamentStore(app.getPath('userData'));
+// The filaments Color remix and the shopping check choose from: the built-in inventory (the Filament screen) once it
+// has spools, otherwise the old Filament Inventory web page's folder set in Settings, until it's imported.
 async function inventory() {
+  const own = Fil.stock();
+  if (own) return own;
   const cfg = await readConfig();
-  if (!cfg.inventoryPath) return { ok: false, error: 'No filament inventory set. Add its location in Settings.' };
-  return Inv.loadInventory(cfg.inventoryPath);
+  if (cfg.inventoryPath) return Inv.loadInventory(cfg.inventoryPath);
+  return { ok: false, error: 'You haven’t added any filament yet. Open Filament (top right) to add yours.' };
 }
 ipcMain.handle('inventory-status', async () => {
   const cfg = await readConfig();
+  const own = Fil.stock();
+  if (own) return { set: true, builtin: true, ok: true, onHand: true, updated: own.updated, count: own.filaments.length, spools: own.filaments.reduce((t, f) => t + (f.spools || 0), 0) };
   if (!cfg.inventoryPath) return { set: false };
   const inv = Inv.loadInventory(cfg.inventoryPath);
   return { set: true, path: cfg.inventoryPath, ok: inv.ok, error: inv.error, onHand: inv.onHand, updated: inv.updated, count: inv.ok ? inv.filaments.length : 0, spools: inv.ok ? inv.filaments.reduce((t, f) => t + (f.spools || 0), 0) : 0, note: inv.note };
+});
+
+// ---------- the Filament screen (renderer/filament/) ----------
+ipcMain.handle('filament-load', async () => {
+  const cfg = await readConfig();
+  return { ...Fil.load(), imagesBase: 'app://filament/images/', hasKey: !!(await getApiKey()),
+    printers: (cfg.printers || []).map(p => p.name).filter(Boolean), oldFolder: cfg.inventoryPath || '' };
+});
+ipcMain.handle('filament-save', (_e, data) => Fil.save(data));
+ipcMain.handle('filament-has-key', async () => !!(await getApiKey()));
+ipcMain.handle('filament-open-folder', async () => { await fs.mkdir(Fil.backupsDir, { recursive: true }); return shell.openPath(Fil.backupsDir); });
+ipcMain.handle('filament-check-folder', async (_e, loc) => {
+  if (!loc) {
+    const cfg = await readConfig();
+    const r = await dialog.showOpenDialog(win, { title: 'Choose your Filament Inventory folder (the one with index.html and data.js)', defaultPath: Inv.resolveFolder(cfg.inventoryPath) || undefined, properties: ['openDirectory'] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    loc = r.filePaths[0];
+  }
+  return Fil.checkFolder(loc);
+});
+ipcMain.handle('filament-check-backup', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Choose the backup you downloaded from the Filament Inventory page', defaultPath: app.getPath('downloads'), properties: ['openFile'], filters: [{ name: 'Filament Inventory backup', extensions: ['json'] }] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  return Fil.checkBackup(r.filePaths[0]);
+});
+ipcMain.handle('filament-import', async (_e, { folder, backup }) => {
+  const r = await Fil.importOld({ folder, backup });
+  logLine(`filament: imported ${r.orders} order lines, ${r.photos} photos, ${r.spools == null ? 'no backup' : r.spools + ' spools'} from ${folder}`);
+  return r;
+});
+// Claude for the Filament screen (reading screenshots, finding product pages). The screen builds the request;
+// the key is added here and never goes to the page.
+ipcMain.handle('filament-claude', async (_e, body) => {
+  const key = await getApiKey();
+  if (!key) throw new Error('Add your Anthropic API key in Settings first (the gear at the top right).');
+  const { betas, ...rest } = body || {};
+  if (!rest.model || !Array.isArray(rest.messages)) throw new Error('Bad request.');
+  rest.max_tokens = Math.min(+rest.max_tokens || 16000, 32000);
+  const headers = { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' };
+  if (Array.isArray(betas) && betas.length) headers['anthropic-beta'] = betas.join(',');
+  let res;
+  try { res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers, body: JSON.stringify(rest), signal: AbortSignal.timeout(10 * 60 * 1000) }); }
+  catch (e) { throw new Error(e.name === 'TimeoutError' ? 'Claude took too long to answer. Try again.' : 'Couldn’t reach Anthropic. Check your internet connection.'); }
+  const data = await res.json().catch(() => null);
+  if (res.ok && data) return data;
+  const msg = (data && data.error && data.error.message) || `HTTP ${res.status}`;
+  logLine(`filament: Claude request failed (${res.status}): ${msg}`);
+  if (res.status === 401) throw new Error('Anthropic didn’t accept the API key. Check it in Settings.');
+  if (res.status === 403) throw new Error('This API key isn’t allowed to use Claude. Check it in the Anthropic Console.');
+  if (res.status === 429) throw new Error('Anthropic is limiting requests on this key right now. Wait a minute and try again.');
+  if (res.status === 529 || res.status >= 500) throw new Error('Anthropic is busy right now. Try again in a minute.');
+  if (res.status === 400 && /credit|balance|billing/i.test(msg)) throw new Error(`Your Anthropic account needs credits: ${msg}`);
+  throw new Error(`Anthropic turned the request down: ${msg}`);
+});
+// A web page or image for the Filament screen, fetched here (no browser CORS limits): a store's product data
+// (Shopify's /products/<name>.js) or its product photo. https only, size-limited. Uses Chromium's network stack
+// (Windows certificates and proxy settings, like a browser). Stores briefly refuse bursts of requests (429), so
+// those are retried after a pause.
+ipcMain.handle('filament-fetch', async (_e, { url, as }) => {
+  let u; try { u = new URL(url); } catch { throw new Error('Bad address.'); }
+  if (u.protocol !== 'https:') throw new Error('Only https addresses can be fetched.');
+  let res;
+  for (let attempt = 0; ; attempt++) {
+    res = await net.fetch(u.href, { headers: { accept: as === 'image' ? 'image/*' : 'application/json' }, signal: AbortSignal.timeout(20000) });
+    if (res.status !== 429 || attempt === 2) break;
+    await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > 15 * 1024 * 1024) throw new Error('Too large.');
+  const type = (res.headers.get('content-type') || '').split(';')[0].trim();
+  if (as === 'image') {
+    if (!/^image\//.test(type)) throw new Error('Not an image.');
+    return { type, base64: buf.toString('base64') };
+  }
+  return JSON.parse(buf.toString('utf8'));
 });
 ipcMain.handle('inventory-browse', async () => {
   const r = await dialog.showOpenDialog(win, { title: 'Choose your Filament Inventory folder (the one with index.html)', properties: ['openDirectory'] });
@@ -1112,8 +1199,8 @@ ipcMain.handle('remix-undo', async () => { await S.ready;
 const Shop = require('./src/shopping');
 ipcMain.handle('shopping-check', async (_e, { slots }) => {
   const cfg = await readConfig();
-  if (!cfg.inventoryPath) return { set: false };
-  const inv = Inv.loadInventory(cfg.inventoryPath);
+  if (!Fil.stock() && !cfg.inventoryPath) return { set: false };   // no inventory of any kind: the check stays hidden
+  const inv = await inventory();
   if (!inv.ok) return { set: true, ok: false, error: inv.error };
   const rows = Shop.check(slots || [], inv.filaments);
   const model = cfg.model || DEFAULT_MODEL;
@@ -1123,7 +1210,7 @@ ipcMain.handle('shopping-check', async (_e, { slots }) => {
 ipcMain.handle('shopping-find', async (_e, { rows }) => {
   const cfg = await readConfig();
   const key = await getApiKey();
-  const inv = cfg.inventoryPath ? Inv.loadInventory(cfg.inventoryPath) : { ok: false };
+  const inv = await inventory();
   const brands = inv.ok ? [...new Set(inv.filaments.map(f => f.brand).filter(Boolean))].slice(0, 12) : [];
   progress('Searching the web for matching filaments…');
   const r = await Shop.findProducts({ apiKey: key, model: cfg.model || DEFAULT_MODEL, items: rows, brands });
@@ -1577,9 +1664,12 @@ else {
   app.on('open-file', (e, f) => { e.preventDefault(); if (win) win.webContents.send('open-from-os', f); });
   app.whenReady().then(() => {
     protocol.handle('app', async (req) => {
-      const rel = decodeURIComponent(new URL(req.url).pathname).replace(/^\/+/, '');
-      const file = path.normalize(path.join(__dirname, rel));
-      if (!file.startsWith(path.normalize(__dirname))) return new Response('Not found', { status: 404 });
+      const u = new URL(req.url);
+      const rel = decodeURIComponent(u.pathname).replace(/^\/+/, '');
+      // app://filament/images/<name>: product photos of the filament inventory, from the data folder
+      const root = u.host === 'filament' ? Fil.imagesDir : __dirname;
+      const file = path.normalize(path.join(root, u.host === 'filament' ? rel.replace(/^images\//, '') : rel));
+      if (!file.startsWith(path.normalize(root) + path.sep)) return new Response('Not found', { status: 404 });
       try {
         const body = await fs.readFile(file);
         return new Response(body, { headers: { 'content-type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream' } });

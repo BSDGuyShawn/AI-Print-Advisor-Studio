@@ -51,7 +51,7 @@ function loadInventory(loc) {
   }
   try {
     const f = fromCatalog(dir);
-    if (f && f.length) return { ok: true, dir, onHand: false, updated: null, filaments: f, note: 'Using every filament you’ve bought (empties included). Turn on “Print Advisor sync” in the inventory’s Settings so only what’s on hand is used.' };
+    if (f && f.length) return { ok: true, dir, onHand: false, updated: null, filaments: f, note: 'Using every filament you’ve bought (empties included). Import it on the Filament screen so only what’s on hand is used.' };
   } catch (e) { return { ok: false, error: `Couldn’t read the inventory: ${e.message}` }; }
   return { ok: false, error: 'No inventory data found there (expected print-advisor-stock.json or data.js).' };
 }

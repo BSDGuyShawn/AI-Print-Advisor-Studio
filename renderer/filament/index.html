@@ -4,27 +4,28 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Filament Inventory</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='44' fill='%23f28c28'/><circle cx='50' cy='50' r='14' fill='%23fff'/></svg>">
+<!-- Same rules as the main window, plus product photos served by the app from its data folder (app://filament/). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob: app://filament; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self'">
 <style>
 :root{
-  --bg:#f5f5f2; --surface:#ffffff; --surface-2:#f0efeb; --text:#1d1d1b; --muted:#6b6b66; --border:#e2e1dc;
-  --accent:#e0701c; --accent-ink:#fff; --bar:#c2611a; --pla:#2b6cb0; --petg:#2f855a; --danger:#c53030; --warn:#b7791f;
+  --bg:#E6E9EC; --surface:#ffffff; --surface-2:#F0F2F4; --text:#18232E; --muted:#586774; --border:#CBD2D8;
+  --accent:#1F7A8C; --accent-ink:#fff; --bar:#1F7A8C; --pla:#2b6cb0; --petg:#2f855a; --danger:#c53030; --warn:#b7791f;
   --shadow:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.05); --photo-bg:#ffffff;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#161615; --surface:#20201e; --surface-2:#2a2a27; --text:#ecebe6; --muted:#a3a29b; --border:#34342f;
-    --accent:#f28c3a; --accent-ink:#1d1d1b; --bar:#f0a060; --pla:#7fb3f0; --petg:#6fcf97; --danger:#fc8181; --warn:#f6c26b;
+    --bg:#1B2128; --surface:#222A32; --surface-2:#29323B; --text:#E3E9EE; --muted:#9AA8B4; --border:#38434E;
+    --accent:#4DB3C4; --accent-ink:#0F1E22; --bar:#4DB3C4; --pla:#7fb3f0; --petg:#6fcf97; --danger:#fc8181; --warn:#f6c26b;
     --shadow:0 1px 2px rgba(0,0,0,.4); --photo-bg:#f4f4f2;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#161615; --surface:#20201e; --surface-2:#2a2a27; --text:#ecebe6; --muted:#a3a29b; --border:#34342f;
-  --accent:#f28c3a; --accent-ink:#1d1d1b; --bar:#f0a060; --pla:#7fb3f0; --petg:#6fcf97; --danger:#fc8181; --warn:#f6c26b;
+  --bg:#1B2128; --surface:#222A32; --surface-2:#29323B; --text:#E3E9EE; --muted:#9AA8B4; --border:#38434E;
+  --accent:#4DB3C4; --accent-ink:#0F1E22; --bar:#4DB3C4; --pla:#7fb3f0; --petg:#6fcf97; --danger:#fc8181; --warn:#f6c26b;
   --shadow:0 1px 2px rgba(0,0,0,.4); --photo-bg:#f4f4f2;
 }
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 "Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 a{color:var(--accent)}
@@ -285,7 +286,7 @@ table.review .note{font-size:11.5px;color:var(--warn);margin-top:3px}
 <header>
   <div class="wrap">
     <div class="top">
-      <h1><span class="logo"></span>Filament Inventory</h1>
+      <h1><span class="logo"></span>Filament</h1>
       <nav class="tabs" id="tabs">
         <a href="#inventory" data-view="inventory">Inventory</a>
         <a href="#spools" data-view="spools">Spools</a>
