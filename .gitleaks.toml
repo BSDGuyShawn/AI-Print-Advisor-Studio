@@ -1,0 +1,10 @@
+# Gitleaks settings: the standard rules, plus the few lines that look like keys but aren't.
+title = "AI 3D Print Advisor Studio"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Names of the Filament screen's browser storage entries (for example 'filamentInventory.v2'), not secrets"
+regexTarget = "line"
+regexes = ['''_KEY = 'filamentInventory\.[a-z0-9.]+'''']
