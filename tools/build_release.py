@@ -35,7 +35,9 @@ EXE = 'AI 3D Print Advisor Studio.exe'
 CSC = os.path.join(os.environ.get('WINDIR', r'C:\Windows'), 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe')
 
 def asar_node_modules(asar, out):
-    """Copy node_modules out of an app.asar (and its .unpacked folder)."""
+    """Copy node_modules out of an app.asar (and its .unpacked folder), or from a plain node_modules folder."""
+    if os.path.isdir(asar):
+        shutil.copytree(asar, os.path.join(out, 'node_modules'), dirs_exist_ok=True); return
     d = open(asar, 'rb').read()
     hdr = json.loads(d[16:16 + struct.unpack('<I', d[12:16])[0]]); base = 8 + struct.unpack('<I', d[4:8])[0]
     unpacked = asar + '.unpacked'

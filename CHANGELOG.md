@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.23.1
+- **The guide stands out more**: a bright orange window, and the "Click here" highlight and the "Click …" line are
+  now bright cyan, so the next thing to click still pops against it.
+- **Meet the wizard**: the first guide screen shows an animated wizard waving his wand at a Snapmaker U1, turning a
+  spaghetti mess into a dragon. His face is the guide's icon on every step.
+
 ## 2.23.0
 - **Updates built in.** The app checks GitHub for a new version when it starts and once a day while it's open.
   When there is one, it shows **what's new** since your version, and **Install and restart** updates it **in place**
