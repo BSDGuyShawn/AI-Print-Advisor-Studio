@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.19.2
+- Word explanations: **STL file** has its own picture (it showed the 3MF one), and the **3MF file** picture
+  labels all three parts: model, colors and settings.
+
 ## 2.19.1
 - **Tidier download**: the unzipped folder now holds just one program to open (`AI 3D Print Advisor Studio.exe`,
   or `... DEMO.exe`) and an `app` folder with everything else. The zip no longer has a folder inside it, so

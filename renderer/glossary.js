@@ -26,6 +26,8 @@ const rocket = (x, y, s, upright) => upright
   ? `<g transform="translate(${x} ${y}) scale(${s})"><polygon points="0,-60 -9,-44 9,-44" fill="${K.red}"/><rect x="-9" y="-44" width="18" height="38" fill="${K.white}" stroke="${K.mute}"/><circle cx="0" cy="-30" r="4" fill="${K.blue}"/><polygon points="-9,-16 -17,-2 -9,-6" fill="${K.red}"/><polygon points="9,-16 17,-2 9,-6" fill="${K.red}"/><rect x="-6" y="-6" width="12" height="6" fill="${K.grey}"/></g>`
   : `<g transform="translate(${x} ${y}) scale(${s})"><polygon points="60,-9 44,0 44,-18" fill="${K.red}"/><rect x="6" y="-18" width="38" height="18" fill="${K.white}" stroke="${K.mute}"/><circle cx="30" cy="-9" r="4" fill="${K.blue}"/><rect x="0" y="-15" width="6" height="12" fill="${K.grey}"/></g>`;
 const cube = (x, y, s, c = K.teal) => `<g transform="translate(${x} ${y}) scale(${s})"><polygon points="0,-30 26,-15 0,0 -26,-15" fill="${c}" opacity=".75"/><polygon points="-26,-15 0,0 0,30 -26,15" fill="${c}"/><polygon points="26,-15 0,0 0,30 26,15" fill="${K.tealD}"/></g>`;
+const fileDoc = (x, y) => `<path d="M${x} ${y} h60 l22 22 v88 h-82 z" fill="${K.paper}" stroke="${K.grey}"/><path d="M${x + 60} ${y} v22 h22" fill="none" stroke="${K.grey}"/>`;
+const gear = (x, y, c = K.mute) => `<g transform="translate(${x} ${y})" fill="${c}">${[...Array(8)].map((_, i) => `<rect x="-2.5" y="-11" width="5" height="6" rx="1" transform="rotate(${i * 45})"/>`).join('')}<circle r="7.5"/><circle r="3" fill="${K.paper}"/></g>`;
 
 const PIC = {
   slicer: svg(`${cube(40, 62, 1)}${T(40, 118, '3D model')}${arrow(74, 62, 96, 62)}
@@ -144,9 +146,15 @@ const PIC = {
   extruder: svg(`<line x1="120" y1="4" x2="120" y2="96" stroke="${K.teal}" stroke-width="4"/>${[96, 144].map(x => `<circle cx="${x}" cy="40" r="20" fill="${K.grey}"/>${[...Array(10)].map((_, i) => `<rect x="${x - 2}" y="${18}" width="4" height="6" fill="${K.grey}" transform="rotate(${i * 36} ${x} 40)"/>`).join('')}<circle cx="${x}" cy="40" r="4" fill="${K.mute}"/>`).join('')}
     ${nozzle(120, 124, .9, K.teal).replace('y1="-62"', 'y1="-50"')}${arrow(60, 30, 60, 60, K.orange)}${T(46, 74, 'pushes', { color: K.orange, bold: true })}
     ${T(170, 80, 'gears grip the', { anchor: 'start', size: 9 })}${T(170, 92, 'filament', { anchor: 'start', size: 9 })}`, '0 0 240 132'),
-  file3mf: svg(`<path d="M80 12 h60 l22 22 v88 h-82 z" fill="${K.paper}" stroke="${K.grey}"/><path d="M140 12 v22 h22" fill="none" stroke="${K.grey}"/>${cube(121, 62, .7)}
-    ${T(121, 108, '.3mf', { bold: true, size: 14 })}${[K.red, K.white, K.blue].map((c, i) => `<circle cx="${184}" cy="${46 + i * 14}" r="5" fill="${c}" stroke="${K.grey}"/>`).join('')}${T(194, 50, 'colors', { anchor: 'start', size: 9 })}${T(194, 78, 'settings', { anchor: 'start', size: 9 })}
+  file3mf: svg(`${fileDoc(80, 12)}${cube(121, 62, .7)}${T(121, 108, '.3mf', { bold: true, size: 14 })}
+    ${line(56, 56, 98, 62)}${T(52, 59, 'model', { anchor: 'end', size: 9.5 })}
+    ${[K.red, K.white, K.blue].map((c, i) => `<circle cx="${180 + i * 13}" cy="38" r="5" fill="${c}" stroke="${K.mute}" stroke-width=".8"/>`).join('')}${T(193, 56, 'colors', { size: 9.5 })}
+    ${gear(193, 82)}${T(193, 104, 'settings', { size: 9.5 })}
     ${T(120, 136, 'one file: model + colors + settings', { color: K.mute })}`, '0 0 240 142'),
+  fileStl: svg(`${fileDoc(80, 12)}${cube(121, 62, .7, K.block).replace(`fill="${K.tealD}"`, `fill="${K.mute}"`)}${T(121, 108, '.stl', { bold: true, size: 14 })}
+    ${line(56, 56, 98, 62)}${T(52, 59, 'shape', { anchor: 'end', size: 9.5 })}
+    ${['no colors', 'no settings'].map((s, i) => `<g transform="translate(178 ${38 + i * 34})">${line(-5, -5, 5, 5, K.red, 2)}${line(-5, 5, 5, -5, K.red, 2)}</g>${T(178, 56 + i * 34, s, { size: 9.5 })}`).join('')}
+    ${T(120, 136, 'shape only: you choose colors and settings', { color: K.mute })}`, '0 0 240 142'),
   website: svg(`<rect x="20" y="12" width="200" height="104" rx="5" fill="${K.paper}" stroke="${K.grey}"/><rect x="20" y="12" width="200" height="14" rx="5" fill="#E3E7EA"/>
     ${[0, 1, 2].map(c => [0, 1].map(r => `<rect x="${32 + c * 62}" y="${34 + r * 40}" width="52" height="32" rx="3" fill="#EEF1F3"/>${cube(58 + c * 62, 52 + r * 40, .38, [K.teal, K.orange, K.blue][(c + r) % 3])}`).join('')).join('')}
     ${T(120, 134, 'a website full of free models to download', { color: K.mute })}`),
@@ -164,7 +172,7 @@ const TERMS = [
   { id: '3mf', title: '3MF file', pic: 'file3mf', cs: true, match: ['3MF', '.3mf', '3mf'],
     short: 'A 3D model file. Besides the shape, it can hold the colors and the print settings, so one file has everything needed to print.',
     more: 'Most models you download from MakerWorld or Printables come as .3mf. An STL file is the older kind: shape only, no colors or settings.' },
-  { id: 'stl', title: 'STL file', pic: 'file3mf', cs: true, match: ['STL', 'STLs'],
+  { id: 'stl', title: 'STL file', pic: 'fileStl', cs: true, match: ['STL', 'STLs'],
     short: 'An older, very common 3D model file. It holds only the shape: no colors and no settings.', more: 'This app works with .3mf files. Snapmaker Orca can open an STL and save it as a 3MF.' },
   { id: 'mesh', title: 'Mesh, triangles', pic: 'mesh', match: ['mesh', 'meshes', 'triangles', 'triangle'],
     short: 'A 3D model’s surface is built from many small flat triangles, together called the mesh. More triangles means more detail, but a bigger, slower file.',
