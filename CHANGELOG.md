@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.24.0
+- **Everyone takes the guided tour once**, including people who set the app up before the tour existed. It runs on
+  the sample rocket with recorded results, so the first experience is quick and the same for everyone (no waiting
+  on a big model of your own). It covers every feature: recommendations, Compare slices, Color remix, the filament
+  library, print history and the troubleshooter, before your filament library is emptied for real use.
+- **The tour now sets up the real app**: creating an Anthropic account and adding credit, creating an API key just
+  for this app (so the Console shows exactly what it costs, and you can switch it off on its own), or choosing the
+  free chatbot instead, and finding Snapmaker Orca (with a download link and Browse if it isn't installed).
+  **Finish the tour** unlocks once the AI is set up; then the app restarts in normal mode where everything is real.
+- After the tour, the app offers the **printable booklet** once: open it to print, save a copy, or get the 1-page
+  quick sheet.
+- **Saved 3MF files say when they were made**: "Rocket (advisor - 2026-11-19 3.42 PM).3mf", and
+  "(advisor - Fast - …)" for a version from Compare. Converting many files and the Bambu export do the same.
+
 ## 2.23.1
 - **The guide stands out more**: a bright orange window, and the "Click here" highlight and the "Click …" line are
   now bright cyan, so the next thing to click still pops against it.

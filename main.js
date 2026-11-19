@@ -80,15 +80,15 @@ if (!process.env.AIPA_USER_DATA) migrateFromOldName();   // a test data folder s
 Spend.init(app.getPath('userData'), (e, s) => { if (win && !win.isDestroyed()) win.webContents.send('spend', { usd: e.usd, feature: e.feature, month: s.month }); });
 
 const CONFIG_PATH = () => path.join(app.getPath('userData'), 'config.json');
-// Tour or not: once per launch. Asked for again from Settings (tourDone false), done once finished (true). People
-// who used the app before the tour existed (settings already chosen) aren't sent through it.
+// Tour or not: once per launch. Runs until it's finished (tourDone true); Settings can ask for it again.
 function decideTour() {
   if (!TOUR_DATA) return false;
   if (process.env.AIPA_TOUR) return process.env.AIPA_TOUR === '1';
   let cfg = {};
   try { cfg = JSON.parse(require('fs').readFileSync(CONFIG_PATH(), 'utf8')); } catch {}
-  if (typeof cfg.tourDone === 'boolean') return !cfg.tourDone;
-  return !(cfg.experience != null || cfg.apiKey || (cfg.printers || []).length);
+  // everyone takes it once, also people who used the app before the tour existed: it ends with the AI and
+  // slicer setup, and opening a big model of your own first can make a slow first impression
+  return cfg.tourDone !== true;
 }
 async function readConfig() { try { return JSON.parse(await fs.readFile(CONFIG_PATH(), 'utf8')); } catch { return {}; } }
 async function writeConfig(cfg) { await fs.mkdir(path.dirname(CONFIG_PATH()), { recursive: true }); await fs.writeFile(CONFIG_PATH(), JSON.stringify(cfg, null, 2)); }
@@ -395,9 +395,7 @@ ipcMain.handle('batch-convert', async (_e, { files, outDir }) => { await S.ready
       send(i, 'working', { note: 'Applying safety fixes and saving…' });
       const out = await convertedFile(base);
       const dir = outDir || path.dirname(file);
-      let target = path.join(dir, `${heuristicName(path.basename(file))}.3mf`);
-      if (path.resolve(target) === path.resolve(file)) target = target.replace(/\.3mf$/i, ' (advisor).3mf');
-      target = freePath(target);
+      const target = freePath(path.join(dir, `${heuristicName(path.basename(file))}${advisorStamp()}.3mf`));
       await fs.writeFile(target, await stampPrintName(out.buffer, target).catch(() => out.buffer));
       const note = `${base.mode === 'same' ? 'Already set up for the ' + (M.short || 'printer') : 'Converted'}${out.fixes ? `, ${out.fixes} automatic fix${out.fixes === 1 ? '' : 'es'}` : ''} · ${((Date.now() - t) / 1000).toFixed(0)} s`;
       send(i, 'done', { note, out: target });
@@ -728,9 +726,9 @@ ipcMain.handle('save-3mf', async (_e, { changes, rotations, slider, purpose, pla
     baseBuffer = await Slicer.cliReady(S.base.buffer, S.base.project);
     extra.push('This model had no slicer settings, so it was saved as a Snapmaker U1 project using the stock 0.20 mm profile. Check the filament presets in Orca after opening.');
   }
-  // the file name says which version it is: "(advisor)" for the recommendations, "(advisor - Fast)" and so on from Compare
-  const tag = variantName && !/^(recommended|current|original)$/i.test(variantName) ? ` - ${String(variantName).replace(/\s*(\+.*|recipe)$/i, '').replace(/^Reoriented:\s*/i, '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40)}` : '';
-  const def = friendlyPath(path.dirname(S.filePath), tag);
+  // the file name says which version it is and when (advisorStamp): "(advisor - <date time>)", "(advisor - Fast - <date time>)"
+  const label = variantName && !/^(recommended|current|original)$/i.test(variantName) ? String(variantName).replace(/\s*(\+.*|recipe)$/i, '').replace(/^Reoriented:\s*/i, '').replace(/[\\/:*?"<>|()]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40) : '';
+  const def = path.join(path.dirname(S.filePath), `${printName()}${advisorStamp(label)}.3mf`);
   const r = await dialog.showSaveDialog(win, { title: variantName ? `Save “${variantName}” as a 3MF project` : 'Save as a 3MF project', defaultPath: def, filters: [{ name: '3MF project', extensions: ['3mf'] }] });
   if (r.canceled || !r.filePath) return null;
   const fin = finalize(changes, plateIndex, rotations);
@@ -1049,7 +1047,7 @@ ipcMain.handle('export-bambu', async (_e, { machine, changes, rotations, plateIn
   } finally { setMachine(saved); }
   out = await addPackageThumbnails(out, thumbs, plateIndex || 1).catch(() => out);
   const short = lib.machine.replace(/^Bambu Lab\s+/, '').replace(/\s+[\d.]+ nozzle$/, '');
-  const r = await dialog.showSaveDialog(win, { title: `Save the ${short} version`, defaultPath: friendlyPath(path.dirname(S.filePath), ` - Bambu ${short}`), filters: [{ name: '3MF project', extensions: ['3mf'] }] });
+  const r = await dialog.showSaveDialog(win, { title: `Save the ${short} version`, defaultPath: path.join(path.dirname(S.filePath), `${printName()}${advisorStamp(`Bambu ${short}`)}.3mf`), filters: [{ name: '3MF project', extensions: ['3mf'] }] });
   if (r.canceled || !r.filePath) return null;
   out = await stampPrintName(out, r.filePath).catch(() => out);
   await fs.writeFile(r.filePath, out);
@@ -1287,6 +1285,13 @@ async function readNames() { try { return JSON.parse(await fs.readFile(namesFile
 async function rememberName(hash, entry) { const all = await readNames(); all[hash] = entry; await writeJsonAtomic(namesFile(), all).catch(() => {}); }
 function printName() { return (S.printName && S.printName.name) || heuristicName(path.basename(S.filePath || 'My Print')); }
 // a file name for this model in a folder, never the original file itself
+// Every 3MF the app saves says it came from the advisor and when: "Rocket (advisor - 2026-11-19 3.42 PM).3mf", or
+// "Rocket (advisor - Fast - 2026-11-19 3.42 PM).3mf" for a version from Compare (Windows names can't hold a colon)
+function advisorStamp(label = '') {
+  const d = new Date(), p2 = (n) => String(n).padStart(2, '0');
+  const h = d.getHours() % 12 || 12, ap = d.getHours() < 12 ? 'AM' : 'PM';
+  return ` (advisor${label ? ` - ${label}` : ''} - ${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${h}.${p2(d.getMinutes())} ${ap})`;
+}
 function friendlyPath(dir, suffix = '', ext = '.3mf') {
   let p = path.join(dir, `${printName()}${suffix}${ext}`);
   if (S.filePath && path.resolve(p) === path.resolve(S.filePath)) p = path.join(dir, `${printName()}${suffix} (advisor)${ext}`);
@@ -1444,7 +1449,7 @@ async function buildMenu() {
 const sha1 = (b) => crypto.createHash('sha1').update(b).digest('hex');
 function orcaTargetPath(src) {
   const dir = path.dirname(src);
-  const stem = path.basename(src).replace(/\.3mf$/i, '').replace(/\s*\(advisor(?: \d+)?\)\s*$/i, '');
+  const stem = path.basename(src).replace(/\.3mf$/i, '').replace(/\s*\(advisor[^)]*\)(?: \d+)?\s*$/i, '');
   return path.join(dir, `${stem} (advisor).3mf`);
 }
 function nextFreeCopy(p) {
@@ -1514,7 +1519,7 @@ ipcMain.handle('orca-reloaded', async (_e, file) => {
 });
 
 // ---------- print issue troubleshooter ----------
-const stemOf = (f) => String(f || '').split(/[\\/]/).pop().replace(/\.(gcode|3mf)$/i, '').replace(/_plate_\d+$/i, '').replace(/\s*\((advisor|recommended|original|[a-z]+ recipe)\)\s*$/i, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const stemOf = (f) => String(f || '').split(/[\\/]/).pop().replace(/\.(gcode|3mf)$/i, '').replace(/_plate_\d+$/i, '').replace(/\s*\((advisor[^)]*|recommended|original|[a-z]+ recipe)\)\s*$/i, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 ipcMain.handle('ts-open', async (_e, { jobId }) => { await S.ready;
   const job = (S.lastJobs || []).find(j => j.id === jobId);
@@ -1683,6 +1688,18 @@ ipcMain.handle('open-cheatsheet', async (_e, which) => {
   return true;
 });
 
+// save a copy of a cheat sheet where the user wants it (to print later, or keep)
+ipcMain.handle('save-cheatsheet', async (_e, which) => {
+  const file = CHEAT_SHEETS[which];
+  if (!file) throw new Error('Unknown cheat sheet.');
+  const src = path.join(__dirname, 'cheatsheets', file);
+  if (!fss.existsSync(src)) throw new Error('The cheat sheet isn’t in this copy of the app. It’s also on the project’s GitHub page (docs/cheat-sheets).');
+  const r = await dialog.showSaveDialog(win, { title: 'Save the PDF', defaultPath: path.join(app.getPath('documents'), file), filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+  if (r.canceled || !r.filePath) return null;
+  await fs.copyFile(src, r.filePath);
+  return r.filePath;
+});
+
 // the tour: finished (remember it, keep the experience level picked in it, start the app for real), or asked for again
 ipcMain.handle('tour-finish', async (_e, { experience, explainWords } = {}) => {
   const cfg = await readConfig();
@@ -1709,6 +1726,7 @@ ipcMain.handle('get-config', async () => { await S.ready;
     printers: (cfg.printers || []).map(p => ({ name: p.name, url: p.url, hasKey: !!p.apiKey })),
     slicer: slicerInfo(),
     autoUpdate: cfg.autoUpdate !== false, updatesSupported: app.isPackaged,
+    offerBooklet: !DEMO && cfg.tourDone === true && !cfg.bookletOffered,
     version: require('./package.json').version, homepage: /YOUR-GITHUB-USERNAME/.test(require('./package.json').homepage || '') ? null : require('./package.json').homepage,
   };
 });
@@ -1720,6 +1738,7 @@ ipcMain.handle('set-config', async (_e, patch) => { await S.ready;
   if (Number.isInteger(patch.experience) && patch.experience >= 0 && patch.experience <= 3) cfg.experience = patch.experience;
   if (typeof patch.guideDone === 'boolean') cfg.guideDone = patch.guideDone;
   if (typeof patch.autoUpdate === 'boolean') cfg.autoUpdate = patch.autoUpdate;
+  if (patch.bookletOffered === true) cfg.bookletOffered = true;
   if (typeof patch.explainWords === 'boolean') cfg.explainWords = patch.explainWords; else if (patch.explainWords === null) delete cfg.explainWords;
   if (typeof patch.apiKey === 'string') {
     const key = patch.apiKey.trim();

@@ -1948,8 +1948,13 @@ const DEMO_STEPS = [
   { id: 'makerworld', title: 'MakerWorld files on a U1 (optional)', text: 'Using a Snapmaker U1 or another non-Bambu printer? Click Open 3MF and choose “Demo Rocket (MakerWorld version)” to see the app convert a Bambu Lab file. Bambu Lab owners open MakerWorld files as they are.', target: () => $('openBtn') },
   { id: 'limits', title: 'What no app can control', text: 'Settings are only part of a good print. Damp filament, a cold or drafty room and temperature swings, the type and brand of filament, and a dirty bed or a printer that needs calibrating can still spoil a print, however good the settings. AI can also make mistakes, especially with little to go on, so tell it what the part is for and read the changes. “Good to know” under every set of recommendations lists what to look after, and the Glossary window has printable cheat sheets (a 1-page sheet and a booklet) to keep next to your printer.', target: () => $('glossaryBtn') },
   { id: 'settings', title: 'Settings: where you set things up', text: 'Everything you set up lives in Settings, the gear at the top right: your AI key, your printers, Snapmaker Orca and your experience level. Click the gear.', target: () => $('settingsBtn'), until: 'settings' },
-  { id: 'apikey', title: 'Your Anthropic API key', text: 'The app needs an Anthropic API key to use AI on its own. One analysis sends Claude pictures of your model, the slice results and your settings, often over several requests, and puts the answers straight into the app. A chatbot can’t do that: in the free chatbot mode you copy and paste every request by hand, and the chatbot sees less. A key is pay-as-you-go and cheap: most analyses cost a few cents (about 4–10¢ with Sonnet, so $5 lasts 60 or more), with no subscription. Create one with the link under the box, paste it here, then click “Save settings” at the bottom. You can also do this after the tour.', target: () => $('apiKeyField') },
-  { id: 'done', title: 'You’re ready!', text: 'Click “Finish the tour” to start using the app with your own models. It restarts once and opens fresh: your filament library starts empty and nothing from the tour is kept (except an API key you saved). You can take this tour again from Settings.' },
+  { id: 'why-key', title: 'Why the app uses an API key', text: 'The app needs an Anthropic API key to use AI on its own. One analysis sends Claude pictures of your model, the slice results and your settings, often over several requests, and puts the answers straight into the app. A chatbot can’t do that: in the free chatbot mode you copy and paste every request by hand, and the chatbot sees less. A key is pay-as-you-go and cheap: most analyses cost a few cents (about 4–10¢ with Sonnet). The next three steps set up the real app: your account, your key and your slicer.', target: () => $('apiKeyField') },
+  { id: 'account', title: 'Set up: your Anthropic account', text: 'The AI behind this app is Claude, made by Anthropic. To use it you need a free Anthropic account and a few dollars of credit (pay as you go, no subscription; $5 is the minimum and lasts for 60 or more analyses). Already have an account? Skip ahead. Otherwise: open the Claude Console below, sign up (or log in), then open Billing and add credit.', links: [['Open the Claude Console', 'https://platform.claude.com/'], ['Billing: add credit', 'https://platform.claude.com/settings/billing']], target: () => $('apiKeyField') },
+  { id: 'apikey', title: 'Set up: an API key just for this app', text: 'In the Console, open API keys, click “Create key” and name it “AI 3D Print Advisor Studio”. Make a new key for this app even if you already have one: the Console then shows exactly what this app has cost, and you can switch it off without affecting anything else. Copy the key (it starts with sk-ant-), paste it in the API key box here, and keep it private. Prefer not to pay? Choose “Free chatbot” at the top of Settings instead: free, but you copy and paste each request by hand.', links: [['Open API keys', KEYS_URL]], target: () => $('apiKeyField'),
+    doneIf: () => tourAiReady() || (openDlg('settingsDialog') && ($('apiKey').value.trim().length > 20 || (document.querySelector('input[name=aiMode]:checked') || {}).value === 'chat')) },
+  { id: 'slicer', title: 'Set up: Snapmaker Orca', text: 'The app slices with Snapmaker Orca, the free slicer for the U1, to measure your models and compare versions. It needs to be installed on this PC, and the app needs to know where. If the “Snapmaker Orca program” box below shows it was found, you’re fine. If not, install it (link below) and click Browse to pick snapmaker-orca.exe. Then click “Save settings”.', links: [['Download Snapmaker Orca', 'https://github.com/Snapmaker/OrcaSlicer/releases/latest']], target: () => $('slicerPath'),
+    doneIf: () => !openDlg('settingsDialog') && tourSlicerReady() },
+  { id: 'done', title: 'You’re ready!', text: 'Click “Finish the tour” to start the real app. It restarts once in normal mode: every click is real (Snapmaker Orca slices your models, Claude reviews them), and your filament library starts empty. Nothing from the tour is kept except what you just set up. You can take this tour again from Settings.' },
 ];
 if (api.demo) GUIDE_STEPS.splice(0, GUIDE_STEPS.length, ...DEMO_STEPS);
 
@@ -1965,11 +1970,18 @@ const NEXT_CLICK = {
   makerworld: () => demoPickBtn(1, [$('openBtn'), '“Open 3MF”']),
   words: () => [$('glossaryBtn'), '“Glossary”'],
   settings: () => (openDlg('settingsDialog') ? null : [$('settingsBtn'), 'the gear (Settings)']),
+  'why-key': () => (openDlg('settingsDialog') ? null : [$('settingsBtn'), 'the gear (Settings)']),
+  account: () => (openDlg('settingsDialog') ? null : [$('settingsBtn'), 'the gear (Settings)']),
   apikey: () => {
-    if (!openDlg('settingsDialog')) return state.config.realHasKey ? null : [$('settingsBtn'), 'the gear (Settings)'];
+    if (!openDlg('settingsDialog')) return tourAiReady() ? null : [$('settingsBtn'), 'the gear (Settings)'];
     if ($('apiKeyField').classList.contains('hidden')) return null;
-    return $('apiKey').value.trim() ? [$('saveSettings'), '“Save settings”'] : [$('apiKey'), 'the API key box and paste your key'];
+    return [$('apiKey'), 'the API key box and paste your key'];
   },
+  slicer: () => {
+    if (!openDlg('settingsDialog')) return tourSlicerReady() ? null : [$('settingsBtn'), 'the gear (Settings)'];
+    return $('slicerPath').value.trim() || (state.config.realSlicer || {}).available ? [$('saveSettings'), '“Save settings”'] : [$('browseSlicer'), '“Browse” and pick snapmaker-orca.exe'];
+  },
+  done: () => (tourAiReady() ? null : [$('settingsBtn'), 'the gear (Settings), and add your key or choose Free chatbot']),
   inspect: () => { const b = document.querySelector('#viewerTools [data-mode=overhang]'); return b && b.getAttribute('aria-checked') !== 'true' ? [b, '“Overhangs”'] : null; },
   orient: () => { const o = byText('#orientList .orient-opt', /upright/i) || document.querySelector('#orientList .orient-opt.best'); return o ? [o, 'the upright orientation'] : null; },
   ask: () => [$('analyzeBtn'), '“Get recommended settings”'],
@@ -2052,7 +2064,10 @@ function guideTick() {
   if (!st) { ring.classList.add('hidden'); return; }
   // already done (e.g. the file opened another way): move on
   if (st.until && st.skipIf && st.skipIf()) { guideEvent(st.until); return; }
-  const next = NEXT_CLICK[st.id] && st.id !== 'done' ? NEXT_CLICK[st.id]() : null;
+  // a step that is done by what the user set up (e.g. a key typed in) moves on by itself
+  if (st.doneIf && st.doneIf()) { GUIDE.i++; renderGuide(); return; }
+  if (st.id === 'done' && api.tour) gateFinish();
+  const next = NEXT_CLICK[st.id] && (st.id !== 'done' || api.tour) ? NEXT_CLICK[st.id]() : null;
   let el = next && next[0], r = shownRect(el, true);
   const click = !!r;
   if (!r) { el = st.target && st.target(); r = shownRect(el); }
@@ -2086,11 +2101,13 @@ function renderGuide() {
   $('guideStep').textContent = st.id === 'done' ? 'Done' : `Step ${GUIDE.i + 1} of ${GUIDE_STEPS.length - 1}`;
   $('guideTitle').textContent = st.title;
   if ($('guideHero')) $('guideHero').classList.toggle('hidden', GUIDE.i !== 0);
-  $('guideText').innerHTML = esc(st.text) + (st.id === 'open' && wordsOn() ? '<br><span class="waiting">Words with a dotted underline are explained: hover over one to see what it means and a picture.</span>' : '');
+  $('guideText').innerHTML = esc(st.text) + (st.id === 'open' && wordsOn() ? '<br><span class="waiting">Words with a dotted underline are explained: hover over one to see what it means and a picture.</span>' : '')
+    + (st.links ? `<span class="guide-links">${st.links.map(([label, url]) => `<a class="btn small" href="${esc(url)}" target="_blank" rel="noopener">${esc(label)} ↗</a>`).join('')}</span>` : '');
   $('guideWait').textContent = st.until ? { opened: 'Waiting for you to open a model…', analyzed: 'Click the highlighted button to continue.', 'compare-picked': 'Click a version in the table to continue.', saved: 'Save or send it to finish.', oriented: 'Pick an orientation to continue.', remixed: 'Apply a scheme to continue.', glossary: 'Open the Glossary to continue (or skip this step).', settings: 'Open Settings to continue.', filament: 'Open Filament to continue.', troubleshot: 'Run the troubleshooter to continue.' }[st.until] : '';
   $('guideAct').textContent = ''; $('guideAct').classList.add('hidden'); $('guideWait').classList.remove('hidden');
   $('guideDots').innerHTML = GUIDE_STEPS.slice(0, -1).map((_, k) => `<span class="${k <= GUIDE.i ? 'on' : ''}"></span>`).join('');
   $('guideBack').disabled = GUIDE.i === 0;
+  $('guideNext').disabled = false; const later = $('guideSlicerLater'); if (later) later.remove();
   $('guideNext').textContent = st.id === 'done' ? (api.tour ? 'Finish the tour' : 'Finish') : st.until ? 'Skip step' : 'Next';
   guideLastEl = null;
   placeGuide();
@@ -2107,9 +2124,27 @@ function guideEvent(name) {
   if (ahead > 0) { GUIDE.i = ahead + 1; renderGuide(); }
   else if (name === 'analyzed') { const review = GUIDE_STEPS.findIndex(x => x.id === 'review'); if (GUIDE.i < review) { GUIDE.i = review; renderGuide(); } }
 }
+// The tour unlocks the real app only once the AI is set up (a saved key, or the free chatbot chosen) and
+// Snapmaker Orca is found (or the user says they'll install it later)
+const tourAiReady = () => !!(state.config.realHasKey || state.config.realAiMode === 'chat');
+const tourSlicerReady = () => !!((state.config.realSlicer || {}).available || GUIDE.slicerLater);
+function gateFinish() {
+  const ai = tourAiReady(), sl = tourSlicerReady();
+  $('guideNext').disabled = !(ai && sl);
+  const why = !ai ? 'To finish, add your API key in Settings and click Save settings (or choose Free chatbot). Use Back to see how.'
+    : !sl ? 'Snapmaker Orca wasn’t found. Set its location in Settings (Back shows how), or finish now and set it later.' : '';
+  if ($('guideWait').textContent !== why) $('guideWait').textContent = why;
+  $('guideWait').classList.toggle('hidden', !why);
+  let later = $('guideSlicerLater');
+  if (ai && !sl && !later) {
+    later = document.createElement('button'); later.id = 'guideSlicerLater'; later.className = 'link'; later.textContent = 'Finish now, set up Snapmaker Orca later (slicing stays off until then)';
+    later.onclick = () => { GUIDE.slicerLater = true; later.remove(); gateFinish(); };
+    $('guideWait').after(later);
+  } else if (later && (sl || !ai)) later.remove();
+}
 $('guideNext').onclick = () => {
   if (GUIDE_STEPS[GUIDE.i].id === 'done') {
-    if (api.tour) { $('guideNext').disabled = true; $('guideNext').textContent = 'Starting the app…'; api.finishTour(); return; }
+    if (api.tour) { if (!(tourAiReady() && tourSlicerReady())) { gateFinish(); return; } $('guideNext').disabled = true; $('guideNext').textContent = 'Starting the app…'; api.finishTour(); return; }
     stopGuide(true); return;
   }
   GUIDE.i++; renderGuide();
@@ -2170,6 +2205,7 @@ async function loadConfig() {
     : !state.config.hasKey ? `To get recommendations, create a Claude API key at <a href="${KEYS_URL}" target="_blank" rel="noopener">platform.claude.com/settings/keys</a> and paste it in <button class="link" id="keyLink">Settings</button>, or switch to the free chatbot mode there.`
     : state.config.hasKey ? '' : 'To get recommendations, add a Claude API key or switch to the free chatbot mode in <button class="link" id="keyLink">Settings</button>.';
   const kl = $('keyLink'); if (kl) kl.onclick = openSettings;
+  offerBooklet();
 }
 function openSettings() {
   const sel = $('modelSelect');
@@ -2193,6 +2229,12 @@ function openSettings() {
   $('slicerPath').value = state.config.slicerPath || '';
   $('slicerPath').placeholder = state.config.detectedSlicer ? `Detected: ${state.config.detectedSlicer}` : 'Not found. Browse to snapmaker-orca.exe';
   $('slicerStatus').textContent = state.info.available ? `Ready: ${state.info.filaments.length} U1 filament presets found.` : 'Slicing is off until Snapmaker Orca is found.';
+  if (api.tour && state.config.realSlicer) {
+    const rs = state.config.realSlicer;
+    $('slicerPath').value = rs.path || '';
+    $('slicerPath').placeholder = rs.detected ? `Detected: ${rs.detected}` : 'Not found. Install it, then Browse to snapmaker-orca.exe';
+    $('slicerStatus').textContent = rs.available ? `Found: ${rs.exe || rs.detected}. You’re set.` : 'Not found on this PC yet. Install Snapmaker Orca, then click Browse.';
+  }
   $('printerRows').innerHTML = '';
   (state.config.printers.length ? state.config.printers : [{}]).forEach(p => addPrinterRow(p));
   $('discoverResults').innerHTML = ''; $('discoverStatus').textContent = '';
@@ -2274,6 +2316,20 @@ $('updateCheckBtn').onclick = async () => {
     $('updateStatus').textContent = info.available ? `Version ${info.latest} is available.` : `You have the newest version (${info.current}).`;
     if (info.available) showUpdate(info);
   } catch (e) { $('updateStatus').textContent = `Couldn’t check: ${cleanErr(e)}`; }
+};
+// once, the first time the real app opens after the tour: offer the printable booklet
+function offerBooklet() {
+  if (!state.config.offerBooklet || api.tour || $('bookletDialog').open) return;
+  state.config.offerBooklet = false;
+  api.setConfig({ bookletOffered: true }).catch(() => {});
+  setTimeout(() => { if (!document.querySelector('dialog[open]')) $('bookletDialog').showModal(); else state.config.offerBooklet = true; }, 1500);
+}
+$('bookletLater').onclick = () => $('bookletDialog').close();
+$('bookletOpen').onclick = () => { openCheatSheet('booklet'); $('bookletDialog').close(); };
+$('bookletQuick').onclick = () => { openCheatSheet('quick'); };
+$('bookletSave').onclick = async () => {
+  try { const p = await api.saveCheatSheet('booklet'); if (p) { toast(`Saved the booklet: ${p}`, 6000); $('bookletDialog').close(); } }
+  catch (e) { toast(cleanErr(e), 6000); }
 };
 $('autoUpdate').onchange = (e) => { state.config.autoUpdate = e.target.checked; api.setConfig({ autoUpdate: e.target.checked }).catch(() => {}); };
 

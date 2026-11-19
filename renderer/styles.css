@@ -469,7 +469,8 @@ dialog.welcome { width: min(640px, 94vw); padding: 0; }
 .guide-head, .guide-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .guide-foot { margin: 12px 16px 0; }
 .guide-step { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
-.guide-dots { display: flex; gap: 4px; }
+.guide-dots { display: flex; flex-wrap: wrap; gap: 4px; flex-basis: 100%; margin-bottom: 10px; }
+.guide-foot { flex-wrap: wrap; justify-content: flex-end; }
 .guide-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
 .guide-dots span.on { background: var(--g-orange); }
 .guide .waiting { font-size: 13px; color: #E06A00; font-weight: 600; }
@@ -665,3 +666,14 @@ dialog.update h2 { margin: 0 0 4px; }
 .upd-progress .bar { flex: 1; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
 .upd-progress .bar span { display: block; height: 100%; width: 0; background: var(--accent, #1F9AAE); transition: width .2s; }
 fieldset.updates .check { display: block; margin: 8px 0 4px; }
+
+/* links to open from a guide step (Claude Console, Snapmaker Orca download) */
+.guide-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.guide-links .btn { text-decoration: none; border-color: var(--g-orange, #FF7A00); color: inherit; font-weight: 600; }
+#guideSlicerLater { display: block; margin: 6px 16px 0; font-size: 13px; }
+
+/* the booklet offer after the tour */
+dialog.booklet { width: min(560px, 92vw); border-top: 6px solid #FF7A00; }
+dialog.booklet h2 { margin: 4px 0 8px; }
+.booklet-wizard { float: right; width: 72px; height: 72px; border-radius: 50%; margin: 0 0 8px 12px; border: 3px solid #FF7A00; background: #fff; }
+dialog.booklet .dialog-actions { flex-wrap: wrap; }

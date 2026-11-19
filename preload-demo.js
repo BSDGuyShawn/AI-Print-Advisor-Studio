@@ -184,6 +184,7 @@ function printersStatus() {
 contextBridge.exposeInMainWorld('advisor', {
   demo: true, tour: true,
   openCheatSheet: (which) => ipcRenderer.invoke('open-cheatsheet', which),   // the real PDFs: worth keeping
+  saveCheatSheet: (which) => ipcRenderer.invoke('save-cheatsheet', which),
   // the end of the tour: remember it and start the app for real (with the experience level picked in the tour)
   finishTour: () => ipcRenderer.invoke('tour-finish', { experience: config.experience, explainWords: config.explainWords }),
   choose3mf: async () => { const p = await pickModel(); return p ? api_openPath(p) : null; },
@@ -265,9 +266,9 @@ contextBridge.exposeInMainWorld('advisor', {
   onMenu: (cb) => ipcRenderer.on('menu', (_e, m) => cb(m)),
   openInOrca: blocked('orca'), orcaReloaded: async () => null, onOrcaFileChanged: () => {},
   historyRate: async () => true,
-  browseSlicer: blocked('files'),
+  browseSlicer: () => ipcRenderer.invoke('browse-slicer'),   // the real slicer location is set up in the tour
   // whether a real API key is saved (the tour's own answers don't need one)
-  getConfig: async () => { try { const real = await ipcRenderer.invoke('get-config'); config.realHasKey = real.hasKey; config.realAiMode = real.aiMode; } catch {} return clone(config); },
+  getConfig: async () => { await readReal(); return clone(config); },
   spendSummary: async () => spendSummary(),
   spendClear: async () => { demoSpend.entries = []; return spendSummary(); },
   onSpend: (cb) => listeners.spend.push(cb),
@@ -281,7 +282,8 @@ contextBridge.exposeInMainWorld('advisor', {
     const real = {};
     if (typeof patch.apiKey === 'string' && patch.apiKey.trim()) real.apiKey = patch.apiKey;
     if (patch.aiMode === 'api' || patch.aiMode === 'chat') real.aiMode = patch.aiMode;
-    if (Object.keys(real).length) { await ipcRenderer.invoke('set-config', real); if (real.apiKey) { config.realHasKey = true; notice('key'); } }
+    if (typeof patch.slicerPath === 'string' && patch.slicerPath.trim() !== (config.realSlicer || {}).path) real.slicerPath = patch.slicerPath;
+    if (Object.keys(real).length) { await ipcRenderer.invoke('set-config', real); if (real.apiKey) notice('key'); await readReal(); }
     for (const k of ['experience', 'guideDone', 'explainWords', 'model', 'aiMode']) if (k in patch) config[k] = patch[k];
     return true;
   },
@@ -290,6 +292,15 @@ contextBridge.exposeInMainWorld('advisor', {
   startupState: async () => ({ label: 'Guided tour. Everything here is recorded from the real app.', pct: 100, done: true }),
   onStartup: (cb) => listeners.startup.push(cb),
 });
+
+// what's really set up (not the tour's recorded settings): the key, the AI choice and Snapmaker Orca
+async function readReal() {
+  try {
+    const real = await ipcRenderer.invoke('get-config');
+    config.realHasKey = real.hasKey; config.realAiMode = real.aiMode;
+    config.realSlicer = { path: real.slicerPath || '', detected: real.detectedSlicer || '', available: !!((real.slicer && real.slicer.available) || real.slicerPath || real.detectedSlicer), exe: (real.slicer && real.slicer.exe) || real.slicerPath || real.detectedSlicer };   // the tour doesn't load the slicer: found = installed or chosen
+  } catch {}
+}
 
 // opening a model: only the tour models (dropping your own file explains instead)
 async function api_openPath(p) {

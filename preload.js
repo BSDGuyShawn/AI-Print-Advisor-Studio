@@ -96,6 +96,7 @@ contextBridge.exposeInMainWorld('advisor', {
   browseSlicer: () => ipcRenderer.invoke('browse-slicer'),
   restartTour: () => ipcRenderer.invoke('tour-restart'),
   openCheatSheet: (which) => ipcRenderer.invoke('open-cheatsheet', which),
+  saveCheatSheet: (which) => ipcRenderer.invoke('save-cheatsheet', which),
   updateCheck: () => ipcRenderer.invoke('update-check'),
   updateInstall: () => ipcRenderer.invoke('update-install'),
   updateSkip: (version) => ipcRenderer.invoke('update-skip', version),
