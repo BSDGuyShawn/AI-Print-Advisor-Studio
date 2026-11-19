@@ -1194,7 +1194,7 @@ async function findProductPages(list) {
 // A store image -> small JPEG data URL kept with the filament (works offline, survives the store changing its site).
 async function photoFromUrl(src) {
   const u = new URL(src.startsWith('//') ? 'https:' + src : src);
-  if (u.hostname.endsWith('shopify.com')) u.searchParams.set('width', '800');
+  if (u.hostname === 'cdn.shopify.com' || u.hostname.endsWith('.shopify.com')) u.searchParams.set('width', '800');   // Shopify's image CDN: ask for a smaller copy
   const img = await api.filamentFetch({ url: u.href, as: 'image' });   // fetched by the app (no browser CORS limits)
   const bytes = Uint8Array.from(atob(img.base64), c => c.charCodeAt(0));
   const bmp = await createImageBitmap(new Blob([bytes], { type: img.type }));

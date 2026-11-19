@@ -21,7 +21,7 @@ const { getMachine } = require('./machine');
 // Creator settings worth carrying over when converting someone else's project to the U1.
 // Speeds, accelerations and temperatures are machine/material specific, so they come from the U1 profiles instead.
 const PORTABLE = Object.entries(CURATED)
-  .filter(([k, c]) => ['Quality', 'Strength', 'Support', 'Adhesion'].includes(c[1]) && !/line_width|filament$/.test(k))
+  .filter(([k, c]) => ['Quality', 'Strength', 'Support', 'Adhesion'].includes(c[1]) && !/line_width/.test(k) && !/filament$/.test(k))
   .map(([k]) => k);
 
 const sha = (...parts) => { const h = crypto.createHash('sha1'); for (const p of parts) h.update(p); return h.digest('hex'); };
