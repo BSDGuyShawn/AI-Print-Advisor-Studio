@@ -152,7 +152,7 @@ const failing = (kind, message) => async () => { notice(kind); throw new Error(m
 // in-memory settings for the session (nothing is written)
 const recordedConfig = (find('get-config', []) || {}).r || {};
 const config = Object.assign({}, recordedConfig, {
-  hasKey: true, keyNeedsReentry: false, aiMode: 'api', experience: null, guideDone: false, model: recordedConfig.model || 'claude-opus-5-5',
+  hasKey: true, keyNeedsReentry: false, aiMode: 'api', experience: null, guideDone: false, explainWords: null, model: recordedConfig.model || 'claude-opus-5-5',
   printers: PRINTERS.map(p => ({ name: p.name, url: p.url, hasKey: false })), demo: true,
   version: require('./package.json').version,   // this build's version, not the one the answers were recorded with
 });
@@ -269,7 +269,7 @@ contextBridge.exposeInMainWorld('advisor', {
   onSpend: (cb) => listeners.spend.push(cb),
   setConfig: async (patch) => {
     if (typeof patch.apiKey === 'string' && patch.apiKey.trim()) notice('key');
-    for (const k of ['experience', 'guideDone', 'model', 'aiMode']) if (k in patch) config[k] = patch[k];
+    for (const k of ['experience', 'guideDone', 'explainWords', 'model', 'aiMode']) if (k in patch) config[k] = patch[k];
     return true;
   },
   onOpenFromOS: () => {},

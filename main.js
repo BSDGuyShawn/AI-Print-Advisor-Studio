@@ -1617,7 +1617,7 @@ ipcMain.handle('get-config', async () => { await S.ready;
   const cfg = await readConfig();
   return {
     model: cfg.model || DEFAULT_MODEL, hasKey: !!(await getApiKey()), keyNeedsReentry: !!cfg.apiKey && !(await getApiKey()), aiMode: cfg.aiMode || 'api', hasAdminKey: !!dec(cfg.adminKey),
-    experience: Number.isInteger(cfg.experience) ? cfg.experience : null, guideDone: !!cfg.guideDone,
+    experience: Number.isInteger(cfg.experience) ? cfg.experience : null, guideDone: !!cfg.guideDone, explainWords: typeof cfg.explainWords === 'boolean' ? cfg.explainWords : null,
     slicerPath: cfg.slicerPath || '', detectedSlicer: candidateExecutables()[0] || '',
     printers: (cfg.printers || []).map(p => ({ name: p.name, url: p.url, hasKey: !!p.apiKey })),
     slicer: slicerInfo(),
@@ -1631,6 +1631,7 @@ ipcMain.handle('set-config', async (_e, patch) => { await S.ready;
   if (patch.aiMode === 'api' || patch.aiMode === 'chat') cfg.aiMode = patch.aiMode;
   if (Number.isInteger(patch.experience) && patch.experience >= 0 && patch.experience <= 3) cfg.experience = patch.experience;
   if (typeof patch.guideDone === 'boolean') cfg.guideDone = patch.guideDone;
+  if (typeof patch.explainWords === 'boolean') cfg.explainWords = patch.explainWords; else if (patch.explainWords === null) delete cfg.explainWords;
   if (typeof patch.apiKey === 'string') {
     const key = patch.apiKey.trim();
     if (!key) delete cfg.apiKey; else cfg.apiKey = enc(key);

@@ -30,7 +30,7 @@ This guide takes you from "I downloaded a model" to "it's printing", one step at
 
 1. Double-click **`AI 3D Print Advisor Studio.exe`**.
    If Windows says **"Windows protected your PC"**, click **More info → Run anyway**. To avoid that warning, right-click the zip **before extracting** → **Properties** → tick **Unblock** → **OK** (see the [FAQ](FAQ.md#windows-says-windows-protected-your-pc)).
-2. The app asks **how much 3D printing experience you have**. Pick honestly: "Brand new" turns on the step-by-step guide and extra tips. You can change it later in Settings.
+2. The app asks **how much 3D printing experience you have**. Pick honestly: "Brand new" turns on the step-by-step guide and extra tips. "Brand new" and "A little" also **explain 3D printing words**: words with a dotted underline show what they mean, with a picture, when you hover over them (see [Words you don't know](#words-you-dont-know)). You can change all of this later in Settings.
 3. The app looks for **Snapmaker Orca** on your computer. The bar at the top says when it's ready. If it can't find it, open **Settings** (the gear, top right) and click **Browse** next to "Snapmaker Orca program".
 4. Click the **gear** to open **Settings** and:
    - choose how to get AI advice (next section),
@@ -201,6 +201,18 @@ The **AI** button at the top shows what the app's AI requests cost this month. I
 For your **whole Anthropic account** (including other apps), see the [Cost page](https://platform.claude.com/cost) in the Claude Console. Organization accounts can also add an **Admin API key** in Settings to see that total inside the app.
 
 ---
+
+## Words you don't know
+
+New to 3D printing? Words like **brim**, **infill** or **prime tower** have a **dotted underline** in the app.
+
+- **Hover** the mouse over an underlined word: a small window explains it in plain words, with a drawing.
+- **Click** the word to keep the explanation open while you read; click anywhere else to close it.
+- Click **All words** in that window, or the **Glossary** button at the top of the app, to see every word with its drawing. Type in the search box to find one.
+
+The underlines are on when you chose "Brand new" or "A little". To turn them on or off: **Settings** (gear, top right) → **Explain 3D printing words**.
+
+![An underlined word explained with a drawing](images/16-word-help.jpg)
 
 ## Glossary
 

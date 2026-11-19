@@ -26,6 +26,7 @@
       <button class="btn ghost spend-chip" id="spendChip" title="What this app’s AI requests cost this month (details in Settings)">AI $0.00</button>
       <button class="btn ghost" id="filamentBtn" aria-pressed="false" title="Your filament inventory: what you have, spools, locations and print settings">Filament</button>
       <button class="btn ghost" id="guideBtn" title="Step-by-step guide">Guide</button>
+      <button class="btn ghost" id="glossaryBtn" title="3D printing words explained, with pictures">Glossary</button>
       <button class="btn ghost" id="openBtn">Open 3MF</button>
       <button class="btn ghost icon" id="settingsBtn" aria-label="Settings" title="Settings">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm7.4-2.5.1-1-.1-1 2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3h-4l-.4 2.5c-.6.3-1.2.6-1.7 1l-2.4-1-2 3.4 2 1.6-.1 1 .1 1-2 1.6 2 3.4 2.4-1c.5.4 1.1.7 1.7 1L11 21h4l.4-2.5c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.4-2-1.6Z"/></svg>
@@ -184,6 +185,7 @@
           <option value="3">Experienced: no tips, technical details first</option>
         </select>
       </label>
+      <label class="check-field"><input type="checkbox" id="explainWords"> <span><b>Explain 3D printing words.</b> Words like “brim” or “infill” get a dotted underline; hover over one to see what it means, with a picture. (The Glossary button at the top lists them all.)</span></label>
       <fieldset class="ai-mode">
         <legend>How should the app get AI advice?</legend>
         <label><input type="radio" name="aiMode" value="api"><span><b>Claude API key</b> (automatic). Pay-as-you-go from platform.claude.com; no subscription needed.</span></label>

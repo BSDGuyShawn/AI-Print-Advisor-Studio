@@ -1,4 +1,5 @@
 import { ModelViewer } from './viewer.js';
+import { createGlossary } from './glossary.js';
 
 const api = window.advisor;
 const $ = (id) => document.getElementById(id);
@@ -15,6 +16,8 @@ const state = {
   result: null, recipe: null, compare: null, selectedVariant: null, history: null, busy: false, checks: [],
 };
 const viewer = new ModelViewer($('viewer'));
+// beginner word help (renderer/glossary.js): dotted-underlined words explained with a picture on hover
+const glossary = createGlossary({ isOn: () => wordsOn() });
 
 // ---------- progress strip ----------
 const busy = new Map(); // task id -> { label, pct }
@@ -621,6 +624,7 @@ function showFilament(on) {
   if (on && !view.querySelector('iframe')) {
     const f = document.createElement('iframe');
     f.src = 'filament/index.html'; f.title = 'Filament inventory';
+    f.addEventListener('load', () => { try { glossary.attach(f.contentDocument, f); } catch (e) { console.warn('glossary', e); } });
     view.appendChild(f);
   }
   document.body.classList.toggle('filament-open', on);
@@ -629,6 +633,7 @@ function showFilament(on) {
   if (on) { view.querySelector('iframe').focus(); guideEvent('filament'); }
   else { SHOP.key = ''; renderShopping(); }   // what's on hand may have changed
 }
+$('glossaryBtn').onclick = () => glossary.open();
 $('filamentBtn').onclick = () => showFilament(!document.body.classList.contains('filament-open'));
 
 
@@ -1832,7 +1837,13 @@ function renderModelCard() {
 // ---------- experience level, guide and tips ----------
 // 0 brand new, 1 a little, 2 comfortable, 3 experienced. Decides how much help is shown.
 function level() { const x = state.config && state.config.experience; return Number.isInteger(x) ? x : 1; }
-function applyLevel() { document.body.dataset.level = String(level()); }
+function applyLevel() { document.body.dataset.level = String(level()); glossary.refresh(); }
+// "Explain 3D printing words": on for Brand new and A little unless changed in Settings; off until a level is chosen
+function wordsOn() {
+  const c = state.config;
+  if (!c || c.experience == null) return false;
+  return typeof c.explainWords === 'boolean' ? c.explainWords : c.experience <= 1;
+}
 
 const sectionOf = (tip) => { const b = document.querySelector(`[data-tip="${tip}"]`); return b ? b.closest('section, .panel, .block') || b.parentElement.parentElement : null; };
 const GUIDE_STEPS = [
@@ -1870,7 +1881,7 @@ const GUIDE = { i: 0, on: false };
 // above it), and back to the 3D view when the window closes.
 const guideHome = $('guide').parentElement;
 function placeGuide() {
-  const open = [...document.querySelectorAll('dialog[open]')].filter(d => !/^demo/.test(d.id)).pop();
+  const open = [...document.querySelectorAll('dialog[open]')].filter(d => !/^demo/.test(d.id) && d.id !== 'glossaryDialog').pop();
   const g = $('guide'), target = open || guideHome;
   if (g.parentElement !== target) target.appendChild(g);
   g.classList.toggle('in-dialog', !!open);
@@ -1891,7 +1902,7 @@ function renderGuide() {
   $('guide').classList.remove('hidden');
   $('guideStep').textContent = st.id === 'done' ? 'Done' : `Step ${GUIDE.i + 1} of ${GUIDE_STEPS.length - 1}`;
   $('guideTitle').textContent = st.title;
-  $('guideText').innerHTML = esc(st.text) + (st.until ? `<br><span class="waiting">${{ opened: 'Waiting for you to open a model…', analyzed: 'Click the highlighted button to continue.', 'compare-picked': 'Click a version in the table to continue.', saved: 'Save or send it to finish.', oriented: 'Pick an orientation to continue.', remixed: 'Apply a scheme to continue.', filament: 'Open Filament to continue.', troubleshot: 'Run the troubleshooter to continue.' }[st.until]}</span>` : '');
+  $('guideText').innerHTML = esc(st.text) + (st.id === 'open' && wordsOn() ? '<br><span class="waiting">Words with a dotted underline are explained: hover over one to see what it means and a picture.</span>' : '') + (st.until ? `<br><span class="waiting">${{ opened: 'Waiting for you to open a model…', analyzed: 'Click the highlighted button to continue.', 'compare-picked': 'Click a version in the table to continue.', saved: 'Save or send it to finish.', oriented: 'Pick an orientation to continue.', remixed: 'Apply a scheme to continue.', filament: 'Open Filament to continue.', troubleshot: 'Run the troubleshooter to continue.' }[st.until]}</span>` : '');
   $('guideDots').innerHTML = GUIDE_STEPS.slice(0, -1).map((_, k) => `<span class="${k <= GUIDE.i ? 'on' : ''}"></span>`).join('');
   $('guideBack').disabled = GUIDE.i === 0;
   $('guideNext').textContent = st.id === 'done' ? 'Finish' : st.until ? 'Skip step' : 'Next';
@@ -1980,6 +1991,8 @@ function openSettings() {
     : `No key saved yet. Create one at ${keysLink} (pay-as-you-go; a Claude subscription isn’t needed, but the account needs a little prepaid credit).`;
   document.querySelectorAll('input[name=aiMode]').forEach(r => { r.checked = r.value === (state.config.aiMode || 'api'); });
   $('experienceSelect').value = String(level());
+  $('explainWords').checked = wordsOn() || (state.config.experience == null && level() <= 1);
+  $('experienceSelect').onchange = () => { $('explainWords').checked = Number($('experienceSelect').value) <= 1; };
   const syncMode = () => { const chat = document.querySelector('input[name=aiMode]:checked').value === 'chat'; $('apiKeyField').classList.toggle('hidden', chat); $('modelSelect').closest('.field').classList.toggle('hidden', chat); };
   document.querySelectorAll('input[name=aiMode]').forEach(r => { r.onchange = syncMode; });
   syncMode();
@@ -2090,6 +2103,8 @@ $('settingsDialog').addEventListener('close', async () => {
   const model = $('modelSelect').value === 'custom' ? $('customModel').value : $('modelSelect').value;
   const printers = [...document.querySelectorAll('.printer-row')].map(r => ({ name: r.querySelector('.p-name').value.trim(), url: r.querySelector('.p-url').value.trim(), apiKey: r.querySelector('.p-key').value.trim() })).filter(p => p.url);
   const patch = { model, printers, slicerPath: $('slicerPath').value.trim(), aiMode: (document.querySelector('input[name=aiMode]:checked') || {}).value || 'api', experience: Number($('experienceSelect').value) };
+  // remember the switch only when it differs from what the level would choose, so changing level later still applies
+  patch.explainWords = $('explainWords').checked === (patch.experience <= 1) ? null : $('explainWords').checked;
   if ($('apiKey').value.trim()) patch.apiKey = $('apiKey').value;
   if ($('adminKey').value.trim()) patch.adminKey = $('adminKey').value;
   const before = state.info.available;

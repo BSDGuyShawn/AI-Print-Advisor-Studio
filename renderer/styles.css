@@ -613,3 +613,4 @@ fieldset.spend legend { font-weight: 600; padding: 0 4px; }
 .spend-totals b { font-size: 17px; display: block; font-variant-numeric: tabular-nums; }
 /* the guide over an open window (see placeGuide in app.js) */
 .guide.in-dialog { position: fixed; left: 18px; bottom: 18px; z-index: 50; box-shadow: 0 8px 28px rgb(0 0 0 / .35); }
+.check-field { display: grid; grid-template-columns: 20px 1fr; gap: 4px; align-items: start; margin: 2px 0 14px; font-size: 13px; line-height: 1.45; }

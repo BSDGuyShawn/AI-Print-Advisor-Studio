@@ -22,6 +22,7 @@ Optional: **Compare slices** (right) to see Fine / Fast / Recommended side by si
 | **AI $…** | What the AI cost this month. Click for details. |
 | **Filament** | Your filament library. **Back to model** returns. |
 | **Guide** | Step-by-step guide, on or off. |
+| **Glossary** | Every 3D printing word explained, with a drawing. |
 | **Open 3MF** | Open a model. |
 | ⚙ | Settings: API key, printers, slicer, experience level. |
 
@@ -59,3 +60,5 @@ Optional: **Compare slices** (right) to see Fine / Fast / Recommended side by si
 ## Words
 
 **Overhang**: printed over air · **Supports**: scaffolding you break off · **Brim**: sticky ring around the base · **Infill**: inside pattern (10–20%) · **Walls**: outer shell lines (2–3) · **Layer height**: 0.08 smooth … 0.28 fast. More in the [glossary](USER-GUIDE.md#glossary).
+
+**Don't know a word?** Hover over any word with a dotted underline in the app, or click **Glossary** at the top.

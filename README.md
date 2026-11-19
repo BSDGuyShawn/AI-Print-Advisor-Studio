@@ -74,6 +74,7 @@ To **uninstall**, delete the folder. Your settings and filament are in `%APPDATA
 | ![Compare slices table](docs/images/04-compare-slices.jpg) | **Compare versions side by side.** Real slices of Fine, Fast, Recommended and more: how it looks, how strong it is, how long it takes, how much filament. |
 | ![Color remix schemes](docs/images/07-remix-schemes.jpg) | **Color remix.** The AI finds the parts of a model and designs new color schemes using only filament you own. One click paints them in. |
 | ![Filament library](docs/images/09-filament-library.jpg) | **Filament library.** Every spool with photos, colors, location and grams left. Add filament from a screenshot of your order (Amazon or any store). |
+| ![An underlined word explained with a drawing](docs/images/16-word-help.jpg) | **New to 3D printing? Words are explained.** Hover over an underlined word like "brim" or "prime tower" to see what it means, with a drawing. The Glossary button lists them all. |
 | ![Troubleshooter](docs/images/13-troubleshooter.jpg) | **Fix failed prints.** Pick a print from your printer's history, mark where it failed, and get the likely causes and the settings to change. |
 
 See **[all features](docs/FEATURES.md)**, the **[user guide](docs/USER-GUIDE.md)**, the one-page **[cheat sheet](docs/CHEAT-SHEET.md)**, the **[FAQ](docs/FAQ.md)** and **[troubleshooting](docs/TROUBLESHOOTING.md)**.

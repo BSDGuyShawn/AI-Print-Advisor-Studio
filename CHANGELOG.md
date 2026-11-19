@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.19.0
+- **3D printing words explained** (for "Brand new" and "A little"): words like brim, infill, nozzle, prime tower,
+  purge, "Generic PLA", toolhead and about 45 others get a dotted underline. Hover over one to see a plain-language
+  explanation with a drawing; click it to keep the explanation open. Works everywhere in the app, including open
+  windows (Color remix, Settings) and the Filament screen, in the full app and the demo.
+- **Glossary** button at the top: every word with its drawing, searchable.
+- Settings: "Explain 3D printing words" switch, so anyone can turn the underlines on or off.
+
 ## 2.18.0
 - **Runs on Electron 45.4.1** (was 33.2.1), the official build from the Electron project. Clears the published
   Chromium/Electron security advisories and the antivirus "packed program" flag some scanners raised on the
