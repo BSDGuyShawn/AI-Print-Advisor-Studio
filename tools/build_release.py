@@ -13,6 +13,9 @@ The runtime folder supplies Electron (the .exe and its DLLs) and the bundled nod
 Nothing from your data folder goes into the full app. The demo gets: the recorded answers (scrubbed of local paths),
 your filament catalog and product photos with the shop links replaced by dummies, and your printers' names and
 addresses (never their API keys).
+
+Layout: the folder (and zip) holds just one program, a small launcher (tools/launcher/Launcher.cs, compiled with the
+C# compiler that ships with Windows), plus an "app" folder with Electron and everything else.
 """
 import argparse
 import tarfile
@@ -29,6 +32,7 @@ import zipfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP_FILES = ['main.js', 'preload.js', 'preload-demo.js', 'package.json', 'LICENSE', 'THIRD-PARTY-NOTICES.md', 'CHANGELOG.md', 'renderer', 'src']
 EXE = 'AI 3D Print Advisor Studio.exe'
+CSC = os.path.join(os.environ.get('WINDIR', r'C:\Windows'), 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe')
 
 def asar_node_modules(asar, out):
     """Copy node_modules out of an app.asar (and its .unpacked folder)."""
@@ -105,6 +109,23 @@ def demo_data(args, demo_dir, exe):
                 for bad in [b for b in ('sk-ant', os.environ.get('USERNAME', ''), 'amazon.com/gp/your-account', 'apiKey') if b]:   # keys, your Windows user name, order links
                     if bad in t: sys.exit(f'Stopped: "{bad}" found in {os.path.join(root, f)}')
 
+def build_launcher(csc, dst, title, version):
+    """The one program at the top of the folder: starts app/<title>.exe (tools/launcher/Launcher.cs)."""
+    tmp = tempfile.mkdtemp(prefix='launcher-')
+    info = os.path.join(tmp, 'LauncherInfo.cs')
+    q = lambda v: json.dumps(v)   # a valid C# string literal for these plain values
+    open(info, 'w', encoding='utf-8').write(
+        'using System.Reflection;\n'
+        f'[assembly: AssemblyTitle({q(title)})] [assembly: AssemblyProduct({q(title)})]\n'
+        '[assembly: AssemblyCompany("AI 3D Print Advisor Studio (open source)")]\n'
+        '[assembly: AssemblyCopyright("AGPL-3.0, github.com/jtroberts83/AI-Print-Advisor-Studio")]\n'
+        f'[assembly: AssemblyVersion({q(version)})] [assembly: AssemblyFileVersion({q(version)})]\n'
+        f'static class LauncherInfo {{ public const string Title = {q(title)}; public const string Target = {q(title + ".exe")}; }}\n')
+    subprocess.run([csc, '/nologo', '/target:winexe', '/optimize+', '/platform:anycpu', f'/out:{dst}',
+                    f'/win32icon:{os.path.join(ROOT, "build", "icon.ico")}', '/r:System.Windows.Forms.dll',
+                    os.path.join(ROOT, 'tools', 'launcher', 'Launcher.cs'), info], check=True)
+    shutil.rmtree(tmp, ignore_errors=True)
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--runtime', help='an earlier release folder: its Electron files and bundled node_modules')
@@ -114,12 +135,14 @@ def main():
     ap.add_argument('--out', required=True)
     ap.add_argument('--demo', action='store_true'); ap.add_argument('--recording'); ap.add_argument('--inventory'); ap.add_argument('--backup'); ap.add_argument('--config')
     ap.add_argument('--no-zip', action='store_true')
+    ap.add_argument('--csc', default=CSC, help="the C# compiler that comes with Windows (.NET Framework 4), for the launcher")
     ap.add_argument('--package', action='append', help='an npm .tgz to bundle instead of the runtime copy (repeatable)')
     args = ap.parse_args()
     version = json.load(open(os.path.join(ROOT, 'package.json')))['version']
     name = f"AI-3D-Print-Advisor-Studio-{'DEMO-' if args.demo else ''}{version}-win-x64"
-    out = os.path.join(args.out, name)
-    if os.path.exists(out): shutil.rmtree(out)
+    top = os.path.join(args.out, name)
+    if os.path.exists(top): shutil.rmtree(top)
+    out = os.path.join(top, 'app')   # Electron and all its files; the folder above holds only the launcher
     if args.electron:
         shutil.copytree(args.electron, out, ignore=shutil.ignore_patterns('default_app.asar'))
         os.rename(os.path.join(out, 'electron.exe'), os.path.join(out, EXE))
@@ -142,15 +165,18 @@ def main():
     if args.demo:
         demo_data(args, os.path.join(app, 'demo'), os.path.join(out, EXE))
         os.rename(os.path.join(out, EXE), os.path.join(out, 'AI 3D Print Advisor Studio DEMO.exe'))
-    print('Built', out)
+    title = 'AI 3D Print Advisor Studio' + (' DEMO' if args.demo else '')
+    build_launcher(args.csc, os.path.join(top, title + '.exe'), title, version)
+    print('Built', top)
     if not args.no_zip:
-        z = out + '.zip'
+        # no extra folder inside the zip: Windows' "Extract All" already makes one named after the zip
+        z = top + '.zip'
         if os.path.exists(z): os.remove(z)
         with zipfile.ZipFile(z, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for root, _, files in os.walk(out):
+            for root, _, files in os.walk(top):
                 for f in files:
                     full = os.path.join(root, f)
-                    zf.write(full, os.path.join(name, os.path.relpath(full, out)))
+                    zf.write(full, os.path.relpath(full, top))
         print('Zipped', z, f'{os.path.getsize(z) / 1e6:.0f} MB')
 
 if __name__ == '__main__':

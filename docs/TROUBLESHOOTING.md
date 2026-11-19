@@ -11,6 +11,7 @@ Click **More info → Run anyway**. Next time, skip the warning: before extracti
 
 ### Nothing happens when I double-click the app
 - Make sure you **extracted** the zip first (right-click → Extract All…). Running it from inside the zip doesn't work.
+- Keep the **`app`** folder next to the program. If it says "Couldn't find the app's files", extract the whole zip again and don't move the program out of its folder (make a desktop shortcut instead: right-click → **Send to → Desktop (create shortcut)**).
 - Wait a few seconds: the first start builds an index of your Snapmaker Orca profiles.
 - Still nothing? Check **Task Manager** for "AI 3D Print Advisor Studio" and end it, then start again.
 

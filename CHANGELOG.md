@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.19.1
+- **Tidier download**: the unzipped folder now holds just one program to open (`AI 3D Print Advisor Studio.exe`,
+  or `... DEMO.exe`) and an `app` folder with everything else. The zip no longer has a folder inside it, so
+  "Extract All" no longer makes a folder within a folder of the same name.
+
 ## 2.19.0
 - **3D printing words explained** (for "Brand new" and "A little"): words like brim, infill, nozzle, prime tower,
   purge, "Generic PLA", toolhead and about 45 others get a dotted underline. Hover over one to see a plain-language
