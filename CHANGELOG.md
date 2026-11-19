@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.18.0
+- **Runs on Electron 45.4.1** (was 33.2.1), the official build from the Electron project. Clears the published
+  Chromium/Electron security advisories and the antivirus "packed program" flag some scanners raised on the
+  old launcher. Saved API keys keep working.
+- New app icon; the program shows its own name and version in Windows.
+- **Very large models open**: model files bigger than JavaScript can hold as text (a 619 MB MakerWorld model) are
+  read in chunks, and **Fix model** lightens them (6.9 million → 1 million triangles in about a minute).
+- meshoptimizer 1.3.0 for Fix model.
+- Product photos: honours a store's "try again in N seconds", and falls back to the product's .json data or the
+  page's preview picture when a store doesn't offer the usual product data.
+- AI spending shows tiny costs (under a hundredth of a cent) instead of rounding them to zero.
+
 ## 2.17.1
 - Security: updated the `ws` library (used to talk to printers) from 8.18.0 to 8.23.0 to fix two published
   high-severity advisories (GHSA-58qx-3vcg-4xpx, GHSA-96hv-2xvq-fx4p), and `jszip` from 3.10.1 to 3.10.2.

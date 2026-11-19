@@ -31,7 +31,7 @@ Results are public under the **[Actions](https://github.com/jtroberts83/AI-Print
 1. On the release page, open `SHA256SUMS.txt`.
 2. In the folder with your download, open PowerShell (Shift + right-click → "Open PowerShell window here") and run:
    ```powershell
-   Get-FileHash .\AI-3D-Print-Advisor-Studio-2.17.1-win-x64.zip
+   Get-FileHash .\AI-3D-Print-Advisor-Studio-2.18.0-win-x64.zip
    ```
 3. The long code it prints must match the line for that file in `SHA256SUMS.txt`. If it doesn't, don't run it: the file was changed or damaged.
 
@@ -40,4 +40,4 @@ You can also upload the zip to [VirusTotal](https://www.virustotal.com/) to have
 ## Known limitations
 
 - The Windows program isn't **code-signed** yet, so Windows SmartScreen warns on first start ("Windows protected your PC").
-- The app is built on **Electron 33**. Electron is a web browser engine; the dependency audit reports any known issues in it. Because the app only shows its own local pages and never loads web content, most browser-engine issues can't be reached through it, but moving to a current Electron release is planned.
+- The app runs on **Electron 45**, using Electron's own published Windows build (its checksum is checked before each release is built). Dependabot proposes Electron updates as they come out.

@@ -1,7 +1,9 @@
 """Build ready-to-run Windows folders (and zips) of the app, from this source and an existing build's Electron runtime.
 
 Full app (to share):
-    python tools/build_release.py --runtime <a built AI-3D-Print-Advisor-Studio-x.y.z-win-x64 folder> --out <folder>
+    python tools/build_release.py --electron <official Electron build, unzipped> --modules <an earlier release's app.asar>
+        --package <npm .tgz> ... --rcedit <rcedit.exe> --out <folder>
+  (older way: --runtime <an earlier release folder> reuses that release's Electron files and libraries)
 
 Demo app (guided sample with recorded results, see preload-demo.js):
     python tools/build_release.py --runtime <...> --out <folder> --demo --recording <rec.jsonl>
@@ -105,7 +107,11 @@ def demo_data(args, demo_dir, exe):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--runtime', required=True); ap.add_argument('--out', required=True)
+    ap.add_argument('--runtime', help='an earlier release folder: its Electron files and bundled node_modules')
+    ap.add_argument('--electron', help="Electron's official Windows build, unzipped (electron-vX-win32-x64.zip from github.com/electron/electron releases); used instead of the runtime's Electron files")
+    ap.add_argument('--modules', help='an app.asar to take node_modules from (default: from the runtime)')
+    ap.add_argument('--rcedit', help='rcedit.exe (github.com/electron/rcedit): sets the program icon, name and version')
+    ap.add_argument('--out', required=True)
     ap.add_argument('--demo', action='store_true'); ap.add_argument('--recording'); ap.add_argument('--inventory'); ap.add_argument('--backup'); ap.add_argument('--config')
     ap.add_argument('--no-zip', action='store_true')
     ap.add_argument('--package', action='append', help='an npm .tgz to bundle instead of the runtime copy (repeatable)')
@@ -114,13 +120,25 @@ def main():
     name = f"AI-3D-Print-Advisor-Studio-{'DEMO-' if args.demo else ''}{version}-win-x64"
     out = os.path.join(args.out, name)
     if os.path.exists(out): shutil.rmtree(out)
-    shutil.copytree(args.runtime, out, ignore=shutil.ignore_patterns('app.asar', 'app.asar.unpacked', 'app'))
+    if args.electron:
+        shutil.copytree(args.electron, out, ignore=shutil.ignore_patterns('default_app.asar'))
+        os.rename(os.path.join(out, 'electron.exe'), os.path.join(out, EXE))
+    else:
+        shutil.copytree(args.runtime, out, ignore=shutil.ignore_patterns('app.asar', 'app.asar.unpacked', 'app'))
     app = os.path.join(out, 'resources', 'app')
     os.makedirs(app)
     copy_app(app)
     if not args.demo: os.remove(os.path.join(app, 'preload-demo.js'))
-    asar_node_modules(os.path.join(args.runtime, 'resources', 'app.asar'), app)
+    asar_node_modules(args.modules or os.path.join(args.runtime, 'resources', 'app.asar'), app)
     overlay_packages(args.package, app)
+    if args.rcedit:
+        title = 'AI 3D Print Advisor Studio' + (' DEMO' if args.demo else '')
+        subprocess.run([args.rcedit, os.path.join(out, EXE), '--set-icon', os.path.join(ROOT, 'build', 'icon.ico'),
+                        '--set-version-string', 'FileDescription', title, '--set-version-string', 'ProductName', title,
+                        '--set-version-string', 'CompanyName', 'AI 3D Print Advisor Studio (open source)',
+                        '--set-version-string', 'LegalCopyright', 'AGPL-3.0, github.com/jtroberts83/AI-Print-Advisor-Studio',
+                        '--set-version-string', 'OriginalFilename', os.path.basename(EXE), '--set-version-string', 'InternalName', title,
+                        '--set-file-version', version, '--set-product-version', version], check=True)
     if args.demo:
         demo_data(args, os.path.join(app, 'demo'), os.path.join(out, EXE))
         os.rename(os.path.join(out, EXE), os.path.join(out, 'AI 3D Print Advisor Studio DEMO.exe'))

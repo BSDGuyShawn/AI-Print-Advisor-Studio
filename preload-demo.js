@@ -154,6 +154,7 @@ const recordedConfig = (find('get-config', []) || {}).r || {};
 const config = Object.assign({}, recordedConfig, {
   hasKey: true, keyNeedsReentry: false, aiMode: 'api', experience: null, guideDone: false, model: recordedConfig.model || 'claude-opus-5-5',
   printers: PRINTERS.map(p => ({ name: p.name, url: p.url, hasKey: false })), demo: true,
+  version: require('./package.json').version,   // this build's version, not the one the answers were recorded with
 });
 let filamentState = clone(FIL.state);
 let filamentStock = null;

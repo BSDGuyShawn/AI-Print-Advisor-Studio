@@ -4,6 +4,7 @@
 // them: specks merge into the colour around them, and the mesh is reduced (each colour area on its own with its
 // borders locked, so colours keep their exact edges and the mesh stays closed).
 const JSZip = require('jszip');
+const { BIG_MODEL_BYTES } = require('./threemf');
 const { decode, encode } = require('./paint');
 const { meshKey } = require('./patches');
 
@@ -152,7 +153,8 @@ function mergeSpecks(lab, adj, A) {
 
 let simplifier = null;
 async function getSimplifier() {
-  if (!simplifier) { simplifier = require('meshoptimizer/meshopt_simplifier.js'); await simplifier.ready; }
+  // meshoptimizer 1.x is an ES module: loaded with import() from its 'simplifier' entry point
+  if (!simplifier) { simplifier = (await import('meshoptimizer/simplifier')).MeshoptSimplifier; await simplifier.ready; }
   return simplifier;
 }
 
@@ -227,6 +229,32 @@ function closedEdges(T, nv) {
   return { open, over };
 }
 
+// The same rewrite for an object file too big to handle as one string (see BIG_MODEL_BYTES in threemf.js):
+// walks the bytes, copies everything as it is and swaps in the new <vertices> and <triangles> of the fixed objects.
+function rewriteBig(buf, objs, vertsXml, trisXml) {
+  const out = [];
+  let pos = 0;
+  const find = (s, from) => buf.indexOf(s, from, 'latin1');
+  for (;;) {
+    const i = find('<object', pos);
+    if (i < 0) break;
+    const j = find('>', i), k = find('</object>', j);
+    if (j < 0 || k < 0) break;
+    const id = (/\bid="([^"]+)"/.exec(buf.toString('utf8', i, j + 1)) || [])[1];
+    const g = objs.get(id);
+    const vEnd = find('vertices>', j), tEnd = find('triangles>', j);
+    if (!g || vEnd < 0 || vEnd > k || tEnd < 0 || tEnd > k) { out.push(buf.subarray(pos, k)); pos = k; out.push(buf.subarray(pos, k + 9)); pos = k + 9; continue; }
+    const vOpen = buf.lastIndexOf('<', vEnd), vClose = find('vertices>', vEnd + 9) + 9;
+    const tOpen = buf.lastIndexOf('<', tEnd), tClose = find('triangles>', tEnd + 10) + 10;
+    const head = buf.toString('utf8', vEnd, Math.min(k, vEnd + 400)), thead = buf.toString('utf8', tEnd, Math.min(k, tEnd + 400));
+    const vtag = (/<(\w+:)?vertex\b/.exec(head) || [])[1] || '', ttag = (/<(\w+:)?triangle\b/.exec(thead) || [])[1] || '';
+    out.push(buf.subarray(pos, vOpen), Buffer.from(vertsXml(g, vtag)), buf.subarray(vClose, tOpen), Buffer.from(trisXml(g, ttag)), buf.subarray(tClose, k));
+    pos = k;
+  }
+  out.push(buf.subarray(pos));
+  return Buffer.concat(out);
+}
+
 // Fix the meshes of `items` inside the 3MF in `buffer`. Returns the new buffer and what was done.
 async function fix(buffer, items, { reduceMesh = true, cleanColours = true } = {}) {
   const zip = await JSZip.loadAsync(buffer);
@@ -260,24 +288,31 @@ async function fix(buffer, items, { reduceMesh = true, cleanColours = true } = {
   }
   const codes = new Map(); const codeFor = (s) => { let c = codes.get(s); if (!c) { c = encode({ state: s }); codes.set(s, c); } return c; };
   const fmt = (v) => { const s = v.toFixed(5); return s.replace(/\.?0+$/, '') || '0'; };
+  const vertsXml = (g, vtag) => {
+    const parts = [];
+    for (let v = 0; v < g.V.length; v += 3) parts.push(`<${vtag}vertex x="${fmt(g.V[v])}" y="${fmt(g.V[v + 1])}" z="${fmt(g.V[v + 2])}"/>`);
+    return `<${vtag}vertices>\n     ${parts.join('\n     ')}\n    </${vtag}vertices>`;
+  };
+  const trisXml = (g, ttag) => {
+    const tris = [];
+    for (let t = 0; t < g.T.length / 3; t++) {
+      const paint = g.painted && g.lab[t] !== g.extruder ? ` paint_color="${codeFor(g.lab[t])}"` : '';
+      tris.push(`<${ttag}triangle v1="${g.T[t * 3]}" v2="${g.T[t * 3 + 1]}" v3="${g.T[t * 3 + 2]}"${paint}/>`);
+    }
+    return `<${ttag}triangles>\n     ${tris.join('\n     ')}\n    </${ttag}triangles>`;
+  };
   for (const [file, objs] of byFile) {
     const f = zip.file(file) || zip.file(decodeURIComponent(file));
     if (!f) continue;
-    let xml = await f.async('string');
+    const bytes = await f.async('nodebuffer');
+    if (bytes.length > BIG_MODEL_BYTES) { zip.file(f.name, rewriteBig(bytes, objs, vertsXml, trisXml)); continue; }
+    let xml = bytes.toString('utf8');
     xml = xml.replace(/(<object\b[^>]*\bid="([^"]+)"[^>]*>)([\s\S]*?)(<\/object>)/g, (m0, open, id, body, close) => {
       const g = objs.get(id);
       if (!g || !/<(?:\w+:)?triangles>/.test(body)) return m0;
       const vtag = (/<(\w+:)?vertex\b/.exec(body) || [])[1] || '', ttag = (/<(\w+:)?triangle\b/.exec(body) || [])[1] || '';
-      const parts = [];
-      for (let v = 0; v < g.V.length; v += 3) parts.push(`<${vtag}vertex x="${fmt(g.V[v])}" y="${fmt(g.V[v + 1])}" z="${fmt(g.V[v + 2])}"/>`);
-      const verts = parts.join('\n     ');
-      const tris = [];
-      for (let t = 0; t < g.T.length / 3; t++) {
-        const paint = g.painted && g.lab[t] !== g.extruder ? ` paint_color="${codeFor(g.lab[t])}"` : '';
-        tris.push(`<${ttag}triangle v1="${g.T[t * 3]}" v2="${g.T[t * 3 + 1]}" v3="${g.T[t * 3 + 2]}"${paint}/>`);
-      }
-      body = body.replace(/<((?:\w+:)?vertices)>[\s\S]*?<\/\1>/, `<${vtag}vertices>\n     ${verts}\n    </${vtag}vertices>`)
-        .replace(/<((?:\w+:)?triangles)>[\s\S]*?<\/\1>/, `<${ttag}triangles>\n     ${tris.join('\n     ')}\n    </${ttag}triangles>`);
+      body = body.replace(/<((?:\w+:)?vertices)>[\s\S]*?<\/\1>/, () => vertsXml(g, vtag))
+        .replace(/<((?:\w+:)?triangles)>[\s\S]*?<\/\1>/, () => trisXml(g, ttag));
       return open + body + close;
     });
     zip.file(f.name, xml);

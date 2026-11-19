@@ -148,6 +148,50 @@ function parseModelFile(xml) {
   return { objects, build, unit: unitMatch ? unitMatch[1] : 'millimeter' };
 }
 
+// Very detailed models can hold more XML than JavaScript can keep in one string (about 512 MB; a 600 MB
+// MakerWorld model was seen). Above BIG_MODEL_BYTES a .model file is read in chunks straight from its bytes,
+// picking out the same elements parseModelFile reads, so the model still opens and "Fix model" can lighten it.
+const BIG_MODEL_BYTES = +process.env.AIPA_BIG_MODEL_BYTES || 256 * 1024 * 1024;   // the setting is for tests only
+function parseModelBytes(bytes) {
+  const objects = new Map(), build = [];
+  let unit = 'millimeter', cur = null, inBuild = false;
+  const tagRe = /<(\/?)(?:\w+:)?(model|object|vertex|triangle|component|build|item)\b([^>]*?)\/?>/g;
+  const pre = /(?:^|\s)(?:paint_color|(?:\w+:)?mmu_segmentation)="([0-9A-Fa-f]+)"/;
+  const finish = () => {
+    if (!cur) return;
+    const o = { id: cur.id, name: cur.name, type: cur.type, mesh: null, components: cur.components };
+    if (cur.vx.length || cur.tri.length) o.mesh = { vertices: new Float64Array(cur.vx), triangles: new Uint32Array(cur.tri), painted: cur.painted, paint: cur.painted ? cur.paint : null };
+    objects.set(cur.id, o); cur = null;
+  };
+  const handle = (close, tag, a) => {
+    if (tag === 'model' && !close) { const u = attr(a, 'unit'); if (u) unit = u; }
+    else if (tag === 'object') {
+      if (close) finish();
+      else { finish(); cur = { id: attr(a, 'id'), name: attr(a, 'name'), type: attr(a, 'type') || 'model', vx: [], tri: [], paint: [], painted: 0, components: [] }; }
+    } else if (tag === 'vertex' && cur) cur.vx.push(+attr(a, 'x'), +attr(a, 'y'), +attr(a, 'z'));
+    else if (tag === 'triangle' && cur) {
+      cur.tri.push(+attr(a, 'v1'), +attr(a, 'v2'), +attr(a, 'v3'));
+      if (a.includes('paint_color=') || a.includes('mmu_segmentation=')) { cur.painted++; const pm = pre.exec(a); if (pm) cur.paint[cur.tri.length / 3 - 1] = pm[1]; }
+    } else if (tag === 'component' && cur && !close) cur.components.push({ objectid: attr(a, 'objectid'), path: attr(a, 'p:path') || attr(a, 'path'), transform: parseTransform(attr(a, 'transform')) });
+    else if (tag === 'build') inBuild = !close;
+    else if (tag === 'item' && inBuild && !close) build.push({ objectid: attr(a, 'objectid'), transform: parseTransform(attr(a, 'transform')), printable: attr(a, 'printable') !== '0' });
+  };
+  const dec = new TextDecoder('utf-8');
+  const CHUNK = 32 * 1024 * 1024;
+  let carry = '';
+  for (let pos = 0; pos < bytes.length; pos += CHUNK) {
+    const text = carry + dec.decode(bytes.subarray(pos, Math.min(bytes.length, pos + CHUNK)), { stream: pos + CHUNK < bytes.length });
+    const cut = pos + CHUNK < bytes.length ? text.lastIndexOf('<') : text.length;   // an unfinished tag waits for the next chunk
+    const part = text.slice(0, cut);
+    carry = text.slice(cut);
+    tagRe.lastIndex = 0;
+    let m;
+    while ((m = tagRe.exec(part))) handle(m[1] === '/', m[2], m[3]);
+  }
+  finish();
+  return { objects, build, unit };
+}
+
 const UNIT_SCALE = { micron: 0.001, millimeter: 1, centimeter: 10, inch: 25.4, foot: 304.8, meter: 1000 };
 
 // ---------- settings files ----------
@@ -243,8 +287,13 @@ async function load3mf(buffer) {
   async function getModel(path) {
     const p = path.replace(/^\//, '');
     if (!modelCache.has(p)) {
-      const xml = await readText(p);
-      modelCache.set(p, xml ? parseModelFile(xml) : null);
+      const f = zip.file(p);
+      let model = null;
+      if (f) {
+        const bytes = await f.async('uint8array');
+        model = bytes.length > BIG_MODEL_BYTES ? parseModelBytes(bytes) : parseModelFile(new TextDecoder('utf-8').decode(bytes));
+      }
+      modelCache.set(p, model);
     }
     return modelCache.get(p);
   }
@@ -718,4 +767,4 @@ function buildPresets(project, changes, baseName) {
 }
 function safeName(s) { return s.replace(/[\\/:*?"<>|@]+/g, '_').replace(/\s+/g, ' ').trim(); }
 
-module.exports = { plateMembership, load3mf, analyzePlate, settingsSummary, writeModified, buildPresets, applyChanges, compose, parseTransform, setBuildTransforms, rotationAbout };
+module.exports = { plateMembership, load3mf, analyzePlate, settingsSummary, writeModified, buildPresets, applyChanges, compose, parseTransform, setBuildTransforms, rotationAbout, parseModelBytes, BIG_MODEL_BYTES };

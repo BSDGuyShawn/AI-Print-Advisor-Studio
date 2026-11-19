@@ -1205,11 +1205,32 @@ async function photoFromUrl(src) {
   return c.toDataURL('image/jpeg', 0.8);
 }
 // The photo for this color from a Shopify product page; { photo, page, exact } or null when the store isn't Shopify.
+// Three ways in, best first: the store's /products/<name>.js (photo per variant), its /products/<name>.json (some
+// stores turn the .js off), and finally the page's own preview picture (og:image: the product line, not the color).
 async function storePhoto(pageUrl, color, storeColor) {
   let u; try { u = new URL(pageUrl); } catch { return null; }
-  const m = u.pathname.match(/\/products\/([^/?#]+)/); if (!m) return null;
-  const p = await api.filamentFetch({ url: `${u.origin}/products/${m[1]}.js`, as: 'json' }).catch(() => null);
-  if (!p) return null;
+  const m = u.pathname.match(/\/products\/([^/?#]+)/);
+  const page = m ? u.origin + '/products/' + m[1] : u.href;
+  let p = m ? await api.filamentFetch({ url: `${u.origin}/products/${m[1]}.js`, as: 'json' }).catch(() => null) : null;
+  if (!p && m) {
+    const j = await api.filamentFetch({ url: `${u.origin}/products/${m[1]}.json`, as: 'json' }).catch(() => null);
+    const pr = j && j.product;
+    if (pr) {
+      const imgById = new Map((pr.images || []).map(i => [i.id, i.src]));
+      p = { featured_image: (pr.image && pr.image.src) || (pr.images && pr.images[0] && pr.images[0].src),
+        variants: (pr.variants || []).map(v => ({ title: v.title, featured_image: imgById.get(v.image_id) ? { src: imgById.get(v.image_id) } : null })) };
+    }
+  }
+  if (!p) {
+    const html = await api.filamentFetch({ url: u.href, as: 'text' }).catch(() => null);
+    // the page's preview picture: og:image, twitter:image, or a schema.org Product "image"
+    const og = html && (/<meta[^>]+(?:property|name)=["'](?:og:image(?::secure_url)?|twitter:image)["'][^>]+content=["']([^"']+)["']/i.exec(html)
+      || /<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:image|twitter:image)["']/i.exec(html)
+      || /"@type"\s*:\s*"Product"[\s\S]{0,2000}?"image"\s*:\s*\[?\s*"([^"]+)"/.exec(html));
+    if (!og) return null;
+    const src = og[1].replace(/&amp;/g, '&');
+    return { photo: await photoFromUrl(src.startsWith('//') ? 'https:' + src : new URL(src, u).href), page: u.href, exact: false };
+  }
   const words = s => String(s || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
   let best = null, bestScore = 0;
   for (const v of p.variants || []) {
@@ -1224,7 +1245,7 @@ async function storePhoto(pageUrl, color, storeColor) {
   const exact = bestScore >= 1;
   const src = exact ? best.featured_image.src : (p.featured_image || p.images?.[0]);
   if (!src) return null;
-  return { photo: await photoFromUrl(src), page: u.origin + '/products/' + m[1], exact };
+  return { photo: await photoFromUrl(src), page, exact };
 }
 
 const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');

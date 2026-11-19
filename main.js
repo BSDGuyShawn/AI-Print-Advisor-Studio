@@ -1054,10 +1054,13 @@ ipcMain.handle('filament-fetch', async (_e, { url, as }) => {
   let u; try { u = new URL(url); } catch { throw new Error('Bad address.'); }
   if (u.protocol !== 'https:') throw new Error('Only https addresses can be fetched.');
   let res;
+  const accept = as === 'image' ? 'image/*' : as === 'text' ? 'text/html' : 'application/json';
   for (let attempt = 0; ; attempt++) {
-    res = await net.fetch(u.href, { headers: { accept: as === 'image' ? 'image/*' : 'application/json' }, signal: AbortSignal.timeout(20000) });
+    res = await net.fetch(u.href, { headers: { accept }, signal: AbortSignal.timeout(20000) });
     if (res.status !== 429 || attempt === 2) break;
-    await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
+    // the store says how long to wait (Retry-After, seconds); at most 20 s so the window doesn't hang
+    const after = Number(res.headers.get('retry-after'));
+    await new Promise(r => setTimeout(r, Math.min(20, Number.isFinite(after) && after > 0 ? after : 3 * (attempt + 1)) * 1000));
   }
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
@@ -1067,6 +1070,7 @@ ipcMain.handle('filament-fetch', async (_e, { url, as }) => {
     if (!/^image\//.test(type)) throw new Error('Not an image.');
     return { type, base64: buf.toString('base64') };
   }
+  if (as === 'text') return buf.toString('utf8').slice(0, 2_000_000);
   return JSON.parse(buf.toString('utf8'));
 });
 

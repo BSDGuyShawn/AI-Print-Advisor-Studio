@@ -54,12 +54,12 @@ function record(data, fallbackModel) {
 function summary() {
   const all = entries || [];
   const now = new Date(), monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime(), d30 = now.getTime() - 30 * 86400e3;
-  const total = (list) => ({ usd: +list.reduce((t, e) => t + e.usd, 0).toFixed(4), calls: list.length });
+  const total = (list) => ({ usd: +list.reduce((t, e) => t + e.usd, 0).toFixed(6), calls: list.length });
   const month = all.filter(e => Date.parse(e.t) >= monthStart);
   const byFeature = {};
   for (const e of month) { const f = (byFeature[e.feature] ||= { usd: 0, calls: 0 }); f.usd += e.usd; f.calls++; }
   return { month: total(month), last30: total(all.filter(e => Date.parse(e.t) >= d30)), all: total(all), since: all[0] ? all[0].t : null,
-    byFeature: Object.entries(byFeature).map(([feature, v]) => ({ feature, usd: +v.usd.toFixed(4), calls: v.calls })).sort((a, b) => b.usd - a.usd),
+    byFeature: Object.entries(byFeature).map(([feature, v]) => ({ feature, usd: +v.usd.toFixed(6), calls: v.calls })).sort((a, b) => b.usd - a.usd),
     recent: all.slice(-8).reverse() };
 }
 function clear() { entries = []; try { fs.writeFileSync(file, JSON.stringify({ entries })); } catch {} }
