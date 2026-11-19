@@ -9,10 +9,20 @@ You open a 3D model (a `.3mf` file, like the ones you download from MakerWorld o
 - **asks an AI (Claude) for the right settings** and explains every change in plain words,
 - **shows you what each version will look like**, how strong it will be and how long it takes,
 - **recolors multi-color models** with the filament you actually own,
+- **converts MakerWorld and Bambu Lab files** for your printer,
 - **sends the print to your printer**,
-- and **helps you figure out what went wrong** when a print fails.
+- and **helps you figure out what went wrong** when a print fails: mark where it failed on the 3D model and get likely causes and fixes.
 
 It also keeps a **filament library**: every spool you own, with photos, colors, where it's stored and how much is left.
+
+**Made for beginners:** a **guided tour** walks you through everything on a sample model before you open your own. Every recommendation says *why*, so you learn as you go. Words like "brim" or "infill" are explained when you hover over them, the **Glossary** has a picture for every term, and there's a **printable booklet** to keep next to your printer. The app **updates itself** with one click.
+
+### Free, with no middleman
+
+- **The app is completely free.** No subscription, no license, no account with the developer, no ads.
+- **For the AI features, your own Anthropic (Claude) API key is highly recommended.** It's pay-as-you-go and inexpensive: most analyses cost a few cents (about $0.04–0.10), so $5 of credit lasts 60 or more. There's no subscription.
+- **You set it up and manage it yourself**, directly with Anthropic (the guided tour shows you how). The app talks straight from your PC to Anthropic: there's no server or person in between, and the developer never sees your key, your models or your data. Your key is stored encrypted on your PC.
+- **Don't want to pay at all?** Use the free **chatbot mode**: the app gives you a prompt to paste into ChatGPT, Claude or Gemini (free plans work) and you paste the answer back.
 
 It's made for the **Snapmaker U1** with **Snapmaker Orca** (Snapmaker's slicer), and it can also save projects for **Bambu Lab** printers to share on MakerWorld.
 
