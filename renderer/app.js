@@ -1875,39 +1875,136 @@ const DEMO_STEPS = [
   { id: 'done', title: 'That’s the tour!', text: 'Install the full AI 3D Print Advisor Studio to use all of this with your own models, printers and filament. You’ll need your own Anthropic API key, or use the free chatbot mode. Reopen this tour anytime with the Guide button.' },
 ];
 if (api.demo) GUIDE_STEPS.splice(0, GUIDE_STEPS.length, ...DEMO_STEPS);
+
+// What to click next, step by step (also inside windows like Color remix): the guide rings it with a pulsing
+// "Click here" and names it. Each returns [element, what it's called] or null when the step is just reading.
+const openDlg = (id) => { const d = $(id); return d && d.open ? d : null; };
+const tabOn = (t) => { const b = document.querySelector(`[data-tab=${t}]`); return b && b.getAttribute('aria-selected') === 'true'; };
+const byText = (sel, re, root = document) => [...root.querySelectorAll(sel)].find(b => re.test(b.textContent));
+const filamentOpen = () => $('filamentBtn').getAttribute('aria-pressed') === 'true';
+const demoPickBtn = (i, fallback) => { const d = openDlg('demoPick'); return d ? [d.querySelector(`[data-i="${i}"]`), `“${(d.querySelector(`[data-i="${i}"] b`) || {}).textContent || 'the model'}”`] : fallback; };
+const NEXT_CLICK = {
+  open: () => demoPickBtn(0, [$('openBtn'), '“Open 3MF”']),
+  makerworld: () => demoPickBtn(1, [$('openBtn'), '“Open 3MF”']),
+  inspect: () => { const b = document.querySelector('#viewerTools [data-mode=overhang]'); return b && b.getAttribute('aria-checked') !== 'true' ? [b, '“Overhangs”'] : null; },
+  orient: () => { const o = byText('#orientList .orient-opt', /upright/i) || document.querySelector('#orientList .orient-opt.best'); return o ? [o, 'the upright orientation'] : null; },
+  ask: () => [$('analyzeBtn'), '“Get recommended settings”'],
+  compare: () => {
+    if (!tabOn('compare')) return [document.querySelector('[data-tab=compare]'), '“Compare slices”'];
+    const row = document.querySelector('#compareBody tr[data-v]:not([data-v=original])');
+    return row ? [row, 'a version in the table'] : [$('sliceBtn'), '“Slice and compare”'];
+  },
+  finish: () => api.demo ? ($('sendVariant') ? [$('sendVariant'), '“Send to printer…”'] : null)
+    : ($('save3mfVariant') ? [$('save3mfVariant'), '“Save as 3MF”'] : [$('saveBtn'), '“Save as 3MF”']),
+  remix: () => {
+    if (!openDlg('remixDialog')) return [$('remixBtn'), '“Color remix…”'];
+    if (!$('rxPartsPane').classList.contains('hidden')) return !$('rxConfirm').disabled ? [$('rxConfirm'), '“Confirm parts”'] : [$('rxIdentify'), '“Identify parts with AI”'];
+    const side = !$('rxBig').classList.contains('hidden') && $('rxBigSide').querySelector('[data-apply]');
+    if (side) return [side, '“Apply to model”'];
+    const cards = [...$('rxResults').querySelectorAll('.rx-card')];
+    if (!cards.length) return [$('rxGo'), '“Generate”'];
+    const card = cards.find(c => /deep space/i.test(c.textContent)) || cards[0];
+    return [card.querySelector('[data-apply]'), '“Apply to model”' + (/deep space/i.test(card.textContent) ? ' on Deep Space Cruiser' : '')];
+  },
+  filament: () => [$('filamentBtn'), '“Filament”'],
+  history: () => {
+    if (filamentOpen()) return [$('filamentBtn'), '“Back to model”'];
+    if (openDlg('tsDialog')) return [$('tsRun'), '“Troubleshoot with Claude”'];
+    if (!tabOn('history')) return [document.querySelector('[data-tab=history]'), '“Print history”'];
+    const b = document.querySelector('#tab-history [data-ts]'); return b ? [b, '“Troubleshoot…”'] : null;
+  },
+};
 const GUIDE = { i: 0, on: false };
-// A window like Color remix or the troubleshooter opens as a modal dialog: it sits above the page and makes the rest
-// of it unclickable, which would hide the guide. So the guide moves into whichever window is open (bottom left,
-// above it), and back to the 3D view when the window closes.
-const guideHome = $('guide').parentElement;
+// The guide is a floating card. Windows like Color remix open as modal dialogs (above the page, the rest of it
+// unclickable), so the card moves into whichever window is open and comes back when it closes. The "Click here" ring
+// goes into the topmost window too (also the demo's model picker). While the guide is on, guideTick() keeps the ring
+// on the thing to click next and moves the card to the corner where it covers neither that nor the main buttons.
+const ring = document.createElement('div');
+ring.id = 'guideRing'; ring.className = 'guide-ring hidden'; ring.setAttribute('aria-hidden', 'true');
+ring.innerHTML = '<span class="guide-ring-tag">Click here</span>';
+document.body.appendChild(ring);
+const topDialog = (withDemo) => [...document.querySelectorAll('dialog[open]')].filter(d => d.id !== 'glossaryDialog' && (withDemo || !/^demo/.test(d.id))).pop();
 function placeGuide() {
-  const open = [...document.querySelectorAll('dialog[open]')].filter(d => !/^demo/.test(d.id) && d.id !== 'glossaryDialog').pop();
-  const g = $('guide'), target = open || guideHome;
-  if (g.parentElement !== target) target.appendChild(g);
+  const g = $('guide'), open = topDialog(false), home = open || document.body, top = topDialog(true) || document.body;
+  if (g.parentElement !== home) home.appendChild(g);
+  if (ring.parentElement !== top) top.appendChild(ring);
   g.classList.toggle('in-dialog', !!open);
+  if (GUIDE.on) guideTick();
 }
 new MutationObserver(placeGuide).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['open'] });
-let guideFocusEl = null;
+// an element's box when it's showing and clickable (not under another window); scrolled to first if it's off screen
+function shownRect(el, scroll = false) {
+  if (!el || !el.isConnected || el.closest('.hidden')) return null;
+  const d = topDialog(true);
+  if (d && !d.contains(el)) return null;
+  let r = el.getBoundingClientRect();
+  if (r.width < 2 || r.height < 2) return null;
+  if (scroll && (r.top < 0 || r.bottom > innerHeight) && guideScrolled !== el) {   // scroll to it once, then leave the scrolling to the user
+    guideScrolled = el; el.scrollIntoView({ block: 'center' }); r = el.getBoundingClientRect();
+  }
+  return r.bottom < 0 || r.top > innerHeight ? null : r;
+}
+const overlap = (a, b) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+let guideSpot = 0, guideLastEl = null, guideScrolled = null, guideTimer = null;
+function positionCard(target) {
+  const g = $('guide'); if (g.classList.contains('hidden')) return;
+  const W = innerWidth, H = innerHeight, w = g.offsetWidth, h = g.offsetHeight, m = 16, top = 70;
+  const mid = (W - w) / 2;
+  const spots = [[m, H - h - m], [W - w - m, H - h - m], [W - w - m, top], [m, top], [mid, H - h - m], [mid, top]];
+  const avoid = [];
+  if (target) avoid.push([{ left: target.left - 40, right: target.right + 40, top: target.top - 48, bottom: target.bottom + 48 }, 1000]);
+  const scope = topDialog(true) || document;
+  scope.querySelectorAll('button, [role=radio], select, input, .orient-opt, .rx-card').forEach(el => { if (g.contains(el) || el.closest('.guide-ring')) return; const r = shownRect(el); if (r) avoid.push([r, el.matches('.btn.primary, [role=tab]') ? 4 : 2]); });
+  const banner = document.querySelector('.demo-banner'); if (banner) avoid.push([banner.getBoundingClientRect(), 20]);
+  const score = ([x, y]) => avoid.reduce((s, [r, k]) => s + k * overlap(r, { left: x, top: y, right: x + w, bottom: y + h }), 0);
+  const scores = spots.map(score);
+  const best = scores.indexOf(Math.min(...scores));
+  if (scores[best] < scores[guideSpot]) guideSpot = best;   // stay put unless another corner is clearly better
+  const [x, y] = spots[guideSpot];
+  g.style.left = Math.max(m, x) + 'px'; g.style.top = Math.max(m, y) + 'px';
+}
+function guideTick() {
+  const st = GUIDE.on && GUIDE_STEPS[GUIDE.i];
+  if (!st) { ring.classList.add('hidden'); return; }
+  const next = NEXT_CLICK[st.id] && st.id !== 'done' ? NEXT_CLICK[st.id]() : null;
+  let el = next && next[0], r = shownRect(el, true);
+  const click = !!r;
+  if (!r) { el = st.target && st.target(); r = shownRect(el); }
+  const act = click ? `Click ${next[1]}` : '';
+  if ($('guideAct').textContent !== act) { $('guideAct').textContent = act; $('guideAct').classList.toggle('hidden', !act); $('guideWait').classList.toggle('hidden', !!act); }
+  if (el && el !== guideLastEl) { guideLastEl = el; if (!click) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+  ring.classList.toggle('hidden', !r);
+  if (r) {
+    const p = 5;
+    Object.assign(ring.style, { left: `${r.left - p}px`, top: `${r.top - p}px`, width: `${r.width + 2 * p}px`, height: `${r.height + 2 * p}px` });
+    ring.classList.toggle('soft', !click);
+    ring.classList.toggle('tag-below', r.top < 48);
+  }
+  positionCard(r);
+}
 function startGuide(from = 0) { GUIDE.on = true; GUIDE.i = from; while (GUIDE_STEPS[GUIDE.i] && GUIDE_STEPS[GUIDE.i].skipIf && GUIDE_STEPS[GUIDE.i].skipIf()) GUIDE.i++; renderGuide(); }
 function stopGuide(done = false) {
-  GUIDE.on = false; $('guide').classList.add('hidden');
-  if (guideFocusEl) guideFocusEl.classList.remove('guide-focus');
+  GUIDE.on = false; $('guide').classList.add('hidden'); ring.classList.add('hidden');
+  clearInterval(guideTimer); guideTimer = null;
   if (done) api.setConfig({ guideDone: true }).catch(() => {});
 }
 function renderGuide() {
-  if (guideFocusEl) { guideFocusEl.classList.remove('guide-focus'); guideFocusEl = null; }
   if (!GUIDE.on) return;
   const st = GUIDE_STEPS[GUIDE.i];
   if (!st) { stopGuide(true); return; }
   $('guide').classList.remove('hidden');
   $('guideStep').textContent = st.id === 'done' ? 'Done' : `Step ${GUIDE.i + 1} of ${GUIDE_STEPS.length - 1}`;
   $('guideTitle').textContent = st.title;
-  $('guideText').innerHTML = esc(st.text) + (st.id === 'open' && wordsOn() ? '<br><span class="waiting">Words with a dotted underline are explained: hover over one to see what it means and a picture.</span>' : '') + (st.until ? `<br><span class="waiting">${{ opened: 'Waiting for you to open a model…', analyzed: 'Click the highlighted button to continue.', 'compare-picked': 'Click a version in the table to continue.', saved: 'Save or send it to finish.', oriented: 'Pick an orientation to continue.', remixed: 'Apply a scheme to continue.', filament: 'Open Filament to continue.', troubleshot: 'Run the troubleshooter to continue.' }[st.until]}</span>` : '');
+  $('guideText').innerHTML = esc(st.text) + (st.id === 'open' && wordsOn() ? '<br><span class="waiting">Words with a dotted underline are explained: hover over one to see what it means and a picture.</span>' : '');
+  $('guideWait').textContent = st.until ? { opened: 'Waiting for you to open a model…', analyzed: 'Click the highlighted button to continue.', 'compare-picked': 'Click a version in the table to continue.', saved: 'Save or send it to finish.', oriented: 'Pick an orientation to continue.', remixed: 'Apply a scheme to continue.', filament: 'Open Filament to continue.', troubleshot: 'Run the troubleshooter to continue.' }[st.until] : '';
+  $('guideAct').textContent = ''; $('guideAct').classList.add('hidden'); $('guideWait').classList.remove('hidden');
   $('guideDots').innerHTML = GUIDE_STEPS.slice(0, -1).map((_, k) => `<span class="${k <= GUIDE.i ? 'on' : ''}"></span>`).join('');
   $('guideBack').disabled = GUIDE.i === 0;
   $('guideNext').textContent = st.id === 'done' ? 'Finish' : st.until ? 'Skip step' : 'Next';
-  const el = st.target && st.target();
-  if (el && !el.classList.contains('hidden')) { el.classList.add('guide-focus'); guideFocusEl = el; el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+  guideLastEl = null;
+  placeGuide();
+  guideTick();
+  if (!guideTimer) guideTimer = setInterval(guideTick, 250);
 }
 // the app reports what the user just did; the guide moves on when it's what the current step waits for
 function guideEvent(name) {

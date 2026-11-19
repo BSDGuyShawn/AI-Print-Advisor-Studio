@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.20.0
+- **Guide you can't miss**: the step-by-step guide (beginners and the demo) is bigger and brighter, and at every
+  step a pulsing orange **Click here** ring sits on the exact button to press next, with "Click ..." spelled out in
+  the guide. It follows you through windows step by step (Color remix: Identify parts, Confirm parts, Generate,
+  Apply to model; the troubleshooter; the demo's model picker; the Filament screen).
+- The guide moves itself to whichever corner doesn't cover the button to click or the window's other buttons, so
+  it no longer sits on top of what you need (it used to cover "Generate" in Color remix).
+
 ## 2.19.2
 - Word explanations: **STL file** has its own picture (it showed the 3MF one), and the **3MF file** picture
   labels all three parts: model, colors and settings.
