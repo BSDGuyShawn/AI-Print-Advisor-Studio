@@ -633,7 +633,7 @@ function showFilament(on) {
   if (on) { view.querySelector('iframe').focus(); guideEvent('filament'); }
   else { SHOP.key = ''; renderShopping(); }   // what's on hand may have changed
 }
-$('glossaryBtn').onclick = () => glossary.open();
+$('glossaryBtn').onclick = () => { glossary.open(); guideEvent('glossary'); };
 $('filamentBtn').onclick = () => showFilament(!document.body.classList.contains('filament-open'));
 
 
@@ -1857,22 +1857,26 @@ const GUIDE_STEPS = [
   { id: 'finish', title: 'Save it or print it', text: 'Happy with a version? Click “Save as 3MF” to keep the model with these settings (open it in your slicer and print), or “Send to printer…” to print right away.', target: () => $('useButtons') || $('saveBtn'), until: 'saved' },
   { id: 'done', title: 'You’re all set!', text: 'That’s the whole workflow. If a print goes wrong, open Print history and click “Troubleshoot…”: you can paint where it failed and get fixes. Reopen this guide anytime with the Guide button at the top.' },
 ];
-// The demo (api.demo) has its own tour: the sample rocket through every feature, with recorded results.
+// The guided tour (api.demo, the first launch): the sample rocket through every feature, with recorded results.
+// Finishing it unlocks the app for your own models (api.finishTour).
 const DEMO_STEPS = [
-  { id: 'open', title: 'Welcome to the demo!', text: 'This tour walks through the app with a sample model. Everything is recorded from the real app: nothing is sliced, printed or sent to the AI. Click Open 3MF and choose “Demo Rocket”.', target: () => $('openBtn'), until: 'opened', skipIf: () => !!state.file },
+  { id: 'open', title: 'Welcome to AI 3D Print Advisor Studio!', text: 'This one-time tour shows how the app works on a sample toy rocket. Everything is recorded from the real app: nothing is sliced, printed or sent to the AI. When you finish, the app unlocks for your own models. Click Open 3MF and choose “Demo Rocket”.', target: () => $('openBtn'), until: 'opened', skipIf: () => !!state.file },
+  { id: 'words', title: 'Learn the words as you go', text: 'New to 3D printing? Words with a dotted underline are explained: hover over one to see what it means, with a picture. The Glossary button at the top lists every word with its picture, and you can search it. It’s a great way to learn the terms: have a look now, or anytime.', target: () => $('glossaryBtn'), until: 'glossary' },
   { id: 'inspect', title: 'Spot the problem', text: 'This rocket was saved lying on its side. Click “Overhangs” above the model: red areas would be printed over thin air and need supports. Drag to rotate, scroll to zoom.', target: () => $('viewerTools') },
   { id: 'orient', title: 'Stand it up', text: 'The Orientation list scores every way to place the model. Pick “Stood upright · lowest risk”: overhangs drop from about 34 cm² to under 1 cm², so it needs no supports.', target: () => sectionOf('orientation'), until: 'oriented' },
-  { id: 'toolheads', title: 'Four colors, four toolheads', text: 'Each toolhead (T1–T4) prints one filament: white body, red nose and fins, blue windows, grey nozzle. In the full app you set these to the spools you load.', target: () => sectionOf('toolheads') },
+  { id: 'toolheads', title: 'Four colors, four toolheads', text: 'Each toolhead (T1–T4) prints one filament: white body, red nose and fins, blue windows, grey nozzle. With your own models you set these to the spools you load.', target: () => sectionOf('toolheads') },
   { id: 'goal', title: 'Choose quality or speed', text: 'Slide toward Quality or Speed and say what the part is for. The advice takes both into account.', target: () => sectionOf('goal') },
-  { id: 'ask', title: 'Get recommended settings', text: 'Click “Get recommended settings”. In the full app your model is sliced and Claude reviews it (about a minute, a few cents with your API key). Here the answer was recorded.', target: () => $('analyzeBtn'), until: 'analyzed', skipIf: () => !!state.result },
+  { id: 'ask', title: 'Get recommended settings', text: 'Click “Get recommended settings”. Normally your model is sliced and Claude reviews it (about a minute, a few cents with your API key). Here the answer was recorded.', target: () => $('analyzeBtn'), until: 'analyzed', skipIf: () => !!state.result },
   { id: 'review', title: 'Read the recommendations', text: 'This file had 0.08 mm layers (6½ hours), 1 wall, 5% infill and no brim. Each row says what changes and why, in plain words. Untick anything you don’t want.', target: () => $('tab-recs') },
   { id: 'compare', title: 'Compare versions', text: 'Open “Compare slices”, click “Slice and compare”, then click a version to see how it will look, how strong it is and how long it takes.', target: () => document.querySelector('[data-tab=compare]'), until: 'compare-picked' },
-  { id: 'finish', title: 'Save it or print it', text: 'In the full app, “Save as 3MF” keeps the model with these settings and “Send to printer…” prints it on your U1. In the demo they explain instead. Try “Send to printer…” to see the printer picker.', target: () => $('useButtons') || $('saveBtn') },
+  { id: 'finish', title: 'Save it or print it', text: '“Save as 3MF” keeps the model with these settings and “Send to printer…” prints it on your printer. In the tour they explain instead. Try “Send to printer…” to see the printer picker.', target: () => $('useButtons') || $('saveBtn') },
   { id: 'remix', title: 'Color remix', text: 'Click “Color remix…”: Identify parts with AI, Confirm parts, then Generate. Each scheme uses filament from your library. Apply “Deep Space Cruiser” to repaint the rocket.', target: () => $('remixBtn'), until: 'remixed' },
-  { id: 'filament', title: 'Your filament library', text: 'Click “Filament” at the top right: the library Color remix picks from, with photos, spools, locations and print settings. Click a filament, try Spools and Dashboard. Changes last until you close the demo.', target: () => $('filamentBtn'), until: 'filament' },
+  { id: 'filament', title: 'Your filament library', text: 'Click “Filament” at the top right: the library Color remix picks from, with photos, spools, locations and print settings. This is a sample library; yours starts empty after the tour.', target: () => $('filamentBtn'), until: 'filament' },
   { id: 'history', title: 'When a print fails', text: 'Click “Back to model”, open “Print history” and click “Troubleshoot…” on the cancelled “Demo Rocket” print, then run it. The AI explains what went wrong and what to change.', target: () => document.querySelector('[data-tab=history]'), until: 'troubleshot' },
   { id: 'makerworld', title: 'MakerWorld files on a U1 (optional)', text: 'Using a Snapmaker U1 or another non-Bambu printer? Click Open 3MF and choose “Demo Rocket (MakerWorld version)” to see the app convert a Bambu Lab file. Bambu Lab owners open MakerWorld files as they are.', target: () => $('openBtn') },
-  { id: 'done', title: 'That’s the tour!', text: 'Install the full AI 3D Print Advisor Studio to use all of this with your own models, printers and filament. You’ll need your own Anthropic API key, or use the free chatbot mode. Reopen this tour anytime with the Guide button.' },
+  { id: 'settings', title: 'Settings: where you set things up', text: 'Everything you set up lives in Settings, the gear at the top right: your AI key, your printers, Snapmaker Orca and your experience level. Click the gear.', target: () => $('settingsBtn'), until: 'settings' },
+  { id: 'apikey', title: 'Your Anthropic API key', text: 'The app needs an Anthropic API key to use AI on its own. One analysis sends Claude pictures of your model, the slice results and your settings, often over several requests, and puts the answers straight into the app. A chatbot can’t do that: in the free chatbot mode you copy and paste every request by hand, and the chatbot sees less. A key is pay-as-you-go and cheap: most analyses cost a few cents (about 4–10¢ with Sonnet, so $5 lasts 60 or more), with no subscription. Create one with the link under the box, paste it here, then click “Save settings” at the bottom. You can also do this after the tour.', target: () => $('apiKeyField') },
+  { id: 'done', title: 'You’re ready!', text: 'Click “Finish the tour” to start using the app with your own models. It restarts once and opens fresh: your filament library starts empty and nothing from the tour is kept (except an API key you saved). You can take this tour again from Settings.' },
 ];
 if (api.demo) GUIDE_STEPS.splice(0, GUIDE_STEPS.length, ...DEMO_STEPS);
 
@@ -1886,6 +1890,13 @@ const demoPickBtn = (i, fallback) => { const d = openDlg('demoPick'); return d ?
 const NEXT_CLICK = {
   open: () => demoPickBtn(0, [$('openBtn'), '“Open 3MF”']),
   makerworld: () => demoPickBtn(1, [$('openBtn'), '“Open 3MF”']),
+  words: () => [$('glossaryBtn'), '“Glossary”'],
+  settings: () => (openDlg('settingsDialog') ? null : [$('settingsBtn'), 'the gear (Settings)']),
+  apikey: () => {
+    if (!openDlg('settingsDialog')) return state.config.realHasKey ? null : [$('settingsBtn'), 'the gear (Settings)'];
+    if ($('apiKeyField').classList.contains('hidden')) return null;
+    return $('apiKey').value.trim() ? [$('saveSettings'), '“Save settings”'] : [$('apiKey'), 'the API key box and paste your key'];
+  },
   inspect: () => { const b = document.querySelector('#viewerTools [data-mode=overhang]'); return b && b.getAttribute('aria-checked') !== 'true' ? [b, '“Overhangs”'] : null; },
   orient: () => { const o = byText('#orientList .orient-opt', /upright/i) || document.querySelector('#orientList .orient-opt.best'); return o ? [o, 'the upright orientation'] : null; },
   ask: () => [$('analyzeBtn'), '“Get recommended settings”'],
@@ -1996,11 +2007,11 @@ function renderGuide() {
   $('guideStep').textContent = st.id === 'done' ? 'Done' : `Step ${GUIDE.i + 1} of ${GUIDE_STEPS.length - 1}`;
   $('guideTitle').textContent = st.title;
   $('guideText').innerHTML = esc(st.text) + (st.id === 'open' && wordsOn() ? '<br><span class="waiting">Words with a dotted underline are explained: hover over one to see what it means and a picture.</span>' : '');
-  $('guideWait').textContent = st.until ? { opened: 'Waiting for you to open a model…', analyzed: 'Click the highlighted button to continue.', 'compare-picked': 'Click a version in the table to continue.', saved: 'Save or send it to finish.', oriented: 'Pick an orientation to continue.', remixed: 'Apply a scheme to continue.', filament: 'Open Filament to continue.', troubleshot: 'Run the troubleshooter to continue.' }[st.until] : '';
+  $('guideWait').textContent = st.until ? { opened: 'Waiting for you to open a model…', analyzed: 'Click the highlighted button to continue.', 'compare-picked': 'Click a version in the table to continue.', saved: 'Save or send it to finish.', oriented: 'Pick an orientation to continue.', remixed: 'Apply a scheme to continue.', glossary: 'Open the Glossary to continue (or skip this step).', settings: 'Open Settings to continue.', filament: 'Open Filament to continue.', troubleshot: 'Run the troubleshooter to continue.' }[st.until] : '';
   $('guideAct').textContent = ''; $('guideAct').classList.add('hidden'); $('guideWait').classList.remove('hidden');
   $('guideDots').innerHTML = GUIDE_STEPS.slice(0, -1).map((_, k) => `<span class="${k <= GUIDE.i ? 'on' : ''}"></span>`).join('');
   $('guideBack').disabled = GUIDE.i === 0;
-  $('guideNext').textContent = st.id === 'done' ? 'Finish' : st.until ? 'Skip step' : 'Next';
+  $('guideNext').textContent = st.id === 'done' ? (api.tour ? 'Finish the tour' : 'Finish') : st.until ? 'Skip step' : 'Next';
   guideLastEl = null;
   placeGuide();
   guideTick();
@@ -2016,7 +2027,13 @@ function guideEvent(name) {
   if (ahead > 0) { GUIDE.i = ahead + 1; renderGuide(); }
   else if (name === 'analyzed') { const review = GUIDE_STEPS.findIndex(x => x.id === 'review'); if (GUIDE.i < review) { GUIDE.i = review; renderGuide(); } }
 }
-$('guideNext').onclick = () => { if (GUIDE_STEPS[GUIDE.i].id === 'done') { stopGuide(true); return; } GUIDE.i++; renderGuide(); };
+$('guideNext').onclick = () => {
+  if (GUIDE_STEPS[GUIDE.i].id === 'done') {
+    if (api.tour) { $('guideNext').disabled = true; $('guideNext').textContent = 'Starting the app…'; api.finishTour(); return; }
+    stopGuide(true); return;
+  }
+  GUIDE.i++; renderGuide();
+};
 $('guideBack').onclick = () => { if (GUIDE.i > 0) { GUIDE.i--; renderGuide(); } };
 $('guideHide').onclick = () => { stopGuide(); toast('Guide hidden. Click “Guide” at the top to bring it back.', 4000); };
 $('guideBtn').onclick = () => (GUIDE.on ? stopGuide() : startGuide(state.result ? GUIDE_STEPS.findIndex(x => x.id === 'review') : state.file ? 1 : 0));
@@ -2084,7 +2101,7 @@ function openSettings() {
   $('apiKey').value = '';
   const keysLink = `<a href="${KEYS_URL}" target="_blank" rel="noopener">platform.claude.com/settings/keys</a>`;
   $('keyStatus').innerHTML = state.config.keyNeedsReentry ? `Your saved key couldn’t be unlocked after the app was renamed. Please paste it again (find or create it at ${keysLink}).`
-    : state.config.hasKey ? `A key is saved. Leave blank to keep it. Manage your keys at ${keysLink}.`
+    : (api.tour ? state.config.realHasKey : state.config.hasKey) ? `A key is saved. Leave blank to keep it. Manage your keys at ${keysLink}.`
     : `No key saved yet. Create one at ${keysLink} (pay-as-you-go; a Claude subscription isn’t needed, but the account needs a little prepaid credit).`;
   document.querySelectorAll('input[name=aiMode]').forEach(r => { r.checked = r.value === (state.config.aiMode || 'api'); });
   $('experienceSelect').value = String(level());
@@ -2101,8 +2118,11 @@ function openSettings() {
   $('discoverResults').innerHTML = ''; $('discoverStatus').textContent = '';
   renderSpend();
   $('aboutLine').innerHTML = `AI 3D Print Advisor Studio ${esc(state.config.version || '')}${state.config.homepage ? ` · <a href="${esc(state.config.homepage)}#readme" target="_blank" rel="noopener">Guide and help</a>` : ''} · Not affiliated with Snapmaker.`;
+  $('tourAgain').classList.toggle('hidden', !state.config.tourAvailable);
   $('settingsDialog').showModal();
+  guideEvent('settings');
 }
+$('tourAgain').onclick = () => api.restartTour();
 $('settingsBtn').onclick = openSettings;
 
 // ---------- AI spending: top-bar counter and the Settings section ----------

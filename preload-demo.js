@@ -1,7 +1,8 @@
-// The demo's stand-in for preload.js. Same window.advisor calls, but every answer comes from demo/recording.json
-// (real results recorded once from the full app on the demo models, see tools/build_demo.py). Nothing is sliced,
-// saved, exported, sent to a printer or asked of the AI. Anything that would do one of those explains instead.
-// It also puts the "DEMO" banner on the window and keeps filament edits in memory only.
+// The guided tour's stand-in for preload.js (used on the first launch, see decideTour in main.js). Same
+// window.advisor calls, but every answer comes from demo/recording.json (real results recorded once from the app on
+// the sample models). Nothing is sliced, saved, exported, sent to a printer or asked of the AI; anything that would
+// do one of those explains instead. It puts the "GUIDED TOUR" banner on the window and keeps filament edits in
+// memory only. Two things are real: an API key typed into Settings is saved for later, and finishing the tour.
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -13,26 +14,26 @@ const REC = decode(read('recording.json', []));
 const PRINTERS = read('printers.json', []);
 const FIL = { catalog: read('filament/catalog.json', { orders: [], prices: {} }), state: read('filament/state.json', null) };
 const base = (p) => String(p || '').split(/[\\/]/).pop();
-const MODELS = [...new Set(REC.filter(r => r.m === 'open-path').map(r => r.args[0]))];   // the demo models, in tour order
+const MODELS = [...new Set(REC.filter(r => r.m === 'open-path').map(r => r.args[0]))];   // the tour models, in tour order
 const ctx = { file: null, remix: null };
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
 const clone = (v) => (v == null ? v : structuredClone(v));
 
-// ---------- the banner and the "demo only" notice ----------
+// ---------- the banner and the "tour only" notice ----------
 const NOTICES = {
-  save: ['Saving is turned off in the demo', 'In the full app this saves the model as a 3MF with the settings built in, ready to open in your slicer.'],
-  send: ['Nothing is sent to a printer in the demo', 'In the full app this uploads the print to the chosen Snapmaker U1 and starts it, with the filaments mapped to its toolheads.'],
-  orca: ['The demo doesn’t open your slicer', 'In the full app this writes the project and opens it in Snapmaker Orca, then offers to reload your edits.'],
-  export: ['Exporting is turned off in the demo', 'In the full app this saves the settings or the project as a file.'],
-  open: ['The demo only opens its sample models', 'Pick one of the demo models. To check your own models, install and use the full AI 3D Print Advisor Studio app.'],
-  ai: ['No AI in the demo', 'In the full app this asks Claude with your own Anthropic API key (usually a few cents). In the demo everything shown was recorded earlier from the real app.'],
-  remix: ['This scheme can’t be applied in the demo', 'The demo can apply “{name}”. In the full app you can apply any scheme.'],
-  link: ['Shop links are switched off in the demo', 'In the full app this opens the store page where you bought the filament, so you can reorder it.'],
-  key: ['The demo doesn’t use an API key', 'Add your Anthropic API key in the full app’s Settings to get real AI advice for your own models.'],
-  printers: ['Printer setup is switched off in the demo', 'In the full app you add your printers here (address and API key) to send prints and see their history.'],
-  ts: ['The demo troubleshoots one sample print', 'Open the troubleshooter on the cancelled “Demo Rocket” print. In the full app any print from your printers can be troubleshot.'],
-  files: ['Files are switched off in the demo', 'In the full app this opens or saves files on your computer.'],
-  generic: ['Not available in the demo', 'This is a demo with recorded results. Use the full AI 3D Print Advisor Studio app to do this for real.'],
+  save: ['Saving is turned off in the tour', 'After the tour this saves the model as a 3MF with the settings built in, ready to open in your slicer.'],
+  send: ['Nothing is sent to a printer in the tour', 'After the tour this uploads the print to the chosen Snapmaker U1 and starts it, with the filaments mapped to its toolheads.'],
+  orca: ['The tour doesn’t open your slicer', 'After the tour this writes the project and opens it in Snapmaker Orca, then offers to reload your edits.'],
+  export: ['Exporting is turned off in the tour', 'After the tour this saves the settings or the project as a file.'],
+  open: ['The tour only opens its sample models', 'Pick one of the sample models. To check your own models, finish the tour: the app then opens any .3mf.'],
+  ai: ['No AI in the tour', 'After the tour this asks Claude with your own Anthropic API key (usually a few cents). In the tour everything shown was recorded earlier from the real app.'],
+  remix: ['This scheme can’t be applied in the tour', 'The tour can apply “{name}”. After the tour you can apply any scheme.'],
+  link: ['Shop links are switched off in the tour', 'After the tour this opens the store page where you bought the filament, so you can reorder it.'],
+  key: ['Your API key is saved', 'The tour itself only replays recorded results, so the key isn’t used yet. Once you finish the tour, the app uses it for real AI advice on your own models.'],
+  printers: ['Printer setup is switched off in the tour', 'After the tour you add your printers here (address and API key) to send prints and see their history.'],
+  ts: ['The tour troubleshoots one sample print', 'Open the troubleshooter on the cancelled “Demo Rocket” print. After the tour any print from your printers can be troubleshot.'],
+  files: ['Files are switched off in the tour', 'After the tour this opens or saves files on your computer.'],
+  generic: ['Not available in the tour', 'The tour uses recorded results. Finish the tour to do this for real.'],
 };
 function notice(kind, vars = {}) {
   const [title, text] = NOTICES[kind] || NOTICES.generic;
@@ -40,7 +41,7 @@ function notice(kind, vars = {}) {
   let dlg = document.getElementById('demoNotice');
   if (!dlg) {
     dlg = document.createElement('dialog'); dlg.id = 'demoNotice'; dlg.className = 'demo-notice';
-    dlg.innerHTML = '<h2></h2><p class="dn-text"></p><p class="dn-more">This is the <b>demo</b> of AI 3D Print Advisor Studio: a guided sample with recorded results. Use the full app (sent along with this demo) to work with your own models, printers and filament.</p><div class="dn-btns"><button class="btn primary" autofocus>OK</button></div>';
+    dlg.innerHTML = '<h2></h2><p class="dn-text"></p><p class="dn-more">This is the <b>guided tour</b>: a sample model with recorded results. Finish the tour (the last step) to use the app with your own models, printers and filament.</p><div class="dn-btns"><button class="btn primary" autofocus>OK</button></div>';
     dlg.querySelector('button').onclick = () => dlg.close();
     document.body.appendChild(dlg);
   }
@@ -67,11 +68,11 @@ window.addEventListener('DOMContentLoaded', () => {
   document.head.appendChild(css);
   const b = document.createElement('div');
   b.className = 'demo-banner';
-  b.innerHTML = '<b>DEMO ONLY</b> · a guided sample with recorded results: nothing is sliced, saved, printed or sent to AI. Use the full app for your own models and filament.';
+  b.innerHTML = '<b>GUIDED TOUR</b> · a sample model with recorded results: nothing is sliced, saved, printed or sent to AI. Finish the tour to use your own models and filament.';
   document.body.appendChild(b);
 });
 
-// "Open 3MF" in the demo: choose one of the two sample models
+// "Open 3MF" in the tour: choose one of the two sample models
 function pickModel() {
   return new Promise((resolve) => {
     let dlg = document.getElementById('demoPick');
@@ -83,7 +84,7 @@ function pickModel() {
       'Demo Rocket.3mf': 'A 4-color toy rocket saved lying on its side with poor settings. The main tour: orientation, recommendations, slice comparison, Color remix and troubleshooting.',
       'Demo Rocket (MakerWorld version).3mf': 'The same rocket as a MakerWorld download, a Bambu Lab P1S project. Shows how the app converts Bambu files for a Snapmaker U1 or another non-Bambu printer. (Bambu Lab owners can open MakerWorld files as they are.)',
     };
-    dlg.innerHTML = `<h2>Open a demo model</h2><p class="dn-more">The demo opens only its sample models. In the full app you open any .3mf (MakerWorld, Printables, your slicer…).</p>
+    dlg.innerHTML = `<h2>Open a sample model</h2><p class="dn-more">The tour opens only its sample models. After the tour you open any .3mf (MakerWorld, Printables, your slicer…).</p>
       <div class="demo-pick">${MODELS.map((m, i) => `<button class="btn" data-i="${i}"><b>${base(m)}</b><small>${about[base(m)] || ''}</small></button>`).join('')}</div>
       <div class="dn-btns"><button class="btn ghost" data-cancel>Cancel</button></div>`;
     dlg.onclick = (e) => {
@@ -124,13 +125,13 @@ async function replay(m, args, { delay = 0, steps = [], strict = false } = {}) {
   const r = find(m, args, { strict });
   if (steps.length) for (const s of steps) { say(s); await wait(delay / steps.length); }
   else if (delay) await wait(delay);
-  if (!r) throw new Error('Not part of this demo.');
+  if (!r) throw new Error('Not part of this tour.');
   if (r.err) throw new Error(r.err);
   return clone(r.r);
 }
 
 const listeners = { progress: [], startup: [], printName: [], sendProgress: [], spend: [] };
-// AI spending as the full app shows it, with typical costs of the recorded requests (nothing is charged in the demo)
+// AI spending as the app after the tour shows it, with typical costs of the recorded requests (nothing is charged in the tour)
 const demoSpend = { entries: [] };
 function spent(feature, usd) {
   demoSpend.entries.push({ t: new Date().toISOString(), feature, model: 'claude-opus-5-5', in: 0, out: 0, cr: 0, cw: 0, searches: 0, usd });
@@ -181,7 +182,9 @@ function printersStatus() {
 }
 
 contextBridge.exposeInMainWorld('advisor', {
-  demo: true,
+  demo: true, tour: true,
+  // the end of the tour: remember it and start the app for real (with the experience level picked in the tour)
+  finishTour: () => ipcRenderer.invoke('tour-finish', { experience: config.experience, explainWords: config.explainWords }),
   choose3mf: async () => { const p = await pickModel(); return p ? api_openPath(p) : null; },
   openPath: (p) => api_openPath(p),
   pathForFile: (file) => webUtils.getPathForFile(file),
@@ -199,7 +202,7 @@ contextBridge.exposeInMainWorld('advisor', {
     for (const [i, v] of variants.entries()) {
       await wait(700);
       const hit = recs.map(r => r.r.find(x => x.id === v.id)).filter(Boolean).pop();
-      out.push(hit ? clone(hit) : { id: v.id, ok: false, error: 'This version wasn’t sliced for the demo. The full app slices any version you pick.' });
+      out.push(hit ? clone(hit) : { id: v.id, ok: false, error: 'This version wasn’t sliced for the tour. After the tour the app slices any version you pick.' });
       say(`Sliced ${i + 1} of ${variants.length}`);
     }
     return out;
@@ -208,9 +211,9 @@ contextBridge.exposeInMainWorld('advisor', {
   historyList: async () => historyShifted(await replay('history-list', [], { delay: 600 })),
   printersStatus: async () => printersStatus(),
   sendPrepare: (a) => replay('send-prepare', [a], { delay: 400 }),
-  sendPrint: failing('send', 'Demo: nothing was sent. Use the full app to print.'),
+  sendPrint: failing('send', 'Tour: nothing was sent. Use the app after the tour to print.'),
   onSendProgress: (cb) => listeners.sendProgress.push(cb),
-  tsOpen: async (a) => { const r = find('ts-open', [a], { strict: true }); if (!r) { notice('ts'); throw new Error('The demo troubleshoots the “Demo Rocket” print only.'); } return clone(r.r); },
+  tsOpen: async (a) => { const r = find('ts-open', [a], { strict: true }); if (!r) { notice('ts'); throw new Error('The tour troubleshoots the “Demo Rocket” print only.'); } return clone(r.r); },
   tsPickModel: blocked('files'),
   tsLoad: (a) => replay('ts-load', [a], { delay: 1500, steps: ['Loading the printed G-code and the model…'] }),
   tsRun: (a) => withCost('Troubleshooting', 0.12, replay('ts-run', [a], { delay: 6000, steps: ['Reading what the printer did at the failed spot…', 'Claude is diagnosing the print…', 'Claude is diagnosing the print…'] })),
@@ -237,19 +240,19 @@ contextBridge.exposeInMainWorld('advisor', {
   filamentLoad: async () => ({ catalog: clone(FIL.catalog), state: clone(filamentState), imagesBase: 'app://bundle/demo/filament/images/', hasKey: true, printers: PRINTERS.map(p => p.name) }),
   filamentSave: async ({ state, stock }) => { filamentState = clone(state); filamentStock = clone(stock); return true; },
   filamentHasKey: async () => true,
-  filamentClaude: failing('ai', 'Demo: reading screenshots and finding photos need the full app and your API key.'),
-  filamentFetch: failing('ai', 'Demo: looking up store photos needs the full app.'),
+  filamentClaude: failing('ai', 'Tour: reading screenshots and finding photos need the app after the tour and your API key.'),
+  filamentFetch: failing('ai', 'Tour: looking up store photos needs the app after the tour.'),
   filamentOpenFolder: blocked('files'),
   remixPrepare: (a) => replay('remix-prepare', [a], { delay: 900, steps: ['Cutting the model into patches…'] }),
   partsIdentify: (a) => withCost('Color remix: parts', 0.08, replay('parts-identify', [a], { delay: 5000, steps: ['Identifying the parts of the model…'] })),
   partsConfirm: (a) => replay('parts-confirm', [a], { delay: 600 }),
   shoppingCheck: (a) => replay('shopping-check', [a]).catch(() => ({ set: false })),
-  shoppingFind: failing('ai', 'Demo: searching shops needs the full app.'),
+  shoppingFind: failing('ai', 'Tour: searching shops needs the app after the tour.'),
   remixRun: (a) => withCost('Color remix: schemes', 0.10, replay('remix-run', [a], { delay: 6000, steps: ['Designing color schemes…'] })),
   remixApply: async (a) => {
     const r = find('remix-apply', [a], { strict: true });
     const any = find('remix-apply', [a]);
-    if (!r) { notice('remix', { name: any && any.r && any.r.name }); throw new Error(`In the demo you can apply “${any && any.r && any.r.name}”.`); }
+    if (!r) { notice('remix', { name: any && any.r && any.r.name }); throw new Error(`In the tour you can apply “${any && any.r && any.r.name}”.`); }
     await wait(1200);
     ctx.remix = r.r.name;
     return clone(r.r);
@@ -262,25 +265,30 @@ contextBridge.exposeInMainWorld('advisor', {
   openInOrca: blocked('orca'), orcaReloaded: async () => null, onOrcaFileChanged: () => {},
   historyRate: async () => true,
   browseSlicer: blocked('files'),
-  getConfig: async () => clone(config),
+  // whether a real API key is saved (the tour's own answers don't need one)
+  getConfig: async () => { try { const real = await ipcRenderer.invoke('get-config'); config.realHasKey = real.hasKey; config.realAiMode = real.aiMode; } catch {} return clone(config); },
   spendSummary: async () => spendSummary(),
   spendClear: async () => { demoSpend.entries = []; return spendSummary(); },
   onSpend: (cb) => listeners.spend.push(cb),
   setConfig: async (patch) => {
-    if (typeof patch.apiKey === 'string' && patch.apiKey.trim()) notice('key');
+    // the API key and AI choice are real settings: kept for when the tour is over
+    const real = {};
+    if (typeof patch.apiKey === 'string' && patch.apiKey.trim()) real.apiKey = patch.apiKey;
+    if (patch.aiMode === 'api' || patch.aiMode === 'chat') real.aiMode = patch.aiMode;
+    if (Object.keys(real).length) { await ipcRenderer.invoke('set-config', real); if (real.apiKey) { config.realHasKey = true; notice('key'); } }
     for (const k of ['experience', 'guideDone', 'explainWords', 'model', 'aiMode']) if (k in patch) config[k] = patch[k];
     return true;
   },
   onOpenFromOS: () => {},
   onProgress: (cb) => listeners.progress.push(cb),
-  startupState: async () => ({ label: 'Demo ready. Everything here is recorded from the real app.', pct: 100, done: true }),
+  startupState: async () => ({ label: 'Guided tour. Everything here is recorded from the real app.', pct: 100, done: true }),
   onStartup: (cb) => listeners.startup.push(cb),
 });
 
-// opening a model: only the demo models (dropping your own file explains instead)
+// opening a model: only the tour models (dropping your own file explains instead)
 async function api_openPath(p) {
   const known = MODELS.find(m => base(m).toLowerCase() === base(p).toLowerCase());
-  if (!known) { notice('open'); throw new Error('The demo opens only its sample models.'); }
+  if (!known) { notice('open'); throw new Error('The tour opens only its sample models.'); }
   ctx.file = known; ctx.remix = null;
   return replay('open-path', [known], { delay: 600, steps: ['Reading the model…'] });
 }

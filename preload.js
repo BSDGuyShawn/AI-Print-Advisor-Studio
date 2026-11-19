@@ -94,6 +94,7 @@ contextBridge.exposeInMainWorld('advisor', {
   historyRate: (args) => ipcRenderer.invoke('history-rate', args),
   showInFolder: (p) => ipcRenderer.invoke('show-in-folder', p),
   browseSlicer: () => ipcRenderer.invoke('browse-slicer'),
+  restartTour: () => ipcRenderer.invoke('tour-restart'),
   getConfig: () => ipcRenderer.invoke('get-config'),
   spendSummary: () => ipcRenderer.invoke('spend-summary'),
   spendClear: () => ipcRenderer.invoke('spend-clear'),

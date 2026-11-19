@@ -38,11 +38,12 @@ const AI_FEATURES = { 'run-claude': 'Recommendations', 'parts-identify': 'Color 
   ipcMain.handle = (channel, fn) => handle(channel, AI_FEATURES[channel] ? (...a) => Spend.run(AI_FEATURES[channel], () => fn(...a)) : fn);
 }
 
-// The demo build ships a demo/ folder (made by tools/build_demo.py). Its window then uses preload-demo.js, which
-// replays recorded answers: nothing is sliced, saved, sent or asked of the AI. It has its own data folder, so it
-// never touches the real app's settings or filament.
-const DEMO = require('fs').existsSync(path.join(__dirname, 'demo', 'recording.json'));
-if (DEMO) app.setPath('userData', path.join(app.getPath('appData'), 'AI 3D Print Advisor Studio DEMO'));
+// The guided tour: the app ships a demo/ folder (recorded results on a sample model, made by
+// tools/build_release.py). On the first launch the window uses preload-demo.js, which replays those answers:
+// nothing is sliced, saved, sent or asked of the AI, and filament edits stay in memory. Finishing the tour sets
+// tourDone in the settings and restarts the app normally (see decideTour and 'tour-finish').
+const TOUR_DATA = require('fs').existsSync(path.join(__dirname, 'demo', 'recording.json'));
+let DEMO = false;   // this run is the tour
 // For testing only: run against a separate data folder so a test never touches your settings or filament.
 if (process.env.AIPA_USER_DATA) app.setPath('userData', process.env.AIPA_USER_DATA);
 
@@ -73,11 +74,21 @@ function migrateFromOldName() {
     S.migratedFromOldName = true;
   } catch {}
 }
-if (!process.env.AIPA_USER_DATA && !DEMO) migrateFromOldName();   // a test data folder starts empty
+if (!process.env.AIPA_USER_DATA) migrateFromOldName();   // a test data folder starts empty
 // the window shows each AI request's cost as it happens (the "AI" counter in the top bar)
 Spend.init(app.getPath('userData'), (e, s) => { if (win && !win.isDestroyed()) win.webContents.send('spend', { usd: e.usd, feature: e.feature, month: s.month }); });
 
 const CONFIG_PATH = () => path.join(app.getPath('userData'), 'config.json');
+// Tour or not: once per launch. Asked for again from Settings (tourDone false), done once finished (true). People
+// who used the app before the tour existed (settings already chosen) aren't sent through it.
+function decideTour() {
+  if (!TOUR_DATA) return false;
+  if (process.env.AIPA_TOUR) return process.env.AIPA_TOUR === '1';
+  let cfg = {};
+  try { cfg = JSON.parse(require('fs').readFileSync(CONFIG_PATH(), 'utf8')); } catch {}
+  if (typeof cfg.tourDone === 'boolean') return !cfg.tourDone;
+  return !(cfg.experience != null || cfg.apiKey || (cfg.printers || []).length);
+}
 async function readConfig() { try { return JSON.parse(await fs.readFile(CONFIG_PATH(), 'utf8')); } catch { return {}; } }
 async function writeConfig(cfg) { await fs.mkdir(path.dirname(CONFIG_PATH()), { recursive: true }); await fs.writeFile(CONFIG_PATH(), JSON.stringify(cfg, null, 2)); }
 const enc = (s) => (safeStorage.isEncryptionAvailable() ? { v: safeStorage.encryptString(s).toString('base64'), e: true } : { v: s, e: false });
@@ -123,7 +134,7 @@ function slicerInfo() {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1500, height: 940, minWidth: 1150, minHeight: 720, title: DEMO ? 'AI 3D Print Advisor Studio (DEMO)' : 'AI 3D Print Advisor Studio', backgroundColor: '#E9ECEE', autoHideMenuBar: false,
+    width: 1500, height: 940, minWidth: 1150, minHeight: 720, title: DEMO ? 'AI 3D Print Advisor Studio (guided tour)' : 'AI 3D Print Advisor Studio', backgroundColor: '#E9ECEE', autoHideMenuBar: false,
     webPreferences: { preload: path.join(__dirname, DEMO ? 'preload-demo.js' : 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
   win.loadURL('app://bundle/renderer/index.html');
@@ -1606,9 +1617,26 @@ ipcMain.handle('browse-slicer', async () => {
 ipcMain.handle('spend-summary', () => Spend.summary());
 ipcMain.handle('spend-clear', () => { Spend.clear(); return Spend.summary(); });
 
+// the tour: finished (remember it, keep the experience level picked in it, start the app for real), or asked for again
+ipcMain.handle('tour-finish', async (_e, { experience, explainWords } = {}) => {
+  const cfg = await readConfig();
+  cfg.tourDone = true; cfg.guideDone = true;
+  if (Number.isInteger(experience) && experience >= 0 && experience <= 3 && cfg.experience == null) cfg.experience = experience;
+  if (typeof explainWords === 'boolean' && !('explainWords' in cfg)) cfg.explainWords = explainWords;
+  await writeConfig(cfg);
+  app.relaunch(); app.exit(0);
+});
+ipcMain.handle('tour-restart', async () => {
+  const cfg = await readConfig();
+  cfg.tourDone = false;
+  await writeConfig(cfg);
+  app.relaunch(); app.exit(0);
+});
+
 ipcMain.handle('get-config', async () => { await S.ready;
   const cfg = await readConfig();
   return {
+    tourAvailable: TOUR_DATA && !DEMO,
     model: cfg.model || DEFAULT_MODEL, hasKey: !!(await getApiKey()), keyNeedsReentry: !!cfg.apiKey && !(await getApiKey()), aiMode: cfg.aiMode || 'api',
     experience: Number.isInteger(cfg.experience) ? cfg.experience : null, guideDone: !!cfg.guideDone, explainWords: typeof cfg.explainWords === 'boolean' ? cfg.explainWords : null,
     slicerPath: cfg.slicerPath || '', detectedSlicer: candidateExecutables()[0] || '',
@@ -1681,6 +1709,7 @@ else {
         return new Response(body, { headers: { 'content-type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream' } });
       } catch { return new Response('Not found', { status: 404 }); }
     });
+    DEMO = decideTour();
     // window first; everything slow happens after it is on screen, with progress shown in the app
     createWindow();
     buildMenu().catch(e => logLine('menu failed:', e));
@@ -1694,7 +1723,7 @@ else {
         const firstRun = !require('fs').existsSync(path.join(app.getPath('userData'), 'profile-index.json'));
         startup(firstRun ? 'Loading Snapmaker U1 profiles (first run builds an index)…' : 'Loading Snapmaker U1 profiles…', 60);
         await new Promise(r => setImmediate(r));
-        if (!DEMO) await setupSlicer();   // the demo slices nothing
+        if (!DEMO) await setupSlicer();   // the tour slices nothing
         const info = slicerInfo();
         startup(info.available ? `Ready. Snapmaker Orca found with ${info.filaments.length} U1 filament presets.` : 'Ready. Snapmaker Orca wasn’t found, so slicing is off until you set it in Settings.', 100, true, !info.available);
         setTimeout(() => pruneOldFiles().catch(() => {}), 15000); // housekeeping, after startup

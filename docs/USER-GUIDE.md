@@ -2,7 +2,7 @@
 
 This guide takes you from "I downloaded a model" to "it's printing", one step at a time. No 3D printing knowledge needed: every new word is explained in the [glossary](#glossary) at the end.
 
-**Quickest way to learn:** run the **demo** first (see the [README](../README.md#-try-it-in-2-minutes-the-demo)). It walks you through all of this with a sample rocket.
+**Quickest way to learn:** the **guided tour** that starts the first time you open the app. It walks you through all of this with a sample rocket.
 
 ---
 
@@ -30,7 +30,8 @@ This guide takes you from "I downloaded a model" to "it's printing", one step at
 
 1. Double-click **`AI 3D Print Advisor Studio.exe`**. It's the only program in the folder; the `app` folder beside it holds the app's files (keep the two together if you move them).
    If Windows says **"Windows protected your PC"**, click **More info → Run anyway**. To avoid that warning, right-click the zip **before extracting** → **Properties** → tick **Unblock** → **OK** (see the [FAQ](FAQ.md#windows-says-windows-protected-your-pc)).
-2. The app asks **how much 3D printing experience you have**. Pick honestly: "Brand new" turns on the step-by-step guide and extra tips. The guide puts a pulsing orange **Click here** ring on the next button to press (also inside windows like Color remix) and moves itself out of the way. "Brand new" and "A little" also **explain 3D printing words**: words with a dotted underline show what they mean, with a picture, when you hover over them (see [Words you don't know](#words-you-dont-know)). You can change all of this later in Settings.
+2. **The guided tour starts** (first launch only). It asks **how much 3D printing experience you have**, then walks you through every feature on a sample rocket with recorded results, shows you the **Glossary**, and where to put your **API key** (and why). Click **Finish the tour** at the end: the app restarts, ready for your own models, with an empty filament library. It won't run again; **Settings → Take the guided tour again** replays it.
+   About the experience level: Pick honestly: "Brand new" turns on the step-by-step guide and extra tips. The guide puts a pulsing orange **Click here** ring on the next button to press (also inside windows like Color remix) and moves itself out of the way. "Brand new" and "A little" also **explain 3D printing words**: words with a dotted underline show what they mean, with a picture, when you hover over them (see [Words you don't know](#words-you-dont-know)). You can change all of this later in Settings.
 3. The app looks for **Snapmaker Orca** on your computer. The bar at the top says when it's ready. If it can't find it, open **Settings** (the gear, top right) and click **Browse** next to "Snapmaker Orca program".
 4. Click the **gear** to open **Settings** and:
    - choose how to get AI advice (next section),

@@ -12,11 +12,11 @@ For **Bambu Lab** printers it can **export a Bambu Studio project** of your tune
 
 ## Do I need to know about 3D printing?
 
-No. Pick **"Brand new"** when the app starts: it turns on a step-by-step guide and tips. The [glossary](USER-GUIDE.md#glossary) explains every term. Or run the **demo** first.
+No. Pick **"Brand new"** when the app starts: it turns on a step-by-step guide and tips. The [glossary](USER-GUIDE.md#glossary) explains every term. The first time you open the app, a **guided tour** walks you through everything with a sample rocket.
 
-## What's the difference between the demo and the full app?
+## What's the guided tour?
 
-The **demo** is a guided tour with a sample rocket. Everything in it was recorded from the real app, so it needs no key, no slicer and no printer, and it can't save, print or change anything. The **full app** does all of it for real with your own models, printers and filament. You can have both.
+The first time you open the app, it runs a one-time **guided tour** with a sample rocket. Everything in it was recorded from the real app, so it needs no key, no slicer and no printer, and it can't save, print or change anything. Click **Finish the tour** at the end and the app restarts, ready for your own models (your filament library starts empty). It doesn't run again; to see it again, open **Settings → Take the guided tour again**. (There used to be a separate demo download; the tour replaces it.)
 
 ## Windows says "Windows protected your PC"
 

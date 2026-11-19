@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.21.0
+- **The demo is now built into the app** as a one-time **guided tour**: the first time you open the app it walks
+  you through every feature on the sample rocket with recorded results (nothing is sliced, printed or sent to AI,
+  and your settings and filament aren't touched). **Finish the tour** to unlock the app for your own models: it
+  restarts once, fresh, with an empty filament library. It never runs again (Settings → "Take the guided tour
+  again" replays it). People who already used the app aren't sent through it. There's no separate DEMO download
+  any more.
+- New tour steps: the **Glossary** (a great way to learn the terms), **Settings** (the gear) and the **API key**:
+  where to paste it, why the app needs one (it works with Claude on its own; a chatbot needs copy and paste every
+  time) and what it costs (a few cents per analysis). A key saved during the tour is kept.
+- The experience level picked in the tour carries over.
+
 ## 2.20.1
 - Removed the optional Anthropic **Admin API key** and the "Check this month on Anthropic" button from
   Settings → AI spending: they only worked for Anthropic organizations. Any admin key saved earlier is deleted

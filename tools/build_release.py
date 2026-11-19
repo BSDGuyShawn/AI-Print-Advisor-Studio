@@ -5,12 +5,12 @@ Full app (to share):
         --package <npm .tgz> ... --rcedit <rcedit.exe> --out <folder>
   (older way: --runtime <an earlier release folder> reuses that release's Electron files and libraries)
 
-Demo app (guided sample with recorded results, see preload-demo.js):
-    python tools/build_release.py --runtime <...> --out <folder> --demo --recording <rec.jsonl>
+With the guided tour (the first launch replays recorded results on a sample model, see preload-demo.js):
+    add --recording <rec.jsonl>
         --inventory <Filament Inventory folder> [--backup <its downloaded backup .json>] --config <the app's config.json>
 
 The runtime folder supplies Electron (the .exe and its DLLs) and the bundled node_modules (read from its app.asar).
-Nothing from your data folder goes into the full app. The demo gets: the recorded answers (scrubbed of local paths),
+Nothing else from your data folder goes into the app. The tour gets: the recorded answers (scrubbed of local paths),
 your filament catalog and product photos with the shop links replaced by dummies, and your printers' names and
 addresses (never their API keys).
 
@@ -133,13 +133,13 @@ def main():
     ap.add_argument('--modules', help='an app.asar to take node_modules from (default: from the runtime)')
     ap.add_argument('--rcedit', help='rcedit.exe (github.com/electron/rcedit): sets the program icon, name and version')
     ap.add_argument('--out', required=True)
-    ap.add_argument('--demo', action='store_true'); ap.add_argument('--recording'); ap.add_argument('--inventory'); ap.add_argument('--backup'); ap.add_argument('--config')
+    ap.add_argument('--recording', help='the recorded tour (rec.jsonl); without it the app has no guided tour');  ap.add_argument('--inventory'); ap.add_argument('--backup'); ap.add_argument('--config')
     ap.add_argument('--no-zip', action='store_true')
     ap.add_argument('--csc', default=CSC, help="the C# compiler that comes with Windows (.NET Framework 4), for the launcher")
     ap.add_argument('--package', action='append', help='an npm .tgz to bundle instead of the runtime copy (repeatable)')
     args = ap.parse_args()
     version = json.load(open(os.path.join(ROOT, 'package.json')))['version']
-    name = f"AI-3D-Print-Advisor-Studio-{'DEMO-' if args.demo else ''}{version}-win-x64"
+    name = f"AI-3D-Print-Advisor-Studio-{version}-win-x64"
     top = os.path.join(args.out, name)
     if os.path.exists(top): shutil.rmtree(top)
     out = os.path.join(top, 'app')   # Electron and all its files; the folder above holds only the launcher
@@ -151,21 +151,20 @@ def main():
     app = os.path.join(out, 'resources', 'app')
     os.makedirs(app)
     copy_app(app)
-    if not args.demo: os.remove(os.path.join(app, 'preload-demo.js'))
+    if not args.recording: os.remove(os.path.join(app, 'preload-demo.js'))
     asar_node_modules(args.modules or os.path.join(args.runtime, 'resources', 'app.asar'), app)
     overlay_packages(args.package, app)
     if args.rcedit:
-        title = 'AI 3D Print Advisor Studio' + (' DEMO' if args.demo else '')
+        title = 'AI 3D Print Advisor Studio'
         subprocess.run([args.rcedit, os.path.join(out, EXE), '--set-icon', os.path.join(ROOT, 'build', 'icon.ico'),
                         '--set-version-string', 'FileDescription', title, '--set-version-string', 'ProductName', title,
                         '--set-version-string', 'CompanyName', 'AI 3D Print Advisor Studio (open source)',
                         '--set-version-string', 'LegalCopyright', 'AGPL-3.0, github.com/jtroberts83/AI-Print-Advisor-Studio',
                         '--set-version-string', 'OriginalFilename', os.path.basename(EXE), '--set-version-string', 'InternalName', title,
                         '--set-file-version', version, '--set-product-version', version], check=True)
-    if args.demo:
+    if args.recording:
         demo_data(args, os.path.join(app, 'demo'), os.path.join(out, EXE))
-        os.rename(os.path.join(out, EXE), os.path.join(out, 'AI 3D Print Advisor Studio DEMO.exe'))
-    title = 'AI 3D Print Advisor Studio' + (' DEMO' if args.demo else '')
+    title = 'AI 3D Print Advisor Studio'
     build_launcher(args.csc, os.path.join(top, title + '.exe'), title, version)
     print('Built', top)
     if not args.no_zip:
