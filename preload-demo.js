@@ -129,7 +129,22 @@ async function replay(m, args, { delay = 0, steps = [], strict = false } = {}) {
   return clone(r.r);
 }
 
-const listeners = { progress: [], startup: [], printName: [], sendProgress: [] };
+const listeners = { progress: [], startup: [], printName: [], sendProgress: [], spend: [] };
+// AI spending as the full app shows it, with typical costs of the recorded requests (nothing is charged in the demo)
+const demoSpend = { entries: [] };
+function spent(feature, usd) {
+  demoSpend.entries.push({ t: new Date().toISOString(), feature, model: 'claude-opus-5-5', in: 0, out: 0, cr: 0, cw: 0, searches: 0, usd });
+  const month = { usd: +demoSpend.entries.reduce((t, e) => t + e.usd, 0).toFixed(4), calls: demoSpend.entries.length };
+  listeners.spend.forEach(cb => { try { cb({ usd, feature, month }); } catch {} });
+}
+function spendSummary() {
+  const total = { usd: +demoSpend.entries.reduce((t, e) => t + e.usd, 0).toFixed(4), calls: demoSpend.entries.length };
+  const by = {};
+  for (const e of demoSpend.entries) { const f = (by[e.feature] ||= { usd: 0, calls: 0 }); f.usd += e.usd; f.calls++; }
+  return { month: total, last30: total, all: total, since: demoSpend.entries[0] ? demoSpend.entries[0].t : null,
+    byFeature: Object.entries(by).map(([feature, v]) => ({ feature, usd: +v.usd.toFixed(4), calls: v.calls })), recent: demoSpend.entries.slice(-8).reverse() };
+}
+const withCost = (feature, usd, p) => p.then(r => { spent(feature, usd); return r; });
 const say = (text) => listeners.progress.forEach(cb => { try { cb(text); } catch {} });
 const blocked = (kind, value = null) => async () => { notice(kind); return value; };
 const failing = (kind, message) => async () => { notice(kind); throw new Error(message || NOTICES[kind][0]); };
@@ -174,7 +189,7 @@ contextBridge.exposeInMainWorld('advisor', {
   analyzePlate: (a) => replay('analyze-plate', [a], { delay: 500 }),
   recipePreview: (s) => replay('recipe-preview', [s]),
   runChecks: (a) => replay('run-checks', [a]),
-  runClaude: (a) => replay('run-claude', [a], { delay: 7000, steps: ['Slicing the original in Snapmaker Orca…', 'Reading print history from your printers…', 'Claude is reviewing the model, slice and settings…', 'Claude is reviewing the model, slice and settings…'] }),
+  runClaude: (a) => withCost('Recommendations', 0.16, replay('run-claude', [a], { delay: 7000, steps: ['Slicing the original in Snapmaker Orca…', 'Reading print history from your printers…', 'Claude is reviewing the model, slice and settings…', 'Claude is reviewing the model, slice and settings…'] })),
   sliceVariants: async ({ variants }) => {
     // each version from its recorded slice of this model
     const recs = REC.filter(r => r.m === 'slice-variants' && base(r.ctx.file) === base(ctx.file));
@@ -197,7 +212,7 @@ contextBridge.exposeInMainWorld('advisor', {
   tsOpen: async (a) => { const r = find('ts-open', [a], { strict: true }); if (!r) { notice('ts'); throw new Error('The demo troubleshoots the “Demo Rocket” print only.'); } return clone(r.r); },
   tsPickModel: blocked('files'),
   tsLoad: (a) => replay('ts-load', [a], { delay: 1500, steps: ['Loading the printed G-code and the model…'] }),
-  tsRun: (a) => replay('ts-run', [a], { delay: 6000, steps: ['Reading what the printer did at the failed spot…', 'Claude is diagnosing the print…', 'Claude is diagnosing the print…'] }),
+  tsRun: (a) => withCost('Troubleshooting', 0.12, replay('ts-run', [a], { delay: 6000, steps: ['Reading what the printer did at the failed spot…', 'Claude is diagnosing the print…', 'Claude is diagnosing the print…'] })),
   rowsFor: (s) => replay('rows-for', [s]),
   chatAnswer: failing('ai'),
   openFolder: blocked('files'), showInFolder: blocked('files'), openLogFolder: blocked('files'),
@@ -225,11 +240,11 @@ contextBridge.exposeInMainWorld('advisor', {
   filamentFetch: failing('ai', 'Demo: looking up store photos needs the full app.'),
   filamentOpenFolder: blocked('files'),
   remixPrepare: (a) => replay('remix-prepare', [a], { delay: 900, steps: ['Cutting the model into patches…'] }),
-  partsIdentify: (a) => replay('parts-identify', [a], { delay: 5000, steps: ['Identifying the parts of the model…'] }),
+  partsIdentify: (a) => withCost('Color remix: parts', 0.08, replay('parts-identify', [a], { delay: 5000, steps: ['Identifying the parts of the model…'] })),
   partsConfirm: (a) => replay('parts-confirm', [a], { delay: 600 }),
   shoppingCheck: (a) => replay('shopping-check', [a]).catch(() => ({ set: false })),
   shoppingFind: failing('ai', 'Demo: searching shops needs the full app.'),
-  remixRun: (a) => replay('remix-run', [a], { delay: 6000, steps: ['Designing color schemes…'] }),
+  remixRun: (a) => withCost('Color remix: schemes', 0.10, replay('remix-run', [a], { delay: 6000, steps: ['Designing color schemes…'] })),
   remixApply: async (a) => {
     const r = find('remix-apply', [a], { strict: true });
     const any = find('remix-apply', [a]);
@@ -247,6 +262,10 @@ contextBridge.exposeInMainWorld('advisor', {
   historyRate: async () => true,
   browseSlicer: blocked('files'),
   getConfig: async () => clone(config),
+  spendSummary: async () => spendSummary(),
+  spendClear: async () => { demoSpend.entries = []; return spendSummary(); },
+  accountSpend: failing('key', 'The demo doesn’t read your Anthropic account.'),
+  onSpend: (cb) => listeners.spend.push(cb),
   setConfig: async (patch) => {
     if (typeof patch.apiKey === 'string' && patch.apiKey.trim()) notice('key');
     for (const k of ['experience', 'guideDone', 'model', 'aiMode']) if (k in patch) config[k] = patch[k];

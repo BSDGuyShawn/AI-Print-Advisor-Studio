@@ -600,3 +600,16 @@ dialog.batch { width: min(760px, 94vw); padding: 0; }
 body.filament-open .filament-view { display: block; }
 body.filament-open main.layout { display: none; }
 #filamentBtn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+
+/* AI spending: the top-bar counter (flashes the cost of each request) and the Settings section */
+.spend-chip { font-variant-numeric: tabular-nums; }
+.spend-chip.flash { background: var(--accent-soft); border-color: var(--accent); transition: background .2s; }
+fieldset.spend { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 10px 14px 12px; margin: 0 0 14px; }
+fieldset.spend legend { font-weight: 600; padding: 0 4px; }
+.spend-summary table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 6px 0 10px; }
+.spend-summary td { padding: 3px 0; border-bottom: 1px solid var(--line); }
+.spend-summary td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; padding-left: 12px; }
+.spend-totals { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13.5px; }
+.spend-totals b { font-size: 17px; display: block; font-variant-numeric: tabular-nums; }
+/* the guide over an open window (see placeGuide in app.js) */
+.guide.in-dialog { position: fixed; left: 18px; bottom: 18px; z-index: 50; box-shadow: 0 8px 28px rgb(0 0 0 / .35); }

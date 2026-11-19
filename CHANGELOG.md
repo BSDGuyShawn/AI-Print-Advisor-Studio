@@ -20,6 +20,12 @@
 - Compare slices: "Finest/Fine/Fast/Fastest + recommendations" keep the recipe's own layer height and speeds; the
   AI's layer height no longer overrides them (Finest could come out the same as Recommended).
 - Times round correctly (2h 0m, not 1h 60m).
+- **AI spending**: every Claude answer is priced from its token counts (list prices, web searches included) and
+  kept in ai-spend.json. An "AI" counter in the top bar flashes each request's cost and shows the month's total;
+  Settings → AI spending lists this month, the last 30 days and all time, by feature, with the latest requests.
+  Optional Admin API key (organizations only): "Check this month on Anthropic" reads Anthropic's own figure for
+  the whole account and for this app's key (Usage and Cost Analytics API).
+- The guide stays visible and clickable over windows like Color remix and the troubleshooter.
 - **Get recommended settings** slices only the original model (the AI needs it). It no longer also slices the
   recommended version for Compare slices; do that in Compare slices when you want it. Sending a print still
   slices on demand.

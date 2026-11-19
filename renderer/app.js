@@ -1865,6 +1865,17 @@ const DEMO_STEPS = [
 ];
 if (api.demo) GUIDE_STEPS.splice(0, GUIDE_STEPS.length, ...DEMO_STEPS);
 const GUIDE = { i: 0, on: false };
+// A window like Color remix or the troubleshooter opens as a modal dialog: it sits above the page and makes the rest
+// of it unclickable, which would hide the guide. So the guide moves into whichever window is open (bottom left,
+// above it), and back to the 3D view when the window closes.
+const guideHome = $('guide').parentElement;
+function placeGuide() {
+  const open = [...document.querySelectorAll('dialog[open]')].filter(d => !/^demo/.test(d.id)).pop();
+  const g = $('guide'), target = open || guideHome;
+  if (g.parentElement !== target) target.appendChild(g);
+  g.classList.toggle('in-dialog', !!open);
+}
+new MutationObserver(placeGuide).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['open'] });
 let guideFocusEl = null;
 function startGuide(from = 0) { GUIDE.on = true; GUIDE.i = from; while (GUIDE_STEPS[GUIDE.i] && GUIDE_STEPS[GUIDE.i].skipIf && GUIDE_STEPS[GUIDE.i].skipIf()) GUIDE.i++; renderGuide(); }
 function stopGuide(done = false) {
@@ -1978,10 +1989,50 @@ function openSettings() {
   $('printerRows').innerHTML = '';
   (state.config.printers.length ? state.config.printers : [{}]).forEach(p => addPrinterRow(p));
   $('discoverResults').innerHTML = ''; $('discoverStatus').textContent = '';
+  $('adminKey').value = ''; $('accountSpend').textContent = '';
+  renderSpend();
   $('aboutLine').innerHTML = `AI 3D Print Advisor Studio ${esc(state.config.version || '')}${state.config.homepage ? ` · <a href="${esc(state.config.homepage)}#readme" target="_blank" rel="noopener">Guide and help</a>` : ''} · Not affiliated with Snapmaker.`;
   $('settingsDialog').showModal();
 }
 $('settingsBtn').onclick = openSettings;
+
+// ---------- AI spending: top-bar counter and the Settings section ----------
+const dollars = (usd) => (usd >= 1 ? `$${usd.toFixed(2)}` : usd >= 0.01 ? `${(usd * 100).toFixed(usd < 0.1 ? 1 : 0)}¢` : usd > 0 ? 'under 1¢' : '$0.00');
+function showSpendChip(month) { $('spendChip').textContent = `AI ${month.usd >= 1 ? '$' + month.usd.toFixed(2) : month.usd > 0 ? dollars(month.usd) : '$0.00'}`; }
+let spendFlash;
+api.onSpend(({ usd, feature, month }) => {
+  const chip = $('spendChip');
+  chip.textContent = `+${dollars(usd)}`; chip.classList.add('flash'); chip.title = `${feature}: ${dollars(usd)}. This month: ${dollars(month.usd)} (details in Settings)`;
+  clearTimeout(spendFlash);
+  spendFlash = setTimeout(() => { chip.classList.remove('flash'); showSpendChip(month); }, 4000);
+  if ($('settingsDialog').open) renderSpend();
+});
+api.spendSummary().then(s => showSpendChip(s.month)).catch(() => {});
+$('spendChip').onclick = () => { openSettings(); setTimeout(() => $('spendField').scrollIntoView({ block: 'center' }), 50); };
+async function renderSpend() {
+  const s = await api.spendSummary().catch(() => null);
+  if (!s) return;
+  showSpendChip(s.month);
+  const when = (t) => new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  $('spendSummary').innerHTML = `<div class="spend-totals"><span><b>${dollars(s.month.usd)}</b>this month (${s.month.calls} request${s.month.calls === 1 ? '' : 's'})</span>
+      <span><b>${dollars(s.last30.usd)}</b>last 30 days</span><span><b>${dollars(s.all.usd)}</b>${s.since ? `since ${new Date(s.since).toLocaleDateString()}` : 'in total'}</span></div>
+    ${s.byFeature.length ? `<table><tbody>${s.byFeature.map(f => `<tr><td>${esc(f.feature)}</td><td class="n">${f.calls}×</td><td class="n">${dollars(f.usd)}</td></tr>`).join('')}</tbody></table>` : '<p class="hint">No AI requests yet this month.</p>'}
+    ${s.recent.length ? `<details><summary>Latest requests</summary><table><tbody>${s.recent.map(e => `<tr><td>${esc(when(e.t))} · ${esc(e.feature)}<br><small>${esc(e.model)}: ${e.in + e.cr + e.cw} tokens in, ${e.out} out${e.searches ? `, ${e.searches} web search${e.searches === 1 ? '' : 'es'}` : ''}</small></td><td class="n">${dollars(e.usd)}</td></tr>`).join('')}</tbody></table></details>` : ''}`;
+  $('adminStatus').innerHTML = (state.config.hasAdminKey ? 'An admin key is saved. Leave blank to keep it. ' : '')
+    + 'Shows Anthropic’s own total for this month, for the whole account and for this app’s key, including use outside this app. Needs an <a href="https://platform.claude.com/settings/admin-keys" target="_blank" rel="noopener">Admin API key</a>, which Anthropic offers to organizations only (an individual account can set one up under Settings → Organization in the Claude Console). Without one, see your account’s total on the <a href="https://platform.claude.com/cost" target="_blank" rel="noopener">Cost page</a>.';
+}
+$('spendClear').onclick = async () => { await api.spendClear(); renderSpend(); toast('The app’s spending record was cleared.', 3000); };
+$('accountSpendBtn').onclick = async () => {
+  const out = $('accountSpend');
+  out.textContent = 'Asking Anthropic…';
+  try {
+    const r = await api.accountSpend({ adminKey: $('adminKey').value.trim() || null });
+    const from = new Date(r.from).toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
+    out.textContent = `Since ${from}: $${r.totalUsd.toFixed(2)} on the whole Anthropic account`
+      + (r.appKeyUsd != null ? `, of which $${r.appKeyUsd.toFixed(2)} on this app’s key (“${r.appKeyName}”).` : '. (This app’s key wasn’t found in the account’s key list.)')
+      + ' Anthropic’s figures can lag a few minutes.';
+  } catch (e) { out.textContent = cleanErr(e); }
+};
 
 // ---------- printers in Settings: any number, added by hand or found on the network ----------
 function addPrinterRow(p = {}) {
@@ -2040,6 +2091,7 @@ $('settingsDialog').addEventListener('close', async () => {
   const printers = [...document.querySelectorAll('.printer-row')].map(r => ({ name: r.querySelector('.p-name').value.trim(), url: r.querySelector('.p-url').value.trim(), apiKey: r.querySelector('.p-key').value.trim() })).filter(p => p.url);
   const patch = { model, printers, slicerPath: $('slicerPath').value.trim(), aiMode: (document.querySelector('input[name=aiMode]:checked') || {}).value || 'api', experience: Number($('experienceSelect').value) };
   if ($('apiKey').value.trim()) patch.apiKey = $('apiKey').value;
+  if ($('adminKey').value.trim()) patch.adminKey = $('adminKey').value;
   const before = state.info.available;
   await api.setConfig(patch);
   await loadConfig();

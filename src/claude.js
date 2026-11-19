@@ -142,6 +142,7 @@ async function callApi(apiKey, body) {
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => null);
+  if (res.ok && data) require('./spend').record(data, body.model);   // what this answer cost (Settings > AI spending)
   return { res, data, msg: data && data.error ? data.error.message : `HTTP ${res.status}` };
 }
 

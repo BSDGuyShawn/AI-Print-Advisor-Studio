@@ -23,6 +23,7 @@
       <input type="text" id="printNameInput" class="hidden" maxlength="48" aria-label="Print name">
     </div>
     <div class="top-actions">
+      <button class="btn ghost spend-chip" id="spendChip" title="What this app’s AI requests cost this month (details in Settings)">AI $0.00</button>
       <button class="btn ghost" id="filamentBtn" aria-pressed="false" title="Your filament inventory: what you have, spools, locations and print settings">Filament</button>
       <button class="btn ghost" id="guideBtn" title="Step-by-step guide">Guide</button>
       <button class="btn ghost" id="openBtn">Open 3MF</button>
@@ -193,6 +194,17 @@
         <input type="password" id="apiKey" autocomplete="off" placeholder="sk-ant-…">
         <small id="keyStatus"></small>
       </label>
+      <fieldset class="spend" id="spendField">
+        <legend>AI spending</legend>
+        <p class="hint">What this app’s AI requests cost, worked out from the tokens each answer used, at Anthropic’s list prices.</p>
+        <div id="spendSummary" class="spend-summary"></div>
+        <label class="field"><span>Your whole Anthropic account <em>Optional</em></span>
+          <input type="password" id="adminKey" autocomplete="off" placeholder="Admin API key: sk-ant-admin01-…">
+          <small id="adminStatus"></small>
+        </label>
+        <div class="row-btns"><button type="button" class="btn" id="accountSpendBtn">Check this month on Anthropic</button> <button type="button" class="link" id="spendClear">Clear this app’s record</button></div>
+        <p class="hint" id="accountSpend"></p>
+      </fieldset>
       <label class="field">
         <span>Claude model</span>
         <select id="modelSelect">
