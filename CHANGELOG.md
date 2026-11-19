@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.17.1
+- Security: updated the `ws` library (used to talk to printers) from 8.18.0 to 8.23.0 to fix two published
+  high-severity advisories (GHSA-58qx-3vcg-4xpx, GHSA-96hv-2xvq-fx4p), and `jszip` from 3.10.1 to 3.10.2.
+  Found by the repository's new dependency audit.
+
 ## 2.17.0
 - **Filament screen** (Filament button, top right): the Filament Inventory web page is now part of the app. You can track
   spools, statuses, weigh-ins, locations, labels, a dashboard, manufacturer print settings and U1 Orca presets.

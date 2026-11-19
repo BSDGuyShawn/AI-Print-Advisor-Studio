@@ -106,7 +106,7 @@ This is open source: every line of code is here for anyone to read. To help you 
   - **Secret scan**: makes sure no passwords or keys were committed.
 - **Every release is virus-scanned** with ClamAV, and its **SHA-256 checksums** are published with it. You can also upload the zip to [VirusTotal](https://www.virustotal.com/) yourself.
 - **Check a download** is exactly what was published: in PowerShell, run
-  `Get-FileHash .\AI-3D-Print-Advisor-Studio-2.17.0-win-x64.zip`
+  `Get-FileHash .\AI-3D-Print-Advisor-Studio-2.17.1-win-x64.zip`
   and compare the result with `SHA256SUMS.txt` on the release page.
 
 Found a security problem? See [SECURITY.md](SECURITY.md).

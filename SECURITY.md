@@ -31,7 +31,7 @@ Results are public under the **[Actions](https://github.com/jtroberts83/AI-Print
 1. On the release page, open `SHA256SUMS.txt`.
 2. In the folder with your download, open PowerShell (Shift + right-click → "Open PowerShell window here") and run:
    ```powershell
-   Get-FileHash .\AI-3D-Print-Advisor-Studio-2.17.0-win-x64.zip
+   Get-FileHash .\AI-3D-Print-Advisor-Studio-2.17.1-win-x64.zip
    ```
 3. The long code it prints must match the line for that file in `SHA256SUMS.txt`. If it doesn't, don't run it: the file was changed or damaged.
 

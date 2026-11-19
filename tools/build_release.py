@@ -13,6 +13,7 @@ your filament catalog and product photos with the shop links replaced by dummies
 addresses (never their API keys).
 """
 import argparse
+import tarfile
 import json
 import os
 import re
@@ -41,6 +42,23 @@ def asar_node_modules(asar, out):
             elif 'offset' in v:
                 os.makedirs(os.path.dirname(p), exist_ok=True); o = base + int(v['offset']); open(p, 'wb').write(d[o:o + v['size']])
     walk(hdr['files']['node_modules'], os.path.join(out, 'node_modules'), 'node_modules')
+
+def overlay_packages(tarballs, app):
+    """Replace bundled libraries with newer npm packages (.tgz from registry.npmjs.org), e.g. for a security fix."""
+    for tgz in tarballs or []:
+        with tarfile.open(tgz) as t:
+            name = json.load(t.extractfile('package/package.json'))['name']
+            dst = os.path.join(app, 'node_modules', name)
+            shutil.rmtree(dst, ignore_errors=True)
+            for m in t.getmembers():
+                if not m.name.startswith('package/') or not (m.isfile() or m.isdir()): continue
+                rel = m.name[len('package/'):]
+                if not rel or '..' in rel.split('/'): continue
+                target = os.path.join(dst, rel)
+                if m.isdir(): os.makedirs(target, exist_ok=True); continue
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with t.extractfile(m) as f, open(target, 'wb') as o: o.write(f.read())
+            print('Bundled', name, json.load(open(os.path.join(dst, 'package.json')))['version'])
 
 def copy_app(dst):
     for f in APP_FILES:
@@ -90,6 +108,7 @@ def main():
     ap.add_argument('--runtime', required=True); ap.add_argument('--out', required=True)
     ap.add_argument('--demo', action='store_true'); ap.add_argument('--recording'); ap.add_argument('--inventory'); ap.add_argument('--backup'); ap.add_argument('--config')
     ap.add_argument('--no-zip', action='store_true')
+    ap.add_argument('--package', action='append', help='an npm .tgz to bundle instead of the runtime copy (repeatable)')
     args = ap.parse_args()
     version = json.load(open(os.path.join(ROOT, 'package.json')))['version']
     name = f"AI-3D-Print-Advisor-Studio-{'DEMO-' if args.demo else ''}{version}-win-x64"
@@ -101,6 +120,7 @@ def main():
     copy_app(app)
     if not args.demo: os.remove(os.path.join(app, 'preload-demo.js'))
     asar_node_modules(os.path.join(args.runtime, 'resources', 'app.asar'), app)
+    overlay_packages(args.package, app)
     if args.demo:
         demo_data(args, os.path.join(app, 'demo'), os.path.join(out, EXE))
         os.rename(os.path.join(out, EXE), os.path.join(out, 'AI 3D Print Advisor Studio DEMO.exe'))
