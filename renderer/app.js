@@ -2099,7 +2099,6 @@ function openSettings() {
   $('printerRows').innerHTML = '';
   (state.config.printers.length ? state.config.printers : [{}]).forEach(p => addPrinterRow(p));
   $('discoverResults').innerHTML = ''; $('discoverStatus').textContent = '';
-  $('adminKey').value = ''; $('accountSpend').textContent = '';
   renderSpend();
   $('aboutLine').innerHTML = `AI 3D Print Advisor Studio ${esc(state.config.version || '')}${state.config.homepage ? ` · <a href="${esc(state.config.homepage)}#readme" target="_blank" rel="noopener">Guide and help</a>` : ''} · Not affiliated with Snapmaker.`;
   $('settingsDialog').showModal();
@@ -2128,21 +2127,8 @@ async function renderSpend() {
       <span><b>${dollars(s.last30.usd)}</b>last 30 days</span><span><b>${dollars(s.all.usd)}</b>${s.since ? `since ${new Date(s.since).toLocaleDateString()}` : 'in total'}</span></div>
     ${s.byFeature.length ? `<table><tbody>${s.byFeature.map(f => `<tr><td>${esc(f.feature)}</td><td class="n">${f.calls}×</td><td class="n">${dollars(f.usd)}</td></tr>`).join('')}</tbody></table>` : '<p class="hint">No AI requests yet this month.</p>'}
     ${s.recent.length ? `<details><summary>Latest requests</summary><table><tbody>${s.recent.map(e => `<tr><td>${esc(when(e.t))} · ${esc(e.feature)}<br><small>${esc(e.model)}: ${e.in + e.cr + e.cw} tokens in, ${e.out} out${e.searches ? `, ${e.searches} web search${e.searches === 1 ? '' : 'es'}` : ''}</small></td><td class="n">${dollars(e.usd)}</td></tr>`).join('')}</tbody></table></details>` : ''}`;
-  $('adminStatus').innerHTML = (state.config.hasAdminKey ? 'An admin key is saved. Leave blank to keep it. ' : '')
-    + 'Shows Anthropic’s own total for this month, for the whole account and for this app’s key, including use outside this app. Needs an <a href="https://platform.claude.com/settings/admin-keys" target="_blank" rel="noopener">Admin API key</a>, which Anthropic offers to organizations only (an individual account can set one up under Settings → Organization in the Claude Console). Without one, see your account’s total on the <a href="https://platform.claude.com/cost" target="_blank" rel="noopener">Cost page</a>.';
 }
 $('spendClear').onclick = async () => { await api.spendClear(); renderSpend(); toast('The app’s spending record was cleared.', 3000); };
-$('accountSpendBtn').onclick = async () => {
-  const out = $('accountSpend');
-  out.textContent = 'Asking Anthropic…';
-  try {
-    const r = await api.accountSpend({ adminKey: $('adminKey').value.trim() || null });
-    const from = new Date(r.from).toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
-    out.textContent = `Since ${from}: $${r.totalUsd.toFixed(2)} on the whole Anthropic account`
-      + (r.appKeyUsd != null ? `, of which $${r.appKeyUsd.toFixed(2)} on this app’s key (“${r.appKeyName}”).` : '. (This app’s key wasn’t found in the account’s key list.)')
-      + ' Anthropic’s figures can lag a few minutes.';
-  } catch (e) { out.textContent = cleanErr(e); }
-};
 
 // ---------- printers in Settings: any number, added by hand or found on the network ----------
 function addPrinterRow(p = {}) {
@@ -2203,7 +2189,6 @@ $('settingsDialog').addEventListener('close', async () => {
   // remember the switch only when it differs from what the level would choose, so changing level later still applies
   patch.explainWords = $('explainWords').checked === (patch.experience <= 1) ? null : $('explainWords').checked;
   if ($('apiKey').value.trim()) patch.apiKey = $('apiKey').value;
-  if ($('adminKey').value.trim()) patch.adminKey = $('adminKey').value;
   const before = state.info.available;
   await api.setConfig(patch);
   await loadConfig();

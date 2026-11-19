@@ -40,7 +40,7 @@ Typical costs per request: recommendations 5–20¢, Color remix parts 6–11¢,
 
 ## Can I see my total Anthropic spend in the app?
 
-The app shows exactly what **it** has spent. For your whole Anthropic account, check the [Cost page](https://platform.claude.com/cost). If your Anthropic account is an **organization**, you can add an **Admin API key** in Settings → AI spending and the app reads the account total for you. (Anthropic doesn't offer admin keys to individual accounts; you can turn yours into an organization in the Claude Console under Settings → Organization.)
+The app shows what **it** has spent (Settings → AI spending). For what your API key has cost in total, including use outside this app, open your [API keys page](https://platform.claude.com/settings/keys) in the Claude Console.
 
 ## What gets sent to the AI?
 

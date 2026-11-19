@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.20.1
+- Removed the optional Anthropic **Admin API key** and the "Check this month on Anthropic" button from
+  Settings → AI spending: they only worked for Anthropic organizations. Any admin key saved earlier is deleted
+  the next time Settings is saved. Settings now links to your **API keys page** in the Claude Console, which
+  shows what your key has cost in total. The app's own record of what it spent stays.
+
 ## 2.20.0
 - **Guide you can't miss**: the step-by-step guide (beginners and the demo) is bigger and brighter, and at every
   step a pulsing orange **Click here** ring sits on the exact button to press next, with "Click ..." spelled out in

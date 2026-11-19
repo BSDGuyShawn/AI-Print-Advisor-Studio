@@ -2,8 +2,8 @@
 // prices. Kept in <userData>/ai-spend.json (the last 5,000 calls). The feature a call belongs to comes from the
 // window action that started it (run(feature, fn) wraps that action; see main.js).
 //
-// Anthropic's own record of the account's spend can only be read with an Admin API key (organizations only),
-// see accountSpend() below.
+// For the key's total cost so far (including use outside the app), Settings points to the Claude Console's API
+// keys page.
 const fs = require('fs');
 const path = require('path');
 const { AsyncLocalStorage } = require('async_hooks');
@@ -64,56 +64,4 @@ function summary() {
 }
 function clear() { entries = []; try { fs.writeFileSync(file, JSON.stringify({ entries })); } catch {} }
 
-// ---------- Anthropic's own numbers (Admin API key, organizations only) ----------
-// This month's cost for the whole organization and for the app's own API key, from the Usage and Cost Analytics
-// API. The key's id is found by matching its hint (start…end) in the organization's key list.
-async function accountSpend(adminKey, appKey) {
-  const headers = { 'x-api-key': adminKey, 'anthropic-version': '2026-10-21', 'anthropic-beta': 'analytics-usage-cost-2026-08-24', 'user-agent': 'AI-3D-Print-Advisor-Studio' };
-  const get = async (url) => {
-    let res;
-    try { res = await fetch(url, { headers, signal: AbortSignal.timeout(30000) }); } catch { throw new Error('Couldn’t reach Anthropic. Check your internet connection.'); }
-    const data = await res.json().catch(() => null);
-    if (res.ok) return data;
-    const msg = (data && data.error && data.error.message) || `HTTP ${res.status}`;
-    if (res.status === 401) throw new Error('Anthropic didn’t accept this admin key. It should start with sk-ant-admin.');
-    if (res.status === 403 || res.status === 404) throw new Error(`This key can’t read the account’s costs (${msg}). Admin keys work only for Anthropic organizations, not individual accounts.`);
-    throw new Error(`Anthropic turned the request down: ${msg}`);
-  };
-  const now = new Date();
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().replace(/\.\d+Z$/, 'Z');
-  const end = now.toISOString().replace(/\.\d+Z$/, 'Z');
-  const base = 'https://api.anthropic.com/v1/organizations';
-  // all cost rows for the month, one per API key (pages followed)
-  const rows = [];
-  let page = null;
-  for (let i = 0; i < 20; i++) {
-    const q = new URLSearchParams({ starting_at: start, ending_at: end, limit: '100' });
-    q.append('group_by[]', 'api_key_id');
-    if (page) q.set('page', page);
-    const d = await get(`${base}/analytics/cost?${q}`);
-    rows.push(...(d.data || []));
-    if (!d.has_more || !d.next_page) break;
-    page = d.next_page;
-  }
-  const cents = (r) => parseFloat(r.cost && r.cost.amount) || 0;
-  const totalUsd = rows.reduce((t, r) => t + cents(r), 0) / 100;
-  // which row is this app's key
-  let appKeyUsd = null, appKeyName = null;
-  if (appKey) {
-    try {
-      const keys = await get(`${base}/api_keys?limit=1000`);
-      const mine = (keys.data || []).find(k => {
-        const hint = String(k.partial_key_hint || '');
-        const [head, tail] = hint.split(/\.{3}|…/);
-        return head && tail && appKey.startsWith(head) && appKey.endsWith(tail);
-      });
-      if (mine) {
-        appKeyName = mine.name || mine.id;
-        appKeyUsd = rows.filter(r => r.group && r.group.api_key_id === mine.id).reduce((t, r) => t + cents(r), 0) / 100;
-      }
-    } catch {}
-  }
-  return { from: start, to: end, totalUsd: +totalUsd.toFixed(2), appKeyUsd: appKeyUsd == null ? null : +appKeyUsd.toFixed(2), appKeyName };
-}
-
-module.exports = { init, run, record, summary, clear, costOf, accountSpend, PRICES };
+module.exports = { init, run, record, summary, clear, costOf, PRICES };

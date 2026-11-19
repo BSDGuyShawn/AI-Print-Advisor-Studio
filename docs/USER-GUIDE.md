@@ -198,7 +198,7 @@ Own a Bambu Lab printer? You can open MakerWorld files as they are. The app can 
 
 The **AI** button at the top shows what the app's AI requests cost this month. It briefly shows the cost of each request as it happens (like "+8¢"). Click it, or open **Settings → AI spending**, for a breakdown by feature.
 
-For your **whole Anthropic account** (including other apps), see the [Cost page](https://platform.claude.com/cost) in the Claude Console. Organization accounts can also add an **Admin API key** in Settings to see that total inside the app.
+To see what your API key has cost **in total** (including use outside this app), open your [API keys page](https://platform.claude.com/settings/keys) in the Claude Console. Settings → AI spending links there too.
 
 ---
 

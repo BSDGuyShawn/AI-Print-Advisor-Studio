@@ -265,7 +265,6 @@ contextBridge.exposeInMainWorld('advisor', {
   getConfig: async () => clone(config),
   spendSummary: async () => spendSummary(),
   spendClear: async () => { demoSpend.entries = []; return spendSummary(); },
-  accountSpend: failing('key', 'The demo doesn’t read your Anthropic account.'),
   onSpend: (cb) => listeners.spend.push(cb),
   setConfig: async (patch) => {
     if (typeof patch.apiKey === 'string' && patch.apiKey.trim()) notice('key');

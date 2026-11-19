@@ -97,7 +97,6 @@ contextBridge.exposeInMainWorld('advisor', {
   getConfig: () => ipcRenderer.invoke('get-config'),
   spendSummary: () => ipcRenderer.invoke('spend-summary'),
   spendClear: () => ipcRenderer.invoke('spend-clear'),
-  accountSpend: (a) => ipcRenderer.invoke('account-spend', a),
   onSpend: (cb) => ipcRenderer.on('spend', (_e, s) => cb(s)),
   setConfig: (patch) => ipcRenderer.invoke('set-config', patch),
   onOpenFromOS: (cb) => ipcRenderer.on('open-from-os', (_e, p) => cb(p)),

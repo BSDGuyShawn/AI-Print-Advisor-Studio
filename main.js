@@ -1605,18 +1605,11 @@ ipcMain.handle('browse-slicer', async () => {
 // ---------- AI spending ----------
 ipcMain.handle('spend-summary', () => Spend.summary());
 ipcMain.handle('spend-clear', () => { Spend.clear(); return Spend.summary(); });
-// Anthropic's own figure for this month (organization total and this app's key), with an Admin API key
-ipcMain.handle('account-spend', async (_e, { adminKey } = {}) => {
-  const cfg = await readConfig();
-  const key = (adminKey || '').trim() || dec(cfg.adminKey);
-  if (!key) throw new Error('Paste an Admin API key first (it starts with sk-ant-admin).');
-  return Spend.accountSpend(key, await getApiKey());
-});
 
 ipcMain.handle('get-config', async () => { await S.ready;
   const cfg = await readConfig();
   return {
-    model: cfg.model || DEFAULT_MODEL, hasKey: !!(await getApiKey()), keyNeedsReentry: !!cfg.apiKey && !(await getApiKey()), aiMode: cfg.aiMode || 'api', hasAdminKey: !!dec(cfg.adminKey),
+    model: cfg.model || DEFAULT_MODEL, hasKey: !!(await getApiKey()), keyNeedsReentry: !!cfg.apiKey && !(await getApiKey()), aiMode: cfg.aiMode || 'api',
     experience: Number.isInteger(cfg.experience) ? cfg.experience : null, guideDone: !!cfg.guideDone, explainWords: typeof cfg.explainWords === 'boolean' ? cfg.explainWords : null,
     slicerPath: cfg.slicerPath || '', detectedSlicer: candidateExecutables()[0] || '',
     printers: (cfg.printers || []).map(p => ({ name: p.name, url: p.url, hasKey: !!p.apiKey })),
@@ -1626,7 +1619,7 @@ ipcMain.handle('get-config', async () => { await S.ready;
 });
 ipcMain.handle('set-config', async (_e, patch) => { await S.ready;
   const cfg = await readConfig();
-  if (typeof patch.adminKey === 'string') { const k = patch.adminKey.trim(); if (k) cfg.adminKey = enc(k); else delete cfg.adminKey; }
+  delete cfg.adminKey;   // removed feature (organization admin key): don't keep an old one around
   if (patch.model) cfg.model = patch.model.trim();
   if (patch.aiMode === 'api' || patch.aiMode === 'chat') cfg.aiMode = patch.aiMode;
   if (Number.isInteger(patch.experience) && patch.experience >= 0 && patch.experience <= 3) cfg.experience = patch.experience;

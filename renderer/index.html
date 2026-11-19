@@ -202,12 +202,8 @@
         <legend>AI spending</legend>
         <p class="hint">What this app’s AI requests cost, worked out from the tokens each answer used, at Anthropic’s list prices.</p>
         <div id="spendSummary" class="spend-summary"></div>
-        <label class="field"><span>Your whole Anthropic account <em>Optional</em></span>
-          <input type="password" id="adminKey" autocomplete="off" placeholder="Admin API key: sk-ant-admin01-…">
-          <small id="adminStatus"></small>
-        </label>
-        <div class="row-btns"><button type="button" class="btn" id="accountSpendBtn">Check this month on Anthropic</button> <button type="button" class="link" id="spendClear">Clear this app’s record</button></div>
-        <p class="hint" id="accountSpend"></p>
+        <p class="hint">For what your API key has cost so far in total (including use outside this app), open your <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">API keys page</a> in the Claude Console.</p>
+        <div class="row-btns"><button type="button" class="link" id="spendClear">Clear this app’s record</button></div>
       </fieldset>
       <label class="field">
         <span>Claude model</span>

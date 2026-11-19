@@ -61,7 +61,7 @@ Everything AI 3D Print Advisor Studio can do, in one list. New to 3D printing? S
 
 ## Costs, privacy and help
 
-- **AI spending**: the cost of every AI request, this month's total in the top bar, details by feature in Settings. Optional Anthropic Admin key to see your whole account.
+- **AI spending**: the cost of every AI request, this month's total in the top bar, details by feature in Settings, and a link to your API keys page in the Claude Console for the key's total cost.
 - **Everything stays on your computer**; your API key is encrypted.
 - **Step-by-step guide**, "?" tips, and an experience setting (from "brand new" to "expert").
 - **3D printing words explained**: for beginners, words like brim, infill or purge are underlined; hover for a plain explanation with a drawing. The **Glossary** button lists about 50 words, searchable.
