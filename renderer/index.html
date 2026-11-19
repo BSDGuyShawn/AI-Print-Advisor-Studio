@@ -25,6 +25,7 @@
     <div class="top-actions">
       <button class="btn ghost spend-chip" id="spendChip" title="What this app’s AI requests cost this month (details in Settings)">AI $0.00</button>
       <button class="btn ghost" id="filamentBtn" aria-pressed="false" title="Your filament inventory: what you have, spools, locations and print settings">Filament</button>
+      <button class="btn update-pill hidden" id="updateBtn" title="A new version is available: see what's new">Update available</button>
       <button class="btn ghost" id="guideBtn" title="Step-by-step guide">Guide</button>
       <button class="btn ghost" id="glossaryBtn" title="3D printing words explained, with pictures">Glossary</button>
       <button class="btn ghost" id="openBtn">Open 3MF</button>
@@ -233,6 +234,15 @@
         </div>
         <div id="discoverResults"></div>
       </fieldset>
+      <fieldset class="updates">
+        <legend>Updates</legend>
+        <div class="row-btns">
+          <button type="button" class="btn" id="updateCheckBtn">Check for updates</button>
+          <span class="hint" id="updateStatus"></span>
+        </div>
+        <label class="check"><input type="checkbox" id="autoUpdate"> Check automatically when the app starts and once a day</label>
+        <small>Updates install in place, in the same folder. Your settings, API key, filament library and print history are kept.</small>
+      </fieldset>
       <p class="hint">Printable cheat sheets (PDF): <button type="button" class="link" data-sheet="quick">1-page quick sheet</button> · <button type="button" class="link" data-sheet="booklet">booklet with every word and picture</button> <button type="button" class="link hidden" id="tourAgain">· Take the guided tour again</button></p>
       <p class="hint about" id="aboutLine"></p>
       <div class="dialog-actions">
@@ -240,6 +250,19 @@
         <button class="btn primary" id="saveSettings" value="save">Save settings</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="updateDialog" class="update">
+    <h2 id="updTitle">Update available</h2>
+    <p class="hint" id="updSub"></p>
+    <div id="updNotes" class="upd-notes"></div>
+    <div id="updProgress" class="upd-progress hidden"><div class="bar"><span></span></div><span class="label"></span></div>
+    <p class="hint" id="updNote"></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn ghost" id="updSkip">Skip this version</button>
+      <button type="button" class="btn ghost" id="updLater">Later</button>
+      <button type="button" class="btn primary" id="updInstall">Install and restart</button>
+    </div>
   </dialog>
 
   <dialog id="lightbox" class="lightbox">

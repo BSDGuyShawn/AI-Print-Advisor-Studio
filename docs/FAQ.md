@@ -36,6 +36,14 @@ Run the **troubleshooter** on the failed print (Print history → Troubleshoot�
 
 Yes: a [1-page cheat sheet](cheat-sheets/AI-3D-Print-Advisor-Cheat-Sheet-1-page.pdf) and a [booklet with every word and picture](cheat-sheets/AI-3D-Print-Advisor-Booklet.pdf) (PDF, US Letter). In the app: the **Glossary** window or **Settings**. They're also in the **Printable cheat sheets** folder next to the program.
 
+## How do I update?
+
+From 2.23.0 the app updates itself. It checks GitHub when it starts and once a day while it's open; when there's a new version it shows what's new since yours, and **Install and restart** installs it into the same folder (no new download warnings). Only releases that passed the virus scan are installed, and the download is checked against the published checksum. Your settings, API key, filament library and print history are stored separately and kept. **Settings → Check for updates** checks any time; you can turn the automatic check off there. On 2.22.0 or older, download the new zip once by hand.
+
+## My Snapmaker Orca color mixes don't show
+
+They do from 2.23.0: mixed colors ("Full Spectrum" mixed filaments) are listed under the toolheads with their recipe, and the 3D view shows the blended color. They're printed with the real filaments in their recipe, so only those need loading.
+
 ## Windows says "Windows protected your PC"
 
 That's Windows SmartScreen. It warns about any program that isn't signed with a paid certificate, which most free hobby apps aren't. Click **More info**, then **Run anyway**.

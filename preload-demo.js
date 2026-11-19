@@ -271,6 +271,11 @@ contextBridge.exposeInMainWorld('advisor', {
   spendSummary: async () => spendSummary(),
   spendClear: async () => { demoSpend.entries = []; return spendSummary(); },
   onSpend: (cb) => listeners.spend.push(cb),
+  // no updates during the tour (the real app checks after it)
+  updateCheck: async () => ({ available: false, canInstall: false, notes: [] }),
+  updateInstall: async () => { throw new Error('Updates are available after the tour.'); },
+  updateSkip: async () => true,
+  onUpdateAvailable: () => {}, onUpdateProgress: () => {},
   setConfig: async (patch) => {
     // the API key and AI choice are real settings: kept for when the tour is over
     const real = {};

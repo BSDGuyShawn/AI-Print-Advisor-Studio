@@ -121,7 +121,9 @@ async function openFile(promise, restore = null, opts = {}) {
     Object.assign(state, { file: info, result: null, compare: null, rotations: {}, checks: [], orientObj: null, assemblyChoice: null, blockersOn: false, remixApplied: false });
     resetRemix();
     state.slots = initialSlots(info.filaments);
+    state.mixes = info.mixes || [];
     renderFileInfo();
+    guideEvent('opened');   // the model is on screen: the guide moves on now, not after the slower preparing below
     if (restore) {
       if (restore.slots && restore.slots.length) state.slots = restore.slots;
       state.rotations = restore.rotations || {};
@@ -146,7 +148,6 @@ async function openFile(promise, restore = null, opts = {}) {
     info.warnings.forEach(w => toast(w, 7000));
     api.printName().then(showPrintName).catch(() => {});
     saveSession();
-    guideEvent('opened');
   } catch (e) { toast(`Could not open the file: ${cleanErr(e)}`, 8000); }
   finally { clearBusy('file'); }
 }
@@ -387,7 +388,7 @@ function partsViewer() {
 function showParts() {
   const pv = partsViewer(), pre = state.analysis.preview;
   pv.load(pre);
-  pv.setFilamentColors(Object.fromEntries(state.slots.map(s => [s.slot, s.color])));
+  pushColors(pv);
   pv.setPatches(pre, RX.prep.patchLabels);
   if (PT.labels) {
     pv.setRegions(pre, PT.labels);
@@ -573,7 +574,7 @@ async function rxShowBig(i) {
   $('rxBigTitle').textContent = v.name;
   if (!RX.big) RX.big = new ModelViewer($('rxBigView'));
   RX.big.load(state.analysis.preview);
-  RX.big.setFilamentColors(Object.fromEntries(state.slots.map(s => [s.slot, s.color])));
+  pushColors(RX.big);
   RX.big.setRegions(state.analysis.preview, RX.labels);
   RX.big.showRegionColors(schemeHex(v));
   requestAnimationFrame(() => { window.dispatchEvent(new Event('resize')); RX.big.fit('iso'); });
@@ -877,6 +878,7 @@ async function prepare() {
   try {
     const r = await withBusy('prepare', state.info.available ? 'Preparing the project for your printer…' : 'Reading the project…', () => api.prepare(state.slots.map(s => ({ slot: s.slot, type: s.type, preset: s.preset, color: s.color }))));
     const notes = [...r.notes];
+    state.mixes = r.mixes || [];
     if (r.slotMap) {
       // filaments were renumbered to fit the toolheads (e.g. 1, 3, 5 → T1, T2, T3): move the choices along
       const moved = state.slots.filter(x => r.slotMap[x.slot]).map(x => ({ ...x, slot: r.slotMap[x.slot] }));
@@ -938,19 +940,21 @@ function renderMaterials() {
       <label class="swatch" style="background:${esc(s.color)}" title="Filament color"><input type="color" value="${esc(s.color)}"></label>
       <span class="tool">T${s.slot}</span>
       <select aria-label="Filament for toolhead ${s.slot}">${usePresets ? presetOptions(s.preset) : TYPES.map(m => `<option ${m === s.type ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>
+      <button type="button" class="sparkle-btn ${sparkles(s) ? 'on' : ''}" title="Galaxy, glitter or sparkle filament: sparkles in the 3D view (click to switch)" aria-label="Sparkly filament on toolhead ${s.slot}" aria-pressed="${sparkles(s)}">✦</button>
       ${used.has(s.slot) ? '<span></span>' : `<button class="remove" title="Remove T${s.slot}" aria-label="Remove toolhead ${s.slot}">×</button>`}
-    </div>`).join('');
-  $('materials').querySelectorAll('.mat-row').forEach(row => {
+    </div>`).join('') + mixRowsHtml();
+  $('materials').querySelectorAll('.mat-row[data-slot]').forEach(row => {
     const slot = state.slots.find(s => s.slot === Number(row.dataset.slot));
     row.querySelector('select').onchange = e => {
       if (usePresets) { slot.preset = e.target.value; slot.type = (state.info.filaments.find(f => f.name === slot.preset) || {}).type || slot.type; }
       else slot.type = e.target.value;
       reprepare();
     };
-    row.querySelector('input[type=color]').oninput = e => { slot.color = e.target.value; row.querySelector('.swatch').style.background = slot.color; pushColors(); };
+    row.querySelector('input[type=color]').oninput = e => { slot.color = e.target.value; row.querySelector('.swatch').style.background = slot.color; pushColors(); refreshMixRows(); };
     row.querySelector('input[type=color]').onchange = () => reprepare();
     const rm = row.querySelector('.remove');
     if (rm) rm.onclick = () => { state.slots = state.slots.filter(s => s !== slot); renderMaterials(); reprepare(); };
+    row.querySelector('.sparkle-btn').onclick = () => { slot.sparkle = !sparkles(slot); saveSession(); renderMaterials(); };
   });
   $('addSlotBtn').classList.toggle('hidden', state.slots.length >= 4);
   pushColors();
@@ -963,6 +967,27 @@ $('addSlotBtn').onclick = () => {
   state.slots.sort((x, y) => x.slot - y.slot);
   renderMaterials(); reprepare();
 };
+// Snapmaker Orca color mixes in the file: shown under the toolheads (they're printed with those toolheads in turn)
+function mixRowsHtml() {
+  const mixes = state.mixes || [];
+  if (!mixes.length) return '';
+  const usedMix = new Set(state.analysis?.totals.mixesUsed || mixes.map(m => m.id));
+  return `<div class="mix-head"><b>Color mixes</b> <span class="muted">from Snapmaker Orca: thin layers of these toolheads in turn, which blend into a new color</span></div>` +
+    mixes.map((m, i) => `<div class="mat-row mix-row ${usedMix.has(m.id) ? '' : 'unused'}" data-mix="${m.id}">
+      <span class="swatch mix-swatch" style="background:${esc(mixColor(m))}" title="Blended color (as Snapmaker Orca shows it)"></span>
+      <span class="tool" title="Filament ${m.id} in Snapmaker Orca">M${i + 1}</span>
+      <span class="mix-recipe">${m.parts.map(p => `<i class="dot" style="background:${esc(slotColor(p.slot))}"></i>T${p.slot} ${Math.round(p.pct)}%`).join(' + ')}</span>
+      <span></span><span></span>
+    </div>`).join('');
+}
+function refreshMixRows() {
+  for (const m of state.mixes || []) {
+    const row = $('materials').querySelector(`[data-mix="${m.id}"]`);
+    if (!row) continue;
+    row.querySelector('.mix-swatch').style.background = mixColor(m);
+    row.querySelectorAll('.dot').forEach((d, i) => { d.style.background = slotColor(m.parts[i].slot); });
+  }
+}
 // ---------- the model's own colours vs. the filament inventory: what to buy ----------
 const SHOP = { key: '', data: null, found: null };
 async function renderShopping() {
@@ -999,7 +1024,34 @@ async function renderShopping() {
     catch (e) { toast(cleanErr(e), 7000); b.disabled = false; b.textContent = 'Find exact products with AI'; }
   };
 }
-function pushColors() { viewer.setFilamentColors(Object.fromEntries(state.slots.map(s => [s.slot, s.color]))); }
+// ---------- filament looks in the 3D views: toolhead colors, Snapmaker Orca color mixes, sparkly filament ----------
+// galaxy / glitter / sparkle filament: tiny flakes that catch the light (the toolhead's ✦ button overrides the guess)
+const SPARKLE_WORDS = /galaxy|glitter|sparkl|starry|star ?dust|twinkl|cosmic|nebula|shimmer|metal ?flake|flake/i;
+const sparkles = (s) => (s.sparkle != null ? !!s.sparkle : SPARKLE_WORDS.test(`${s.preset || ''} ${s.name || ''}`));
+function slotColor(n) {
+  const s = state.slots.find(x => x.slot === n);
+  return s ? s.color : String((state.file && state.file.fileColors || [])[n - 1] || '#888888').slice(0, 7);
+}
+// a mix looks like its filaments blended (what Snapmaker Orca shows), from the toolhead colors as they are now
+function mixColor(m) {
+  const rgb = [0, 0, 0];
+  for (const p of m.parts) {
+    const v = parseInt(String(slotColor(p.slot)).replace('#', '').slice(0, 6), 16) || 0x888888;
+    rgb[0] += ((v >> 16) & 255) * p.pct / 100; rgb[1] += ((v >> 8) & 255) * p.pct / 100; rgb[2] += (v & 255) * p.pct / 100;
+  }
+  return '#' + rgb.map(c => Math.round(Math.min(255, c)).toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+function filamentLooks() {
+  const colors = Object.fromEntries(state.slots.map(s => [s.slot, s.color]));
+  const sparkle = Object.fromEntries(state.slots.filter(sparkles).map(s => [s.slot, 1]));
+  for (const m of state.mixes || []) {
+    colors[m.id] = mixColor(m);
+    const share = m.parts.reduce((t, p) => t + (sparkle[p.slot] ? p.pct / 100 : 0), 0);
+    if (share > 0) sparkle[m.id] = share;
+  }
+  return { colors, sparkle };
+}
+function pushColors(v = viewer) { const L = filamentLooks(); v.setFilamentColors(L.colors, L.sparkle); }
 
 // ---------- orientation ----------
 function renderOrientation() {
@@ -1873,7 +1925,7 @@ const GUIDE_STEPS = [
   { id: 'goal', title: 'Choose quality or speed', text: 'Slide toward Quality for smoother, better-looking prints, or toward Speed for faster ones. If you like, say what the part is for (e.g. “display piece” or “holds weight”); the advice takes it into account.', target: () => sectionOf('goal') },
   { id: 'ask', title: 'Get recommended settings', text: 'Click “Get recommended settings”. The app slices your model to measure it, then asks the AI which settings to change and why. It usually takes under a minute.', target: () => $('analyzeBtn'), until: 'analyzed', skipIf: () => !!state.result },
   { id: 'review', title: 'Read the recommendations', text: 'Each row is one suggested change with the reason in plain words. Untick anything you don’t want. Safety checks at the top catch settings that wouldn’t work, and fix many automatically. “Good to know” at the bottom lists what settings can’t fix (damp filament, the room, the printer), and AI can make mistakes, so read each change.', target: () => $('tab-recs') },
-  { id: 'compare', title: 'Compare versions', text: 'Open “Compare slices” and click a version. You’ll see how it will look (smooth or visible layer lines), how strong it will be, and how long it takes, side by side.', target: () => document.querySelector('[data-tab=compare]'), until: 'compare-picked' },
+  { id: 'compare', title: 'Compare versions', text: 'Open “Compare slices”, click “Slice and compare” (slicing takes a minute or two), then click a version. You’ll see how it will look (smooth or visible layer lines), how strong it will be, and how long it takes, side by side.', target: () => document.querySelector('[data-tab=compare]'), until: 'compare-picked' },
   { id: 'finish', title: 'Save it or print it', text: 'Happy with a version? Click “Save as 3MF” to keep the model with these settings (open it in your slicer and print), or “Send to printer…” to print right away.', target: () => $('useButtons') || $('saveBtn'), until: 'saved' },
   { id: 'done', title: 'You’re all set!', text: 'That’s the whole workflow. If a print goes wrong, open Print history and click “Troubleshoot…”: you can paint where it failed and get fixes. Reopen this guide anytime with the Guide button at the top.' },
 ];
@@ -1998,11 +2050,15 @@ function positionCard(target) {
 function guideTick() {
   const st = GUIDE.on && GUIDE_STEPS[GUIDE.i];
   if (!st) { ring.classList.add('hidden'); return; }
+  // already done (e.g. the file opened another way): move on
+  if (st.until && st.skipIf && st.skipIf()) { guideEvent(st.until); return; }
   const next = NEXT_CLICK[st.id] && st.id !== 'done' ? NEXT_CLICK[st.id]() : null;
   let el = next && next[0], r = shownRect(el, true);
   const click = !!r;
   if (!r) { el = st.target && st.target(); r = shownRect(el); }
-  const act = click ? `Click ${next[1]}` : '';
+  // the app is working (slicing, asking the AI…): say so, so the guide doesn't look stuck
+  const working = !click && busy.size ? [...busy.values()].pop() : null;
+  const act = click ? `Click ${next[1]}` : working ? `Working: ${String(working.label).replace(/…$/, '')}… The guide moves on when it’s done.` : '';
   if ($('guideAct').textContent !== act) { $('guideAct').textContent = act; $('guideAct').classList.toggle('hidden', !act); $('guideWait').classList.toggle('hidden', !!act); }
   if (el && el !== guideLastEl) { guideLastEl = el; if (!click) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
   ring.classList.toggle('hidden', !r);
@@ -2014,6 +2070,8 @@ function guideTick() {
   }
   positionCard(r);
 }
+// react to a click straight away (not on the next 250 ms tick), so the highlight moves on as soon as it's clicked
+document.addEventListener('click', () => { if (GUIDE.on) setTimeout(guideTick, 30); }, true);
 function startGuide(from = 0) { GUIDE.on = true; GUIDE.i = from; while (GUIDE_STEPS[GUIDE.i] && GUIDE_STEPS[GUIDE.i].skipIf && GUIDE_STEPS[GUIDE.i].skipIf()) GUIDE.i++; renderGuide(); }
 function stopGuide(done = false) {
   GUIDE.on = false; $('guide').classList.add('hidden'); ring.classList.add('hidden');
@@ -2140,12 +2198,83 @@ function openSettings() {
   renderSpend();
   $('aboutLine').innerHTML = `AI 3D Print Advisor Studio ${esc(state.config.version || '')}${state.config.homepage ? ` · <a href="${esc(state.config.homepage)}#readme" target="_blank" rel="noopener">Guide and help</a>` : ''} · Not affiliated with Snapmaker.`;
   $('tourAgain').classList.toggle('hidden', !state.config.tourAvailable);
+  $('autoUpdate').checked = state.config.autoUpdate !== false;
+  $('updateStatus').textContent = UPDATE.info && UPDATE.info.available ? `Version ${UPDATE.info.latest} is available.` : `You have version ${state.config.version || ''}.`;
   $('settingsDialog').showModal();
   guideEvent('settings');
 }
 $('tourAgain').onclick = () => api.restartTour();
 document.querySelectorAll('#settingsDialog [data-sheet]').forEach(b => { b.onclick = () => openCheatSheet(b.dataset.sheet); });
 $('settingsBtn').onclick = openSettings;
+
+// ---------- updates: check GitHub, show what's new, install in place ----------
+const UPDATE = { info: null };
+// the CHANGELOG's Markdown, enough of it: bullets (with wrapped lines), bold, code, links
+function mdHtml(md) {
+  const inline = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const items = [], para = [];
+  for (const line of String(md).split('\n')) {
+    if (/^\s*[-*]\s+/.test(line)) items.push(line.replace(/^\s*[-*]\s+/, ''));
+    else if (/^\s+\S/.test(line) && items.length) items[items.length - 1] += ' ' + line.trim();
+    else if (line.trim()) para.push(line.trim());
+  }
+  return (para.length ? `<p>${inline(para.join(' '))}</p>` : '') + (items.length ? `<ul>${items.map(i => `<li>${inline(i)}</li>`).join('')}</ul>` : '');
+}
+function showUpdate(info) {
+  UPDATE.info = info;
+  $('updateBtn').classList.toggle('hidden', !info.available);
+  if (!info.available) return;
+  $('updTitle').textContent = `Version ${info.latest} is available`;
+  $('updSub').textContent = `You have ${info.current}. Here’s what’s new since then${info.notes.length > 1 ? ` (${info.notes.length} versions)` : ''}:`;
+  $('updNotes').innerHTML = info.notes.map(n => `<h3>${esc(n.version)}</h3>${mdHtml(n.text)}`).join('') || '<p>See the release page for details.</p>';
+  $('updNote').innerHTML = info.canInstall
+    ? 'It downloads from GitHub, checks the file, installs into this same folder and restarts the app. Your settings, API key, filament library and history are kept.'
+    : `This copy can’t update itself (it isn’t in a release folder). <a href="${esc(info.page)}" target="_blank" rel="noopener">Download it from the release page</a>.`;
+  $('updInstall').textContent = info.canInstall ? 'Install and restart' : 'Open the release page';
+  ['updInstall', 'updLater', 'updSkip'].forEach(id => { $(id).disabled = false; });
+  $('updProgress').classList.add('hidden');
+  if (!$('updateDialog').open) $('updateDialog').showModal();
+}
+// found by the automatic check: show it now, unless the app is busy or another window is open (then the green button)
+api.onUpdateAvailable(info => {
+  UPDATE.info = info; $('updateBtn').classList.remove('hidden');
+  if (!busy.size && !document.querySelector('dialog[open]')) showUpdate(info);
+});
+api.onUpdateProgress(({ stage, pct }) => {
+  $('updProgress').classList.remove('hidden');
+  $('updProgress').querySelector('.bar span').style.width = `${stage === 'download' ? pct : 100}%`;
+  $('updProgress').querySelector('.label').textContent = stage === 'download' ? `Downloading… ${pct}%` : stage === 'unpack' ? 'Unpacking…' : 'Restarting with the new version…';
+});
+$('updateBtn').onclick = () => UPDATE.info && showUpdate(UPDATE.info);
+$('updLater').onclick = () => $('updateDialog').close();
+$('updSkip').onclick = async () => {
+  await api.updateSkip(UPDATE.info && UPDATE.info.latest).catch(() => {});
+  $('updateDialog').close(); $('updateBtn').classList.add('hidden');
+  toast('Skipped. Settings → Check for updates shows it again.', 5000);
+};
+$('updInstall').onclick = async () => {
+  const info = UPDATE.info;
+  if (!info) return;
+  if (!info.canInstall) { window.open(info.page, '_blank'); return; }
+  if (state.file) saveSession();
+  ['updInstall', 'updLater', 'updSkip'].forEach(id => { $(id).disabled = true; });
+  try { await api.updateInstall(); }
+  catch (e) {
+    $('updProgress').classList.add('hidden');
+    $('updNote').textContent = `The update didn’t install: ${cleanErr(e)}`;
+    ['updInstall', 'updLater', 'updSkip'].forEach(id => { $(id).disabled = false; });
+  }
+};
+$('updateCheckBtn').onclick = async () => {
+  $('updateStatus').textContent = 'Checking…';
+  try {
+    const info = await api.updateCheck();
+    $('updateStatus').textContent = info.available ? `Version ${info.latest} is available.` : `You have the newest version (${info.current}).`;
+    if (info.available) showUpdate(info);
+  } catch (e) { $('updateStatus').textContent = `Couldn’t check: ${cleanErr(e)}`; }
+};
+$('autoUpdate').onchange = (e) => { state.config.autoUpdate = e.target.checked; api.setConfig({ autoUpdate: e.target.checked }).catch(() => {}); };
 
 // ---------- AI spending: top-bar counter and the Settings section ----------
 const dollars = (usd) => (usd >= 1 ? `$${usd.toFixed(2)}` : usd >= 0.01 ? `${(usd * 100).toFixed(usd < 0.1 ? 1 : 0)}¢` : usd > 0 ? 'under 1¢' : '$0.00');

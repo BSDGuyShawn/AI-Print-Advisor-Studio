@@ -3,6 +3,52 @@ import { OrbitControls } from './vendor/OrbitControls.js';
 
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
+// Galaxy / glitter filament: tiny flakes fixed in the model that glint as the view or the light moves.
+// Each triangle carries a 'sparkle' amount (0 = plain filament); the flakes are added on top of the normal lighting.
+const SPARKLE_TIME = { value: 0 };
+function addSparkle(mat) {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uSparkleTime = SPARKLE_TIME;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+attribute float sparkle;
+varying float vSparkle;
+varying vec3 vObjPos;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+vSparkle = sparkle;
+vObjPos = position;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform float uSparkleTime;
+varying float vSparkle;
+varying vec3 vObjPos;
+float spHash(vec3 p) { p = fract(p * vec3(443.897, 441.423, 437.195)); p += dot(p, p.yzx + 19.19); return fract((p.x + p.y) * p.z); }`)
+      .replace('#include <opaque_fragment>', `if (vSparkle > 0.0) {
+  // flakes about 0.35 mm apart, each tilted its own way: bright when it reflects the light toward the eye
+  vec3 cell = floor(vObjPos * 2.8);
+  float glints = 0.0;
+  for (int k = 0; k < 2; k++) {
+    vec3 c = cell + float(k) * 17.0;
+    float r = spHash(c);
+    if (r > 0.82) {
+      vec3 tilt = normalize(vec3(spHash(c + 1.3), spHash(c + 2.7), spHash(c + 4.1)) - 0.5);
+      vec3 n = normalize(normal + tilt * 0.9);
+      vec3 v = normalize(vViewPosition);
+      vec3 lightDir = normalize(vec3(0.35, 0.55, 0.75));
+      float facing = max(dot(reflect(v, n), lightDir), 0.0);
+      float twinkle = 0.65 + 0.35 * sin(uSparkleTime * (1.5 + 3.0 * r) + r * 40.0);
+      glints += pow(facing, 18.0) * twinkle * (0.6 + 1.6 * spHash(c + 7.7));
+    }
+  }
+  // a faint shimmer everywhere plus the bright flakes, tinted a little by the filament color
+  vec3 tint = mix(vec3(1.0), normalize(diffuseColor.rgb + 0.05) * 1.6, 0.35);
+  outgoingLight += tint * (glints * 1.8 + 0.04) * vSparkle;
+}
+#include <opaque_fragment>`);
+  };
+  mat.customProgramCacheKey = () => 'sparkle1';
+}
+
 export class ModelViewer {
   constructor(container) {
     this.container = container;
@@ -58,7 +104,7 @@ export class ModelViewer {
 
     new ResizeObserver(() => this.resize()).observe(container);
     this.resize();
-    const loop = () => { this.controls.update(); this.renderer.render(this.scene, this.camera); requestAnimationFrame(loop); };
+    const loop = (t) => { SPARKLE_TIME.value = (t || 0) / 1000; this.controls.update(); this.renderer.render(this.scene, this.camera); requestAnimationFrame(loop); };
     loop();
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.applyTheme());
     this.applyTheme();
@@ -94,7 +140,8 @@ export class ModelViewer {
     this.scene.add(g);
   }
 
-  setFilamentColors(map) { this.colors = map; this.recolor(); }
+  // map: filament number → color; sparkle (optional): filament number → 0..1 for galaxy / glitter filament
+  setFilamentColors(map, sparkle = {}) { this.colors = map; this.sparkle = sparkle || {}; this.recolor(); }
 
   load(preview) {
     for (const c of this.chunks) { c.mesh.geometry.dispose(); c.mesh.material.dispose(); this.modelGroup.remove(c.mesh); }
@@ -105,11 +152,13 @@ export class ModelViewer {
       geo.setAttribute('position', new THREE.BufferAttribute(p.positions, 3));
       geo.computeVertexNormals();
       geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(p.positions.length), 3));
+      geo.setAttribute('sparkle', new THREE.BufferAttribute(new Float32Array(p.positions.length / 3), 1));
       const isMod = p.kind === 'modifier';
       const mat = new THREE.MeshStandardMaterial({
         vertexColors: true, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide,
         transparent: isMod, opacity: isMod ? 0.18 : 1, depthWrite: !isMod, flatShading: true,
       });
+      if (!isMod) addSparkle(mat);
       const mesh = new THREE.Mesh(geo, mat);
       this.modelGroup.add(mesh);
       const n = p.positions.length / 9, cen = new Float32Array(n * 3), a = p.positions;
@@ -141,6 +190,8 @@ export class ModelViewer {
       const pos = c.mesh.geometry.attributes.position.array;
       const col = c.mesh.geometry.attributes.color;
       const out = col.array;
+      const spA = c.mesh.geometry.attributes.sparkle, sp = spA ? spA.array : null, spk = this.sparkle || {};
+      const sparkleOn = this.mode === 'colors' && c.kind !== 'modifier' && Object.keys(spk).length > 0;
       const base = tmp.set(this.colors[c.extruder] || '#9aa5ae').clone();
       if (c.kind === 'modifier') base.set('#7fb2ff');
       // painted colour: each triangle's own filament (0 = the part's)
@@ -162,8 +213,10 @@ export class ModelViewer {
         }
         if (c.painted && c.painted[i / 9]) color = this.paintColor;
         for (let v = 0; v < 3; v++) { out[i + v * 3] = color.r; out[i + v * 3 + 1] = color.g; out[i + v * 3 + 2] = color.b; }
+        if (sp) { const s = sparkleOn && !(c.painted && c.painted[i / 9]) ? (spk[tf && tf[i / 9] ? tf[i / 9] : c.extruder] || 0) : 0; sp[i / 3] = s; sp[i / 3 + 1] = s; sp[i / 3 + 2] = s; }
       }
       col.needsUpdate = true;
+      if (spA) spA.needsUpdate = true;
     }
   }
 

@@ -37,7 +37,7 @@ It's made for the **Snapmaker U1** with **Snapmaker Orca** (Snapmaker's slicer),
 **Steps**
 
 1. Go to the **[latest release](https://github.com/jtroberts83/AI-Print-Advisor-Studio/releases/latest)**.
-2. Download **`AI-3D-Print-Advisor-Studio-…-win-x64.zip`**.
+2. Download **`AI-3D-Print-Advisor-Studio-win-x64.zip`** ([direct link to the newest](https://github.com/jtroberts83/AI-Print-Advisor-Studio/releases/latest/download/AI-3D-Print-Advisor-Studio-win-x64.zip)).
 3. Right-click the zip → **Properties** → tick **Unblock** → **OK**. (This stops the "Windows protected your PC" warning. No Unblock box? Skip this step.)
 4. Right-click the zip → **Extract All…**. Pick a place you'll find again, like your **Documents** folder.
 5. Open the folder and double-click **`AI 3D Print Advisor Studio.exe`**, the only program in it. Leave the `app` folder next to it. (Tip: right-click it → **Send to → Desktop (create shortcut)**.)
@@ -46,7 +46,7 @@ It's made for the **Snapmaker U1** with **Snapmaker Orca** (Snapmaker's slicer),
 
 > **Windows may show "Windows protected your PC."** That's normal for free apps from small developers that haven't paid for a code-signing certificate. Click **More info**, then **Run anyway**. To avoid the warning altogether, do the **Unblock** step above before extracting. If you'd like to check the files first, see [Is it safe?](#is-it-safe) below.
 
-To **update**, download the new zip and extract it over the old folder (or into a new one). Your settings, filament and history are kept separately, so they stay.
+**Updates are built in** (from 2.23.0): the app checks GitHub when it starts and once a day. When there's a new version it shows what's new since yours, and **Install and restart** updates it in place, in the same folder, with no new download warnings. Only releases that passed the virus scan are installed, and the download is checked against the published checksum. Your settings, API key, filament and history are kept (they're stored separately). Settings → **Check for updates** checks any time, and you can turn the automatic check off there. Coming from 2.22.0 or older? Download the new zip once by hand; after that it updates itself.
 
 To **uninstall**, delete the folder. Your settings and filament are in `%APPDATA%\AI 3D Print Advisor Studio`; delete that folder too to remove everything.
 
@@ -96,7 +96,7 @@ This is open source: every line of code is here for anyone to read. To help you 
   - **Secret scan**: makes sure no passwords or keys were committed.
 - **Every release is virus-scanned** with ClamAV, and its **SHA-256 checksums** are published with it. You can also upload the zip to [VirusTotal](https://www.virustotal.com/) yourself.
 - **Check a download** is exactly what was published: in PowerShell, run
-  `Get-FileHash .\AI-3D-Print-Advisor-Studio-2.18.0-win-x64.zip`
+  `Get-FileHash .\AI-3D-Print-Advisor-Studio-win-x64.zip`
   and compare the result with `SHA256SUMS.txt` on the release page.
 
 Found a security problem? See [SECURITY.md](SECURITY.md).

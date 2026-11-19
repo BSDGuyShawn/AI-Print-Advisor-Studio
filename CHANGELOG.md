@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.23.0
+- **Updates built in.** The app checks GitHub for a new version when it starts and once a day while it's open.
+  When there is one, it shows **what's new** since your version, and **Install and restart** updates it **in place**
+  (same folder, no new download warnings). Only releases that passed GitHub's virus scan are installed, and the
+  download is checked against the published SHA-256 checksum. Settings, API key, filament and history are kept.
+  Settings → **Check for updates** (and an option to turn the automatic check off). The download is now called
+  `AI-3D-Print-Advisor-Studio-win-x64.zip`, without the version, so the folder stays the same.
+- **Snapmaker Orca color mixes** ("Full Spectrum" mixed filaments, where thin layers of 2–4 filaments blend into a
+  new color) now show: under the toolheads with their recipe (e.g. T1 60% + T2 40%) and blended color, and in the
+  3D view, so the model looks like it does in Snapmaker Orca. Changing a toolhead's color updates its mixes.
+- Fixed: a file using color mixes was prepared as if each mix were another real filament (e.g. 7 filaments on a
+  4-toolhead U1). Mixes now count as the real filaments they're printed with.
+- **Sparkly filament in the 3D view**: galaxy, glitter and sparkle filaments (detected from the filament name, or
+  switched with the new ✦ button next to each toolhead) get tiny glinting flakes, like the real thing. Mixes that
+  use them sparkle too.
+- Guide fixes: it moves on as soon as a model opens (it used to wait until the app finished preparing it), reacts
+  to clicks straight away, and says when the app is busy (e.g. slicing for Compare slices) instead of looking stuck.
+
 ## 2.22.0
 - **Printable cheat sheets** (PDF, US Letter): a **1-page quick sheet** and a **booklet** with setup, why prints
   fail, a troubleshooting table and every 3D printing word with its picture. Open them from the Glossary window or

@@ -7,6 +7,7 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 const path = require('path');
 const fs = require('fs/promises');
 const { load3mf, analyzePlate, settingsSummary, buildPresets, applyChanges } = require('./src/threemf');
+const { expand: expandMix, parseMixes } = require('./src/mixed');
 const { getMachine, setMachine } = require('./src/machine');
 const { analyzeWithClaude, buildRows, buildSystemPrompt, buildUserContent } = require('./src/claude');
 const { buildChatPrompt, saveImages, parseChatAnswer } = require('./src/chatmode');
@@ -116,6 +117,57 @@ function startup(label, pct, done = false, warn = false) {
 }
 ipcMain.handle('startup-state', () => S.startup || { label: 'Starting…', pct: 5, done: false });
 
+// ---------- updates from GitHub releases (src/updater.js) ----------
+const Updater = require('./src/updater');
+const APP_TITLE = 'AI 3D Print Advisor Studio';
+const appVersion = () => require('./package.json').version;
+const UPD = { info: null, installing: false };
+async function updateCheck({ auto = false } = {}) {
+  const info = await Updater.check({ fetch: (u, o) => net.fetch(u, o), current: appVersion() });
+  const cfg = await readConfig(); cfg.updateLastCheck = Date.now(); await writeConfig(cfg);
+  info.canInstall = !!Updater.installLayout(process.execPath, APP_TITLE);
+  info.skipped = !!info.available && cfg.updateSkip === info.latest;
+  UPD.info = info;
+  if (auto && info.available && !info.skipped && win && !win.isDestroyed()) win.webContents.send('update-available', info);
+  return info;
+}
+// at launch (once the app has settled) and then once a day while it stays open; never during the guided tour
+function scheduleUpdateChecks() {
+  if (DEMO || !app.isPackaged || process.env.AIPA_NO_UPDATE_CHECK) return;
+  const due = async () => {
+    const cfg = await readConfig();
+    if (cfg.autoUpdate === false || UPD.installing) return;
+    if (cfg.updateLastCheck && Date.now() - cfg.updateLastCheck < 23.5 * 3600e3 && UPD.launchChecked) return;
+    UPD.launchChecked = true;
+    await updateCheck({ auto: true }).catch(e => logLine('update check failed:', e.message));
+  };
+  setTimeout(due, 20e3);
+  setInterval(due, 3600e3);
+}
+ipcMain.handle('update-check', async () => updateCheck());
+ipcMain.handle('update-skip', async (_e, version) => { const cfg = await readConfig(); cfg.updateSkip = version || null; await writeConfig(cfg); return true; });
+ipcMain.handle('update-install', async () => {
+  if (UPD.installing) throw new Error('Already updating.');
+  const info = UPD.info && UPD.info.available ? UPD.info : await updateCheck();
+  if (!info.available) throw new Error('You already have the newest version.');
+  UPD.installing = true;
+  try {
+    const send = (stage, p) => win && !win.isDestroyed() && win.webContents.send('update-progress', { stage, pct: Math.round(100 * p) });
+    const r = await Updater.install({ fetch: (u, o) => net.fetch(u, o), info, execPath: process.execPath, title: APP_TITLE, pid: process.pid, onProgress: send });
+    logLine(`update: installing ${info.latest} over ${appVersion()}`);
+    send('restart', 1);
+    Updater.runHandOver(r.bat);
+    setTimeout(() => app.quit(), 400);
+    return true;
+  } catch (e) { UPD.installing = false; logLine('update failed:', e.message); throw e; }
+});
+// what an update leaves behind (the old copy, if it was still locked when the new one started)
+function cleanUpAfterUpdate() {
+  const L = Updater.installLayout(process.execPath, APP_TITLE);
+  if (!L) return;
+  for (const d of ['app-old', 'update-extra']) fs.rm(path.join(L.root, d), { recursive: true, force: true }).catch(() => {});
+}
+
 async function setupSlicer() {
   const cfg = await readConfig();
   const exe = cfg.slicerPath || candidateExecutables()[0] || null;
@@ -173,6 +225,8 @@ async function openPath(p) {
     warnings: S.original.warnings, hasSettings: !!S.original.projectSettings,
     printer: S.original.projectSettings ? (S.original.projectSettings.printer_settings_id || '') : '',
     filaments: fileFilaments(S.original.projectSettings),
+    // Snapmaker Orca color mixes (filament numbers after the real ones) + every real filament's color in the file
+    mixes: S.original.mixes || [], fileColors: (S.original.projectSettings && S.original.projectSettings.filament_colour) || [],
   };
 }
 
@@ -288,7 +342,7 @@ ipcMain.handle('prepare', async (_e, slots) => { await S.ready;
   S.blockerBase = null; S.blockerCache = new Map(); // a fresh base has no added blockers
   S.slotMap = S.base.slotMap || null;
   const wrong = wrongPrinter();
-  return { mode: S.base.mode, notes: S.base.notes, error, wrongPrinter: wrong, slotMap: S.base.slotMap || null, filaments: fileFilaments(S.base.settings), hasSettings: !!Object.keys(S.base.settings || {}).length };
+  return { mode: S.base.mode, notes: S.base.notes, error, wrongPrinter: wrong, slotMap: S.base.slotMap || null, filaments: fileFilaments(S.base.settings), mixes: parseMixes(S.base.settings), hasSettings: !!Object.keys(S.base.settings || {}).length };
 });
 
 // ---------- convert without AI: one file, or many in a row ----------
@@ -297,7 +351,7 @@ function defaultSlots(project) {
   const lib = S.lib, has = (n) => n && lib && lib.byType && lib.byType.filament.has(n);
   const ff = fileFilaments(project.projectSettings);
   if (ff.length) return ff.map(f => ({ slot: f.slot, type: f.type || 'PLA', color: String(f.color).slice(0, 7), preset: has(f.preset) ? f.preset : (lib ? lib.presetForMaterial(f.type || 'PLA') : '') }));
-  const used = new Set(project.items.flatMap(it => [it.extruder || 1, ...it.parts.map(p => p.extruder || 0), ...(it.paintStates || [])]).filter(n => n > 0 && n <= 16));
+  const used = new Set(project.items.flatMap(it => [it.extruder || 1, ...it.parts.map(p => p.extruder || 0), ...(it.paintStates || [])]).flatMap(n => expandMix(n, project.mixes)).filter(n => n > 0 && n <= 16));
   return [...(used.size ? used : [1])].sort((a, b) => a - b).map(n => ({ slot: n, type: 'PLA', color: '#888888', preset: lib ? lib.presetForMaterial('PLA') : '' }));
 }
 // The automatic safety fixes (plate type, temperatures, object labels…) for the whole project, then the file.
@@ -1654,6 +1708,7 @@ ipcMain.handle('get-config', async () => { await S.ready;
     slicerPath: cfg.slicerPath || '', detectedSlicer: candidateExecutables()[0] || '',
     printers: (cfg.printers || []).map(p => ({ name: p.name, url: p.url, hasKey: !!p.apiKey })),
     slicer: slicerInfo(),
+    autoUpdate: cfg.autoUpdate !== false, updatesSupported: app.isPackaged,
     version: require('./package.json').version, homepage: /YOUR-GITHUB-USERNAME/.test(require('./package.json').homepage || '') ? null : require('./package.json').homepage,
   };
 });
@@ -1664,6 +1719,7 @@ ipcMain.handle('set-config', async (_e, patch) => { await S.ready;
   if (patch.aiMode === 'api' || patch.aiMode === 'chat') cfg.aiMode = patch.aiMode;
   if (Number.isInteger(patch.experience) && patch.experience >= 0 && patch.experience <= 3) cfg.experience = patch.experience;
   if (typeof patch.guideDone === 'boolean') cfg.guideDone = patch.guideDone;
+  if (typeof patch.autoUpdate === 'boolean') cfg.autoUpdate = patch.autoUpdate;
   if (typeof patch.explainWords === 'boolean') cfg.explainWords = patch.explainWords; else if (patch.explainWords === null) delete cfg.explainWords;
   if (typeof patch.apiKey === 'string') {
     const key = patch.apiKey.trim();
@@ -1725,6 +1781,8 @@ else {
     // window first; everything slow happens after it is on screen, with progress shown in the app
     createWindow();
     buildMenu().catch(e => logLine('menu failed:', e));
+    cleanUpAfterUpdate();
+    scheduleUpdateChecks();
     logLine(`started AI 3D Print Advisor Studio ${require('./package.json').version} on ${process.platform} ${process.arch}`); // the log always exists, for bug reports
     S.ready = (async () => {
       try {

@@ -13,6 +13,7 @@ const { orientObject, shortlist } = require('./orient');
 
 const PREVIEW_TRIANGLE_LIMIT = 1_500_000;
 const { decode: decodePaint, states: paintStates, subdivide: subdividePaint } = require('./paint');
+const { parseMixes, expand: expandMix } = require('./mixed');
 
 // ---------- small XML helpers (regex-based: model files can be 100+ MB) ----------
 function attr(str, name) {
@@ -358,7 +359,9 @@ async function load3mf(buffer) {
   }
 
   const customLayering = await readCustomLayering(readText, items);
-  return { zip, rootPath, names, items, plates, projectSettings, modelSettings, sliceInfo, images, warnings, hasGcode, customLayering };
+  // Snapmaker Orca color mixes: filament numbers after the real ones, printed with real filaments in turn
+  const mixes = parseMixes(projectSettings);
+  return { zip, rootPath, names, items, plates, projectSettings, modelSettings, sliceInfo, images, warnings, hasGcode, customLayering, mixes };
 }
 
 // Objects with variable layer height (layer_heights_profile.txt) or per-height layer_height ranges
@@ -454,8 +457,10 @@ function analyzePlate(project, plateIndex, rotations = {}, opts = {}) {
     objects.push({
       itemIndex: it.index, name: it.name, extruder: it.extruder, paintedTriangles: it.painted,
       orientationOptions, orientationShortlist: orientationOptions ? shortlist(orientationOptions, 4) : null, rotation: rot || null, rotationAffine,
-      partExtruders: [...new Set([...it.parts.map(p => p.extruder), ...(it.paintStates || [])].filter(Boolean))],
-      paintedExtruders: it.paintStates || [],
+      // a color mix counts as the real filaments it's printed with
+      partExtruders: [...new Set([...it.parts.map(p => p.extruder), ...(it.paintStates || [])].filter(Boolean).flatMap(n => expandMix(n, project.mixes)))],
+      paintedExtruders: [...new Set((it.paintStates || []).flatMap(n => expandMix(n, project.mixes)))],
+      mixesUsed: [...new Set([it.extruder, ...it.parts.map(p => p.extruder), ...(it.paintStates || [])])].filter(n => (project.mixes || []).some(m => m.id === n)),
       modifierParts: it.parts.filter(p => p.subtype && p.subtype !== 'normal_part').map(p => ({ name: p.name, subtype: p.subtype })),
       overrides: it.overrides, ...s,
     });
@@ -524,8 +529,9 @@ function analyzePlate(project, plateIndex, rotations = {}, opts = {}) {
   totals.solidMassGrams = { PLA: +(totals.volumeCm3 * 1.24).toFixed(0), PETG: +(totals.volumeCm3 * 1.27).toFixed(0) };
 
   const extrudersUsed = new Set();
-  for (const o of objects) { extrudersUsed.add(o.extruder); o.partExtruders.forEach(e => extrudersUsed.add(e)); }
+  for (const o of objects) { expandMix(o.extruder, project.mixes).forEach(e => extrudersUsed.add(e)); o.partExtruders.forEach(e => extrudersUsed.add(e)); }
   totals.extrudersUsed = [...extrudersUsed].sort((a, b) => a - b);
+  totals.mixesUsed = [...new Set(objects.flatMap(o => o.mixesUsed))].sort((a, b) => a - b);
   totals.tipRatio = Math.max(0, ...objects.map(o => o.heightToBaseRatio));
   const usedSet = new Set(usedItems.map(it => it.index));
   totals.parkedObjects = parked.filter(it => !usedSet.has(it.index)).length;

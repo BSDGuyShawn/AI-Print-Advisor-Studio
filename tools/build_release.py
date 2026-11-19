@@ -139,7 +139,9 @@ def main():
     ap.add_argument('--package', action='append', help='an npm .tgz to bundle instead of the runtime copy (repeatable)')
     args = ap.parse_args()
     version = json.load(open(os.path.join(ROOT, 'package.json')))['version']
-    name = f"AI-3D-Print-Advisor-Studio-{version}-win-x64"
+    # no version in the name: the folder people extract stays the same, and the app updates itself in place
+    # (releases/latest/download/AI-3D-Print-Advisor-Studio-win-x64.zip is also a stable link to the newest)
+    name = "AI-3D-Print-Advisor-Studio-win-x64"
     top = os.path.join(args.out, name)
     if os.path.exists(top): shutil.rmtree(top)
     out = os.path.join(top, 'app')   # Electron and all its files; the folder above holds only the launcher

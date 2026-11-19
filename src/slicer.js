@@ -11,6 +11,7 @@ const crypto = require('crypto');
 const JSZip = require('jszip');
 const { load3mf, applyChanges, compose, setBuildTransforms, rotationAbout, plateMembership } = require('./threemf');
 const { analyzeGcodeFile } = require('./gcode');
+const { expand: expandMix } = require('./mixed');
 const { ensureThumbnails } = require('./thumbs');
 const { sanitizeZip, describe: describeFixes, parseRangeErrors, applyRangeErrors, describeFix } = require('./sanitize');
 const U1_TEMPLATE = require('./u1-template-settings.json');
@@ -172,7 +173,8 @@ class Slicer {
       }
     }
     const fileCount = vIdx != null || slotMap ? 0 : (ps && Array.isArray(ps.filament_settings_id) ? ps.filament_settings_id.length : 0);
-    const used = Math.max(1, ...cliProject.items.flatMap(it => [it.extruder, ...it.parts.map(p => p.extruder || 0), ...(it.paintStates || [])]));
+    // (a Snapmaker Orca color mix is printed with the real filaments in its recipe: those are the ones to load)
+    const used = Math.max(1, ...cliProject.items.flatMap(it => [it.extruder, ...it.parts.map(p => p.extruder || 0), ...(it.paintStates || [])]).flatMap(n => expandMix(n, cliProject.mixes)));
     // a single-material printer gets exactly one filament (extra listed filaments still affect bed temperature)
     let count = Math.max(used, fileCount, slots.length ? Math.max(...slots.map(s => s.slot)) : 1);
     // a toolhead printer can't take more filaments than it has toolheads (Snapmaker Orca crashes on a U1 asked
@@ -434,7 +436,7 @@ class Slicer {
       }
     }
     const proj = await load3mf(buf);
-    const used = Math.max(1, ...proj.items.flatMap(it => [it.extruder || 1, ...it.parts.map(p => p.extruder || 0), ...(it.paintStates || [])]));
+    const used = Math.max(1, ...proj.items.flatMap(it => [it.extruder || 1, ...it.parts.map(p => p.extruder || 0), ...(it.paintStates || [])]).flatMap(n => expandMix(n, proj.mixes)));
     let count = Math.max(used, slots.length ? Math.max(...slots.map(s => s.slot)) : 1);
     if (M.multiMaterial === 'toolheads' && M.extruders) count = Math.max(used, Math.min(count, M.extruders)); // never more than the toolheads
     if (M.multiMaterial === 'single') count = 1;
