@@ -7,7 +7,7 @@ Two kinds of trouble: **the app** isn't doing what you expect, or **a print** ca
 ## Problems with the app
 
 ### Windows says "Windows protected your PC"
-Click **More info → Run anyway**. Windows shows this for programs that aren't signed with a paid certificate. See the [FAQ](FAQ.md#windows-says-windows-protected-your-pc).
+Click **More info → Run anyway**. Next time, skip the warning: before extracting, right-click the zip → **Properties** → tick **Unblock** → **OK**. Windows shows this for programs that aren't signed with a paid certificate. See the [FAQ](FAQ.md#windows-says-windows-protected-your-pc).
 
 ### Nothing happens when I double-click the app
 - Make sure you **extracted** the zip first (right-click → Extract All…). Running it from inside the zip doesn't work.

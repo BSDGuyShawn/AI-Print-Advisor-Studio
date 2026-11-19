@@ -46,7 +46,7 @@ Optional: **Compare slices** (right) to see Fine / Fast / Recommended side by si
 | MakerWorld file shows **warnings in Orca** | Open it in this app first; it converts it for the U1. |
 | "Snapmaker Orca wasn't found" | Settings → **Browse** to `snapmaker-orca.exe`. |
 | AI button does nothing / asks for a key | Settings → paste your **API key**, or choose **Free chatbot**. |
-| Windows says **"protected your PC"** | **More info → Run anyway** (see FAQ). |
+| Windows says **"protected your PC"** | **More info → Run anyway**. Or before extracting: zip → right-click → **Properties** → **Unblock** (see FAQ). |
 
 ## Color remix in 5 clicks
 

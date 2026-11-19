@@ -29,7 +29,7 @@ This guide takes you from "I downloaded a model" to "it's printing", one step at
 ## 1. First start
 
 1. Double-click **`AI 3D Print Advisor Studio.exe`**.
-   If Windows says **"Windows protected your PC"**, click **More info → Run anyway** (see the [FAQ](FAQ.md#windows-says-windows-protected-your-pc)).
+   If Windows says **"Windows protected your PC"**, click **More info → Run anyway**. To avoid that warning, right-click the zip **before extracting** → **Properties** → tick **Unblock** → **OK** (see the [FAQ](FAQ.md#windows-says-windows-protected-your-pc)).
 2. The app asks **how much 3D printing experience you have**. Pick honestly: "Brand new" turns on the step-by-step guide and extra tips. You can change it later in Settings.
 3. The app looks for **Snapmaker Orca** on your computer. The bar at the top says when it's ready. If it can't find it, open **Settings** (the gear, top right) and click **Browse** next to "Snapmaker Orca program".
 4. Click the **gear** to open **Settings** and:

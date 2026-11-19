@@ -28,11 +28,12 @@ Not sure yet? Start with the **demo**. It walks you through everything with a sa
 
 1. Go to the **[latest release](https://github.com/jtroberts83/AI-Print-Advisor-Studio/releases/latest)**.
 2. Download **`AI-3D-Print-Advisor-Studio-DEMO-…-win-x64.zip`**.
-3. Right-click the downloaded zip → **Extract All…** → **Extract**.
-4. Open the new folder and double-click **`AI 3D Print Advisor Studio DEMO.exe`**.
-5. Follow the guide in the bottom-left corner.
+3. Right-click the downloaded zip → **Properties** → tick **Unblock** → **OK**. (This stops the Windows warning below. If you don't see an Unblock box, skip this step.)
+4. Right-click the zip again → **Extract All…** → **Extract**.
+5. Open the new folder and double-click **`AI 3D Print Advisor Studio DEMO.exe`**.
+6. Follow the guide in the bottom-left corner.
 
-> **Windows may show "Windows protected your PC."** That's normal for free apps from small developers that haven't paid for a code-signing certificate. Click **More info**, then **Run anyway**. If you'd like to check the files first, see [Is it safe?](#is-it-safe) below.
+> **Windows may show "Windows protected your PC."** That's normal for free apps from small developers that haven't paid for a code-signing certificate. Click **More info**, then **Run anyway**. To avoid the warning altogether, do the **Unblock** step above before extracting. If you'd like to check the files first, see [Is it safe?](#is-it-safe) below.
 
 ---
 
@@ -52,10 +53,11 @@ Not sure yet? Start with the **demo**. It walks you through everything with a sa
 
 1. Go to the **[latest release](https://github.com/jtroberts83/AI-Print-Advisor-Studio/releases/latest)**.
 2. Download **`AI-3D-Print-Advisor-Studio-…-win-x64.zip`** (the one *without* "DEMO" in the name).
-3. Right-click the zip → **Extract All…**. Pick a place you'll find again, like your **Documents** folder.
-4. Open the folder and double-click **`AI 3D Print Advisor Studio.exe`**. (Tip: right-click it → **Send to → Desktop (create shortcut)**.)
-5. The first time, the app asks how much 3D printing experience you have, then shows a step-by-step guide.
-6. Click the **gear** (top right) to add your API key and your printers.
+3. Right-click the zip → **Properties** → tick **Unblock** → **OK**. (This stops the "Windows protected your PC" warning. No Unblock box? Skip this step.)
+4. Right-click the zip → **Extract All…**. Pick a place you'll find again, like your **Documents** folder.
+5. Open the folder and double-click **`AI 3D Print Advisor Studio.exe`**. (Tip: right-click it → **Send to → Desktop (create shortcut)**.)
+6. The first time, the app asks how much 3D printing experience you have, then shows a step-by-step guide.
+7. Click the **gear** (top right) to add your API key and your printers.
 
 To **update**, download the new zip and extract it over the old folder (or into a new one). Your settings, filament and history are kept separately, so they stay.
 

@@ -20,7 +20,11 @@ The **demo** is a guided tour with a sample rocket. Everything in it was recorde
 
 ## Windows says "Windows protected your PC"
 
-That's Windows SmartScreen. It warns about any program that isn't signed with a paid certificate, which most free hobby apps aren't. Click **More info**, then **Run anyway**. If you want to be sure the file is genuine, compare its checksum with the release page (see [Is it safe?](../README.md#is-it-safe)) or upload it to [VirusTotal](https://www.virustotal.com/).
+That's Windows SmartScreen. It warns about any program that isn't signed with a paid certificate, which most free hobby apps aren't. Click **More info**, then **Run anyway**.
+
+**To avoid the warning:** do this *before* you extract a new download. Right-click the zip → **Properties** → at the bottom of the **General** tab, tick **Unblock** → **OK**. Then right-click → **Extract All…** as usual. Windows marks every file downloaded from the internet; Unblock removes that mark, so the extracted program starts without the warning. (No Unblock box means the zip isn't marked, and you won't see the warning anyway.) Already extracted? Delete that folder, unblock the zip, and extract again.
+
+The warning comes back for each new version because each version is a new file Windows hasn't seen before. If you want to be sure the file is genuine, compare its checksum with the release page (see [Is it safe?](../README.md#is-it-safe)) or upload it to [VirusTotal](https://www.virustotal.com/).
 
 ## My antivirus flagged it
 
