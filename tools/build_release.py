@@ -164,6 +164,13 @@ def main():
                         '--set-file-version', version, '--set-product-version', version], check=True)
     if args.recording:
         demo_data(args, os.path.join(app, 'demo'), os.path.join(out, EXE))
+    # the printable cheat sheets: in the app (the Glossary and Settings open them) and in their own folder beside the program
+    sheets = os.path.join(ROOT, 'docs', 'cheat-sheets')
+    if os.path.isdir(sheets):
+        for d in (os.path.join(app, 'cheatsheets'), os.path.join(top, 'Printable cheat sheets')):
+            os.makedirs(d, exist_ok=True)
+            for f in os.listdir(sheets):
+                if f.endswith('.pdf'): shutil.copy(os.path.join(sheets, f), d)
     title = 'AI 3D Print Advisor Studio'
     build_launcher(args.csc, os.path.join(top, title + '.exe'), title, version)
     print('Built', top)

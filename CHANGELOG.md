@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.22.0
+- **Printable cheat sheets** (PDF, US Letter): a **1-page quick sheet** and a **booklet** with setup, why prints
+  fail, a troubleshooting table and every 3D printing word with its picture. Open them from the Glossary window or
+  Settings; they're also in a "Printable cheat sheets" folder next to the program, and on GitHub.
+- **Good to know**, under every set of recommendations and every troubleshooter result: what settings can't fix
+  (damp filament, the room and temperature swings, the filament itself, the printer's condition and calibration,
+  the model) and that AI can make mistakes, especially with little to go on.
+- The guided tour has a new step about this, and points to the cheat sheets.
+
 ## 2.21.0
 - **The demo is now built into the app** as a one-time **guided tour**: the first time you open the app it walks
   you through every feature on the sample rocket with recorded results (nothing is sliced, printed or sent to AI,

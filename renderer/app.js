@@ -17,7 +17,8 @@ const state = {
 };
 const viewer = new ModelViewer($('viewer'));
 // beginner word help (renderer/glossary.js): dotted-underlined words explained with a picture on hover
-const glossary = createGlossary({ isOn: () => wordsOn() });
+const openCheatSheet = (which) => api.openCheatSheet(which).catch(e => toast(cleanErr(e), 6000));
+const glossary = createGlossary({ isOn: () => wordsOn(), onCheatSheet: openCheatSheet });
 
 // ---------- progress strip ----------
 const busy = new Map(); // task id -> { label, pct }
@@ -1143,7 +1144,8 @@ function renderResults() {
       ${plan.material_notes ? `<h3>Materials</h3><p>${esc(plan.material_notes)}</p>` : ''}
       ${plan.multicolor_notes ? `<h3>Multi-color</h3><p>${esc(plan.multicolor_notes)}</p>` : ''}
       ${usedHistory && plan.history_notes ? `<h3>From your past prints</h3><p>${esc(plan.history_notes)}</p>` : ''}
-    </div>`;
+    </div>
+    ${caveatHtml()}`;
   body.querySelectorAll('[data-orient]').forEach(b => b.onclick = async () => {
     const c = orientationChoices[Number(b.dataset.orient)];
     await setRotation(c.itemIndex, c.option.rotation);
@@ -1155,6 +1157,23 @@ function renderResults() {
   $('sendRecBtn').onclick = () => openSend('recommended');
   updateCount(); refreshChecks();
 }
+
+// Under every set of AI advice: what settings can't fix, and that AI can be wrong
+function caveatHtml() {
+  return `<details class="caveat"><summary><b>Good to know:</b> settings can’t fix everything</summary>
+    <p>The app chooses settings. Some things that decide how a print turns out happen outside it:</p>
+    <ul>
+      <li><b>Damp filament.</b> Most filament soaks up moisture from the air (PETG, TPU and nylon most). Wet filament strings, pops, looks rough and prints weak. Dry it, and store it sealed with desiccant.</li>
+      <li><b>The room.</b> Cold rooms, drafts (fans, windows, air vents) and temperature swings cause warping, cracks and prints coming loose. ABS and ASA need an enclosure.</li>
+      <li><b>The filament itself.</b> Brands and even colors of the same material print differently. Check the temperatures on the spool’s label.</li>
+      <li><b>The printer.</b> A dirty or uneven bed, a worn or partly clogged nozzle, loose belts or skipped calibration cause failures no setting fixes. Clean the bed (dish soap and water, or isopropyl alcohol) and calibrate now and then.</li>
+      <li><b>The model.</b> Very thin walls, a tiny footprint on the bed or a broken mesh can fail whatever the settings.</li>
+    </ul>
+    <p><b>AI can make mistakes</b>, especially with little to go on. Say what the part is for, describe problems in the troubleshooter and add photos. The app’s safety checks catch settings that wouldn’t work, but read each change before printing, and do a small test print when it matters.</p>
+    <p>Keep this handy: <button class="link" data-sheet="quick">1-page cheat sheet</button> · <button class="link" data-sheet="booklet">booklet</button> (PDF, printable).</p>
+  </details>`;
+}
+document.addEventListener('click', (e) => { const b = e.target.closest('.caveat [data-sheet]'); if (b) openCheatSheet(b.dataset.sheet); });
 
 function settingRow(s) {
   const checked = s.action === 'change' && !s.unchanged && !s.invalid;
@@ -1755,6 +1774,7 @@ function renderTsResult() {
     ${r.physical_checks.length ? `<h3 class="group-title">Check at the printer</h3><ol class="fix-list">${r.physical_checks.map(x => `<li>${esc(x)}</li>`).join('')}</ol>` : ''}
     ${r.orientation ? `<h3 class="group-title">Orientation</h3><p>${esc(r.orientation)}</p>` : ''}
     ${r.questions.length ? `<h3 class="group-title">To narrow it down</h3><ul class="fix-list">${r.questions.map(x => `<li>${esc(x)}</li>`).join('')}</ul><p class="hint">Add the answers to the description and troubleshoot again.</p>` : ''}
+    ${caveatHtml()}
     <div class="ts-actions">
       ${TS.modelPath ? '<button class="btn primary" id="tsUse">Use these settings</button>' : '<button class="btn primary" id="tsUseOpen">Open the model and use these settings</button>'}
       <button class="btn" id="tsCopy">Copy checklist</button>
@@ -1852,7 +1872,7 @@ const GUIDE_STEPS = [
   { id: 'inspect', title: 'Look the model over', text: 'Drag on the model to rotate it and scroll to zoom. Click “Overhangs”: red areas would be printed over thin air and need supports. The Orientation list suggests the safest way to place it on the bed.', target: () => $('viewerTools') },
   { id: 'goal', title: 'Choose quality or speed', text: 'Slide toward Quality for smoother, better-looking prints, or toward Speed for faster ones. If you like, say what the part is for (e.g. “display piece” or “holds weight”); the advice takes it into account.', target: () => sectionOf('goal') },
   { id: 'ask', title: 'Get recommended settings', text: 'Click “Get recommended settings”. The app slices your model to measure it, then asks the AI which settings to change and why. It usually takes under a minute.', target: () => $('analyzeBtn'), until: 'analyzed', skipIf: () => !!state.result },
-  { id: 'review', title: 'Read the recommendations', text: 'Each row is one suggested change with the reason in plain words. Untick anything you don’t want. Safety checks at the top catch settings that wouldn’t work, and fix many automatically.', target: () => $('tab-recs') },
+  { id: 'review', title: 'Read the recommendations', text: 'Each row is one suggested change with the reason in plain words. Untick anything you don’t want. Safety checks at the top catch settings that wouldn’t work, and fix many automatically. “Good to know” at the bottom lists what settings can’t fix (damp filament, the room, the printer), and AI can make mistakes, so read each change.', target: () => $('tab-recs') },
   { id: 'compare', title: 'Compare versions', text: 'Open “Compare slices” and click a version. You’ll see how it will look (smooth or visible layer lines), how strong it will be, and how long it takes, side by side.', target: () => document.querySelector('[data-tab=compare]'), until: 'compare-picked' },
   { id: 'finish', title: 'Save it or print it', text: 'Happy with a version? Click “Save as 3MF” to keep the model with these settings (open it in your slicer and print), or “Send to printer…” to print right away.', target: () => $('useButtons') || $('saveBtn'), until: 'saved' },
   { id: 'done', title: 'You’re all set!', text: 'That’s the whole workflow. If a print goes wrong, open Print history and click “Troubleshoot…”: you can paint where it failed and get fixes. Reopen this guide anytime with the Guide button at the top.' },
@@ -1874,6 +1894,7 @@ const DEMO_STEPS = [
   { id: 'filament', title: 'Your filament library', text: 'Click “Filament” at the top right: the library Color remix picks from, with photos, spools, locations and print settings. This is a sample library; yours starts empty after the tour.', target: () => $('filamentBtn'), until: 'filament' },
   { id: 'history', title: 'When a print fails', text: 'Click “Back to model”, open “Print history” and click “Troubleshoot…” on the cancelled “Demo Rocket” print, then run it. The AI explains what went wrong and what to change.', target: () => document.querySelector('[data-tab=history]'), until: 'troubleshot' },
   { id: 'makerworld', title: 'MakerWorld files on a U1 (optional)', text: 'Using a Snapmaker U1 or another non-Bambu printer? Click Open 3MF and choose “Demo Rocket (MakerWorld version)” to see the app convert a Bambu Lab file. Bambu Lab owners open MakerWorld files as they are.', target: () => $('openBtn') },
+  { id: 'limits', title: 'What no app can control', text: 'Settings are only part of a good print. Damp filament, a cold or drafty room and temperature swings, the type and brand of filament, and a dirty bed or a printer that needs calibrating can still spoil a print, however good the settings. AI can also make mistakes, especially with little to go on, so tell it what the part is for and read the changes. “Good to know” under every set of recommendations lists what to look after, and the Glossary window has printable cheat sheets (a 1-page sheet and a booklet) to keep next to your printer.', target: () => $('glossaryBtn') },
   { id: 'settings', title: 'Settings: where you set things up', text: 'Everything you set up lives in Settings, the gear at the top right: your AI key, your printers, Snapmaker Orca and your experience level. Click the gear.', target: () => $('settingsBtn'), until: 'settings' },
   { id: 'apikey', title: 'Your Anthropic API key', text: 'The app needs an Anthropic API key to use AI on its own. One analysis sends Claude pictures of your model, the slice results and your settings, often over several requests, and puts the answers straight into the app. A chatbot can’t do that: in the free chatbot mode you copy and paste every request by hand, and the chatbot sees less. A key is pay-as-you-go and cheap: most analyses cost a few cents (about 4–10¢ with Sonnet, so $5 lasts 60 or more), with no subscription. Create one with the link under the box, paste it here, then click “Save settings” at the bottom. You can also do this after the tour.', target: () => $('apiKeyField') },
   { id: 'done', title: 'You’re ready!', text: 'Click “Finish the tour” to start using the app with your own models. It restarts once and opens fresh: your filament library starts empty and nothing from the tour is kept (except an API key you saved). You can take this tour again from Settings.' },
@@ -2123,6 +2144,7 @@ function openSettings() {
   guideEvent('settings');
 }
 $('tourAgain').onclick = () => api.restartTour();
+document.querySelectorAll('#settingsDialog [data-sheet]').forEach(b => { b.onclick = () => openCheatSheet(b.dataset.sheet); });
 $('settingsBtn').onclick = openSettings;
 
 // ---------- AI spending: top-bar counter and the Settings section ----------

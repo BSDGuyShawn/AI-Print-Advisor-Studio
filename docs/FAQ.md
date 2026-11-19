@@ -18,6 +18,24 @@ No. Pick **"Brand new"** when the app starts: it turns on a step-by-step guide a
 
 The first time you open the app, it runs a one-time **guided tour** with a sample rocket. Everything in it was recorded from the real app, so it needs no key, no slicer and no printer, and it can't save, print or change anything. Click **Finish the tour** at the end and the app restarts, ready for your own models (your filament library starts empty). It doesn't run again; to see it again, open **Settings → Take the guided tour again**. (There used to be a separate demo download; the tour replaces it.)
 
+## I followed the recommendations and the print still failed. Why?
+
+Settings are only part of a good print. These are outside the app's control:
+
+- **Damp filament.** Most filament soaks up moisture from the air (PETG, TPU and nylon most). Wet filament strings, pops, looks rough and prints weak. Dry it (a filament dryer, or your printer's drying function), and store it sealed with desiccant.
+- **The room.** Cold rooms, drafts (fans, windows, air vents) and temperature swings cause warping, cracks and prints coming loose. ABS and ASA need an enclosure.
+- **The filament itself.** Brands and even colors of the same material print differently. Check the temperatures on the spool's label.
+- **The printer.** A dirty or uneven bed, a worn or partly clogged nozzle, loose belts or skipped calibration cause failures no setting fixes. Clean the bed (dish soap and water, or isopropyl alcohol) and run the printer's calibration now and then.
+- **The model.** Very thin walls, a tiny footprint on the bed or a broken mesh can fail whatever the settings.
+
+**AI can make mistakes**, especially with little to go on. Tell it what the part is for, describe problems in the troubleshooter and add photos. The app's safety checks catch settings that wouldn't work, but read each change before printing, and do a small test print when it matters.
+
+Run the **troubleshooter** on the failed print (Print history → Troubleshoot…): the more you tell it, the better it gets.
+
+## Is there something I can print and keep next to my printer?
+
+Yes: a [1-page cheat sheet](cheat-sheets/AI-3D-Print-Advisor-Cheat-Sheet-1-page.pdf) and a [booklet with every word and picture](cheat-sheets/AI-3D-Print-Advisor-Booklet.pdf) (PDF, US Letter). In the app: the **Glossary** window or **Settings**. They're also in the **Printable cheat sheets** folder next to the program.
+
 ## Windows says "Windows protected your PC"
 
 That's Windows SmartScreen. It warns about any program that isn't signed with a paid certificate, which most free hobby apps aren't. Click **More info**, then **Run anyway**.

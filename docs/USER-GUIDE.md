@@ -195,6 +195,24 @@ Own a Bambu Lab printer? You can open MakerWorld files as they are. The app can 
 
 ---
 
+## Why a print can still fail
+
+The app chooses good settings, but a lot of what decides a print happens outside it. So even the best settings can't promise a perfect print. **Good to know**, under every set of recommendations and every troubleshooter result, lists these:
+
+- **Damp filament.** Most filament soaks up moisture from the air (PETG, TPU and nylon most). Wet filament strings, pops, looks rough and prints weak. Dry it (a filament dryer, or your printer's drying function), and store it sealed with desiccant.
+- **The room.** Cold rooms, drafts (fans, windows, air vents) and temperature swings cause warping, cracks and prints coming loose. ABS and ASA need an enclosure.
+- **The filament itself.** Brands and even colors of the same material print differently. Check the temperatures on the spool's label.
+- **The printer.** A dirty or uneven bed, a worn or partly clogged nozzle, loose belts or skipped calibration cause failures no setting fixes. Clean the bed (dish soap and water, or isopropyl alcohol) and run the printer's calibration now and then.
+- **The model.** Very thin walls, a tiny footprint on the bed or a broken mesh can fail whatever the settings.
+
+**AI can make mistakes**, especially with little to go on. Tell it what the part is for, describe problems in the troubleshooter and add photos. The app's safety checks catch settings that wouldn't work, but read each change before printing, and do a small test print when it matters.
+
+The printable cheat sheets (below) have this too, so you can keep it next to your printer.
+
+## Printable cheat sheets
+
+Two PDFs (US Letter) to print or keep open: a **1-page quick sheet** (the steps, buttons, common problems, key words) and a **booklet** (setup, why prints fail, a troubleshooting table, and every word with its picture). Open them from the **Glossary** window or **Settings** in the app, from the **Printable cheat sheets** folder next to the program, or here: [1-page](cheat-sheets/AI-3D-Print-Advisor-Cheat-Sheet-1-page.pdf) · [booklet](cheat-sheets/AI-3D-Print-Advisor-Booklet.pdf).
+
 ## 14. Keeping an eye on AI costs
 
 The **AI** button at the top shows what the app's AI requests cost this month. It briefly shows the cost of each request as it happens (like "+8¢"). Click it, or open **Settings → AI spending**, for a breakdown by feature.

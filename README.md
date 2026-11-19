@@ -64,7 +64,7 @@ To **uninstall**, delete the folder. Your settings and filament are in `%APPDATA
 | ![An underlined word explained with a drawing](docs/images/16-word-help.jpg) | **New to 3D printing? Words are explained.** Hover over an underlined word like "brim" or "prime tower" to see what it means, with a drawing. The Glossary button lists them all. |
 | ![Troubleshooter](docs/images/13-troubleshooter.jpg) | **Fix failed prints.** Pick a print from your printer's history, mark where it failed, and get the likely causes and the settings to change. |
 
-See **[all features](docs/FEATURES.md)**, the **[user guide](docs/USER-GUIDE.md)**, the one-page **[cheat sheet](docs/CHEAT-SHEET.md)**, the **[FAQ](docs/FAQ.md)** and **[troubleshooting](docs/TROUBLESHOOTING.md)**.
+See **[all features](docs/FEATURES.md)**, the **[user guide](docs/USER-GUIDE.md)**, the one-page **[cheat sheet](docs/CHEAT-SHEET.md)** (printable: [1-page cheat sheet (PDF)](docs/cheat-sheets/AI-3D-Print-Advisor-Cheat-Sheet-1-page.pdf) · [booklet with every word and picture (PDF)](docs/cheat-sheets/AI-3D-Print-Advisor-Booklet.pdf)), the **[FAQ](docs/FAQ.md)** and **[troubleshooting](docs/TROUBLESHOOTING.md)**.
 
 ---
 

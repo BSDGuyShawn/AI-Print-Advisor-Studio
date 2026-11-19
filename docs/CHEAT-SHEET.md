@@ -1,6 +1,6 @@
 # Cheat sheet
 
-One page. Print it or keep it open next to the app.
+One page. Print it or keep it open next to the app. Printable versions: [1-page PDF](cheat-sheets/AI-3D-Print-Advisor-Cheat-Sheet-1-page.pdf) · [booklet PDF with every word and picture](cheat-sheets/AI-3D-Print-Advisor-Booklet.pdf).
 
 ## The 6 steps to a good print
 
@@ -62,3 +62,15 @@ Optional: **Compare slices** (right) to see Fine / Fast / Recommended side by si
 **Overhang**: printed over air · **Supports**: scaffolding you break off · **Brim**: sticky ring around the base · **Infill**: inside pattern (10–20%) · **Walls**: outer shell lines (2–3) · **Layer height**: 0.08 smooth … 0.28 fast. More in the [glossary](USER-GUIDE.md#glossary).
 
 **Don't know a word?** Hover over any word with a dotted underline in the app, or click **Glossary** at the top.
+
+## Why a print can still fail
+
+The app picks settings; these happen outside it:
+
+- **Damp filament.** Most filament soaks up moisture from the air (PETG, TPU and nylon most). Wet filament strings, pops, looks rough and prints weak. Dry it (a filament dryer, or your printer's drying function), and store it sealed with desiccant.
+- **The room.** Cold rooms, drafts (fans, windows, air vents) and temperature swings cause warping, cracks and prints coming loose. ABS and ASA need an enclosure.
+- **The filament itself.** Brands and even colors of the same material print differently. Check the temperatures on the spool's label.
+- **The printer.** A dirty or uneven bed, a worn or partly clogged nozzle, loose belts or skipped calibration cause failures no setting fixes. Clean the bed (dish soap and water, or isopropyl alcohol) and run the printer's calibration now and then.
+- **The model.** Very thin walls, a tiny footprint on the bed or a broken mesh can fail whatever the settings.
+
+**AI can make mistakes**, especially with little to go on. Tell it what the part is for, describe problems in the troubleshooter and add photos. The app's safety checks catch settings that wouldn't work, but read each change before printing, and do a small test print when it matters.

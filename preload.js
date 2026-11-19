@@ -95,6 +95,7 @@ contextBridge.exposeInMainWorld('advisor', {
   showInFolder: (p) => ipcRenderer.invoke('show-in-folder', p),
   browseSlicer: () => ipcRenderer.invoke('browse-slicer'),
   restartTour: () => ipcRenderer.invoke('tour-restart'),
+  openCheatSheet: (which) => ipcRenderer.invoke('open-cheatsheet', which),
   getConfig: () => ipcRenderer.invoke('get-config'),
   spendSummary: () => ipcRenderer.invoke('spend-summary'),
   spendClear: () => ipcRenderer.invoke('spend-clear'),

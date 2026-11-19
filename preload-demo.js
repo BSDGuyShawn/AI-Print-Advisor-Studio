@@ -183,6 +183,7 @@ function printersStatus() {
 
 contextBridge.exposeInMainWorld('advisor', {
   demo: true, tour: true,
+  openCheatSheet: (which) => ipcRenderer.invoke('open-cheatsheet', which),   // the real PDFs: worth keeping
   // the end of the tour: remember it and start the app for real (with the experience level picked in the tour)
   finishTour: () => ipcRenderer.invoke('tour-finish', { experience: config.experience, explainWords: config.explainWords }),
   choose3mf: async () => { const p = await pickModel(); return p ? api_openPath(p) : null; },

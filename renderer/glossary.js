@@ -324,6 +324,8 @@ const CSS = `
 .gloss-dialog .gd-head h2 { margin: 0; font-size: 18px; flex: 1; }
 .gloss-dialog .gd-head input { width: 260px; padding: 6px 10px; border: 1px solid var(--line, #CBD2D8); border-radius: 4px; background: var(--raised, #fff); color: inherit; font: inherit; }
 .gloss-dialog .gd-intro { margin: 0; padding: 10px 18px 0; color: var(--muted, #586774); }
+.gloss-dialog .gd-sheet { border: 1px solid var(--accent, #1F9AAE); background: transparent; color: var(--accent, #1F9AAE); border-radius: 4px; padding: 1px 8px; margin: 2px 2px 0; cursor: pointer; font: inherit; font-weight: 600; }
+.gloss-dialog .gd-sheet:hover { background: var(--accent, #1F9AAE); color: #fff; }
 .gloss-dialog .gd-grid { overflow-y: auto; padding: 14px 18px 18px; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; align-content: start; grid-auto-rows: max-content; flex: 1 1 auto; min-height: 0; }
 .gloss-dialog .gd-card { border: 1px solid #CBD2D8; border-radius: 8px; overflow: hidden; background: #FFFFFF; color: #18232E; font-size: 13px; line-height: 1.5; }
 .gloss-dialog .gd-card.flash { outline: 3px solid #1F9AAE; }
@@ -335,7 +337,7 @@ const CSS = `
 `;
 
 // ---------- the module ----------
-export function createGlossary({ isOn }) {
+export function createGlossary({ isOn, onCheatSheet }) {
   const docs = new Map();   // document -> { observer, frame }
   let pop, dialog, showT, hideT, pinned = false, current = null;
 
@@ -440,7 +442,7 @@ export function createGlossary({ isOn }) {
     if (!dialog) {
       dialog = document.createElement('dialog'); dialog.className = 'gloss-dialog'; dialog.id = 'glossaryDialog';
       dialog.innerHTML = `<div class="gd-head"><h2>3D printing words, explained</h2><input type="search" placeholder="Find a word…" aria-label="Find a word"><button type="button" class="gd-close">Close</button></div>
-        <p class="gd-intro">Words with a dotted underline in the app are in this list: hover over one to see its explanation.</p><div class="gd-grid"></div>`;
+        <p class="gd-intro">Words with a dotted underline in the app are in this list: hover over one to see its explanation.${onCheatSheet ? ' Printable cheat sheets (PDF): <button type="button" class="gd-sheet" data-sheet="quick">1-page quick sheet</button> <button type="button" class="gd-sheet" data-sheet="booklet">Booklet with every word and picture</button>' : ''}</p><div class="gd-grid"></div>`;
       document.body.appendChild(dialog);
       const grid = dialog.querySelector('.gd-grid'), q = dialog.querySelector('input');
       const sorted = [...TERMS].sort((a, b) => a.title.localeCompare(b.title));
@@ -452,6 +454,7 @@ export function createGlossary({ isOn }) {
         grid.querySelector('.gd-none').hidden = n > 0;
       });
       dialog.querySelector('.gd-close').onclick = () => dialog.close();
+      dialog.querySelectorAll('.gd-sheet').forEach(b => { b.onclick = () => onCheatSheet(b.dataset.sheet); });
     }
     const q = dialog.querySelector('input'); q.value = ''; q.dispatchEvent(new Event('input'));
     dialog.showModal();

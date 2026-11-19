@@ -1617,6 +1617,18 @@ ipcMain.handle('browse-slicer', async () => {
 ipcMain.handle('spend-summary', () => Spend.summary());
 ipcMain.handle('spend-clear', () => { Spend.clear(); return Spend.summary(); });
 
+// the printable cheat sheets (PDFs made by tools/make_cheatsheets.js, bundled in cheatsheets/)
+const CHEAT_SHEETS = { quick: 'AI-3D-Print-Advisor-Cheat-Sheet-1-page.pdf', booklet: 'AI-3D-Print-Advisor-Booklet.pdf' };
+ipcMain.handle('open-cheatsheet', async (_e, which) => {
+  const file = CHEAT_SHEETS[which];
+  if (!file) throw new Error('Unknown cheat sheet.');
+  const full = path.join(__dirname, 'cheatsheets', file);
+  if (!require('fs').existsSync(full)) throw new Error('The cheat sheet isn’t in this copy of the app. It’s also on the project’s GitHub page (docs/cheat-sheets).');
+  const err = await shell.openPath(full);
+  if (err) throw new Error(err);
+  return true;
+});
+
 // the tour: finished (remember it, keep the experience level picked in it, start the app for real), or asked for again
 ipcMain.handle('tour-finish', async (_e, { experience, explainWords } = {}) => {
   const cfg = await readConfig();
