@@ -15,7 +15,7 @@ You open a 3D model (a `.3mf` file, like the ones you download from MakerWorld o
 
 It also keeps a **filament library**: every spool you own, with photos, colors, where it's stored and how much is left.
 
-**Made for beginners:** a **guided tour** walks you through everything on a sample model before you open your own. Every recommendation says *why*, so you learn as you go. Words like "brim" or "infill" are explained when you hover over them, the **Glossary** has a picture for every term, and there's a **printable booklet** to keep next to your printer. The app **updates itself** with one click.
+**Made for beginners:** a **guided tour** walks you through everything on a sample model before you open your own. Every recommendation says *why*, so you learn as you go. Words like "brim" or "infill" are explained when you hover over them, the **Glossary** has a picture for every term, and there's a **printable booklet** to keep next to your printer. Not sure where to get models? **Find models** lists the best free and paid sites, starting with **Snapmaker Space** (ready-to-print U1 files). The app **updates itself** with one click.
 
 ### Free, with no middleman
 

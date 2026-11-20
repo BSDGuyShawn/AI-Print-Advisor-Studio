@@ -27,6 +27,7 @@
       <button class="btn ghost" id="filamentBtn" aria-pressed="false" title="Your filament inventory: what you have, spools, locations and print settings">Filament</button>
       <button class="btn update-pill hidden" id="updateBtn" title="A new version is available: see what's new">Update available</button>
       <button class="btn ghost" id="guideBtn" title="Step-by-step guide">Guide</button>
+      <button class="btn ghost" id="modelsBtn" title="Where to download models to print: free and paid sites, including Snapmaker Space for the U1">Find models</button>
       <button class="btn ghost" id="glossaryBtn" title="3D printing words explained, with pictures">Glossary</button>
       <button class="btn ghost" id="openBtn">Open 3MF</button>
       <button class="btn ghost icon" id="settingsBtn" aria-label="Settings" title="Settings">
@@ -47,6 +48,7 @@
           <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 31V11m0 0-7 7m7-7 7 7M10 33v4a2 2 0 0 0 2 2h24a2 2 0 0 0 2-2v-4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <p class="drop-title">Drop a .3mf file here</p>
           <p class="drop-sub">or <button class="link" id="browseBtn">browse your files</button>. MakerWorld downloads and Orca projects both work.</p>
+          <p class="drop-sub">Need something to print? <button class="link" id="findModelsLink">Find free models</button></p>
         </div>
       </section>
 
@@ -251,6 +253,38 @@
         <button class="btn primary" id="saveSettings" value="save">Save settings</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="modelsDialog" class="models">
+    <div class="models-head"><h2>Where to find models to print</h2><button type="button" class="link" id="modelsClose">Close</button></div>
+    <p class="hint">New to 3D printing? These sites have millions of models made by other people. Download a model, then open it here with <b>Open 3MF</b>. Links open in your web browser.</p>
+    <h3>Free models</h3>
+    <div class="model-sites">
+        <a class="model-site star" href="https://space.snapmaker.com" target="_blank" rel="noopener"><span class="ms-top"><b>Snapmaker Space</b><span class="ms-tag">Made for the U1</span></span><span class="ms-text">Snapmaker’s own model site, built around the U1 (new, in open beta). Every model comes as a U1 print file with colors and settings already set up, and featured models are test-printed. <b>The easiest place to start.</b></span><span class="ms-url">space.snapmaker.com</span></a>
+        <a class="model-site" href="https://makerworld.com" target="_blank" rel="noopener"><span class="ms-top"><b>MakerWorld</b><span class="ms-tag">Huge, multi-color</span></span><span class="ms-text">Bambu Lab’s site: one of the biggest, with lots of multi-color models as 3MF print files. Bambu files open here too: the app converts them for your printer.</span><span class="ms-url">makerworld.com</span></a>
+        <a class="model-site" href="https://www.printables.com" target="_blank" rel="noopener"><span class="ms-top"><b>Printables</b><span class="ms-tag">Big community</span></span><span class="ms-text">Prusa’s site: a large, friendly community with good search, “makes” photos from people who printed each model, and contests.</span><span class="ms-url">www.printables.com</span></a>
+        <a class="model-site" href="https://www.thingiverse.com" target="_blank" rel="noopener"><span class="ms-top"><b>Thingiverse</b><span class="ms-tag">The original</span></span><span class="ms-text">The oldest and one of the largest libraries, with millions of free designs. Many are STL files (see the tip below).</span><span class="ms-url">www.thingiverse.com</span></a>
+        <a class="model-site" href="https://thangs.com" target="_blank" rel="noopener"><span class="ms-top"><b>Thangs</b><span class="ms-tag">Search many sites</span></span><span class="ms-text">Searches models from many sites at once, and can find similar shapes. Free and paid models.</span><span class="ms-url">thangs.com</span></a>
+        <a class="model-site" href="https://www.yeggi.com" target="_blank" rel="noopener"><span class="ms-top"><b>Yeggi</b><span class="ms-tag">Search engine</span></span><span class="ms-text">A search engine for printable models across dozens of sites: handy when you know what you want but not where it is.</span><span class="ms-url">www.yeggi.com</span></a>
+    </div>
+    <h3>Paid models and marketplaces</h3>
+    <div class="model-sites">
+        <a class="model-site" href="https://cults3d.com" target="_blank" rel="noopener"><span class="ms-top"><b>Cults</b><span class="ms-tag">Free and paid</span></span><span class="ms-text">A big marketplace from independent designers: decor, gadgets, cosplay, figures. Lots of free models too.</span><span class="ms-url">cults3d.com</span></a>
+        <a class="model-site" href="https://www.myminifactory.com" target="_blank" rel="noopener"><span class="ms-top"><b>MyMiniFactory</b><span class="ms-tag">Minis and figures</span></span><span class="ms-text">Known for tabletop miniatures and statues, with many models checked for printability. Creators also sell monthly memberships.</span><span class="ms-url">www.myminifactory.com</span></a>
+        <a class="model-site" href="https://www.cgtrader.com/3d-print-models" target="_blank" rel="noopener"><span class="ms-top"><b>CGTrader</b><span class="ms-tag">Pro designs</span></span><span class="ms-text">A large professional 3D marketplace with a section of print-ready models.</span><span class="ms-url">www.cgtrader.com</span></a>
+        <a class="model-site" href="https://www.gambody.com" target="_blank" rel="noopener"><span class="ms-top"><b>Gambody</b><span class="ms-tag">Big display models</span></span><span class="ms-text">Detailed figures and vehicles split into parts that print and fit together well.</span><span class="ms-url">www.gambody.com</span></a>
+        <a class="model-site" href="https://www.patreon.com/search?q=3d%20printing" target="_blank" rel="noopener"><span class="ms-top"><b>Patreon creators</b><span class="ms-tag">Monthly sets</span></span><span class="ms-text">Many designers release a new set of models every month to their supporters, often minis and terrain.</span><span class="ms-url">www.patreon.com</span></a>
+        <a class="model-site" href="https://www.etsy.com/search?q=stl%20files" target="_blank" rel="noopener"><span class="ms-top"><b>Etsy</b><span class="ms-tag">Small shops</span></span><span class="ms-text">Plenty of small designers sell digital STL and 3MF files: search “STL files”.</span><span class="ms-url">www.etsy.com</span></a>
+    </div>
+    <div class="models-tips">
+      <p><b>Tips</b></p>
+      <ul>
+        <li><b>Download the 3MF file</b> when there is one: it keeps the colors, the parts and the plate. Look for a print profile made for the <b>Snapmaker U1</b>, or any 3MF (the app converts Bambu Lab files).</li>
+        <li><b>Only an STL?</b> Open it in Snapmaker Orca, then save the project (File, Save Project) as a 3MF and open that here.</li>
+        <li><b>Check the license.</b> Most models are for personal use only: don’t sell the prints unless the license allows it.</li>
+        <li><b>Look at people’s photos</b> of their prints (“makes”, comments and ratings): a model lots of people printed well is a safe first pick.</li>
+      </ul>
+    </div>
   </dialog>
 
   <dialog id="bookletDialog" class="booklet">

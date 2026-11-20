@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.25.0
+- **Find models**: a new button at the top (and a "Find free models" link where you open a file) lists where to
+  download models to print. **Snapmaker Space**, Snapmaker's own site with ready-to-print U1 files, comes first.
+  Free: MakerWorld, Printables, Thingiverse, Thangs and Yeggi. Paid: Cults, MyMiniFactory, CGTrader, Gambody,
+  Patreon creators and Etsy. Tips cover 3MF vs STL files, licenses, and checking other people's prints.
+  The guided tour shows it too.
+
 ## 2.24.0
 - **Everyone takes the guided tour once**, including people who set the app up before the tour existed. It runs on
   the sample rocket with recorded results, so the first experience is quick and the same for everyone (no waiting

@@ -636,6 +636,11 @@ function showFilament(on) {
   else { SHOP.key = ''; renderShopping(); }   // what's on hand may have changed
 }
 $('glossaryBtn').onclick = () => { glossary.open(); guideEvent('glossary'); };
+// where to download models (links open in the browser through the window-open handler)
+const openModels = () => { if (!$('modelsDialog').open) $('modelsDialog').showModal(); guideEvent('models'); };
+$('modelsBtn').onclick = openModels;
+$('findModelsLink').onclick = (e) => { e.stopPropagation(); openModels(); };
+$('modelsClose').onclick = () => $('modelsDialog').close();
 $('filamentBtn').onclick = () => showFilament(!document.body.classList.contains('filament-open'));
 
 
@@ -1934,6 +1939,7 @@ const GUIDE_STEPS = [
 const DEMO_STEPS = [
   { id: 'open', title: 'Welcome to AI 3D Print Advisor Studio!', text: 'This one-time tour shows how the app works on a sample toy rocket. Everything is recorded from the real app: nothing is sliced, printed or sent to the AI. When you finish, the app unlocks for your own models. Click Open 3MF and choose “Demo Rocket”.', target: () => $('openBtn'), until: 'opened', skipIf: () => !!state.file },
   { id: 'words', title: 'Learn the words as you go', text: 'New to 3D printing? Words with a dotted underline are explained: hover over one to see what it means, with a picture. The Glossary button at the top lists every word with its picture, and you can search it. It’s a great way to learn the terms: have a look now, or anytime.', target: () => $('glossaryBtn'), until: 'glossary' },
+  { id: 'models', title: 'Where to find models', text: 'Click “Find models” at the top: it lists the best sites to download models, free and paid. Snapmaker Space is Snapmaker’s own site for the U1, where every model is a ready-to-print U1 file. Close it when you’re done looking.', target: () => $('modelsBtn'), until: 'models' },
   { id: 'inspect', title: 'Spot the problem', text: 'This rocket was saved lying on its side. Click “Overhangs” above the model: red areas would be printed over thin air and need supports. Drag to rotate, scroll to zoom.', target: () => $('viewerTools') },
   { id: 'orient', title: 'Stand it up', text: 'The Orientation list scores every way to place the model. Pick “Stood upright · lowest risk”: overhangs drop from about 34 cm² to under 1 cm², so it needs no supports.', target: () => sectionOf('orientation'), until: 'oriented' },
   { id: 'toolheads', title: 'Four colors, four toolheads', text: 'Each toolhead (T1–T4) prints one filament: white body, red nose and fins, blue windows, grey nozzle. With your own models you set these to the spools you load.', target: () => sectionOf('toolheads') },
@@ -1969,6 +1975,7 @@ const NEXT_CLICK = {
   open: () => demoPickBtn(0, [$('openBtn'), '“Open 3MF”']),
   makerworld: () => demoPickBtn(1, [$('openBtn'), '“Open 3MF”']),
   words: () => [$('glossaryBtn'), '“Glossary”'],
+  models: () => (openDlg('modelsDialog') ? [$('modelsClose'), '“Close”'] : [$('modelsBtn'), '“Find models”']),
   settings: () => (openDlg('settingsDialog') ? null : [$('settingsBtn'), 'the gear (Settings)']),
   'why-key': () => (openDlg('settingsDialog') ? null : [$('settingsBtn'), 'the gear (Settings)']),
   account: () => (openDlg('settingsDialog') ? null : [$('settingsBtn'), 'the gear (Settings)']),
