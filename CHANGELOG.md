@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.26.0
+- **Share on MakerWorld, easier to find**: "For MakerWorld (Bambu)…" buttons next to Save as 3MF (for the
+  recommendations and for any version in Compare slices), and a "Share on MakerWorld" link under Open in Snapmaker
+  Orca. They save a Bambu Studio project made by Bambu Studio itself (needs Bambu Studio, free from bambulab.com).
+  The printer you pick is remembered.
+- **Color mixes come along**: Snapmaker Orca color mixes become filaments of their own in the blended color, so the
+  model looks the same in Bambu Studio and on MakerWorld. (Before, those areas pointed at filaments the Bambu file
+  didn't have.)
+- **The purge tower fits**: it now goes where it has room to grow, and if the model leaves no room, the model slides
+  forward or back to make space. Before, a busy multi-color model could grow the tower off the bed and Bambu Studio
+  refused to slice it.
+- Fixed Bambu Studio crashing while saving a file with more than the usual number of filaments.
+
 ## 2.25.0
 - **Find models**: a new button at the top (and a "Find free models" link where you open a file) lists where to
   download models to print. **Snapmaker Space**, Snapmaker's own site with ready-to-print U1 files, comes first.

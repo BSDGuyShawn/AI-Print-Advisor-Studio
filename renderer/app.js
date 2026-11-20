@@ -701,30 +701,35 @@ async function closeModel() {
   location.reload();
 }
 // ---------- export for Bambu Lab printers ----------
-async function openBambuExport() {
+async function openBambuExport(pre = null) {
   if (!state.file) { toast('Open a model first.', 3000); return; }
   const dlg = $('bambuDialog');
   $('bxStatus').textContent = 'Looking for Bambu Studio…'; $('bxPrinter').innerHTML = ''; $('bxExport').disabled = true;
-  $('bxVersion').querySelector('[value=recommended]').disabled = !state.result;
-  $('bxVersion').value = state.result ? 'recommended' : 'original';
+  const extra = pre && !['recommended', 'original'].includes(pre) ? variantDef(pre) : null;
+  $('bxVersion').innerHTML = `<option value="recommended" ${state.result ? '' : 'disabled'}>Recommended (the checked settings)</option><option value="original">Original</option>${extra ? `<option value="${esc(extra.id)}">${esc(extra.name)} (from Compare)</option>` : ''}`;
+  $('bxVersion').value = extra ? extra.id : (pre === 'original' || !state.result ? 'original' : 'recommended');
   dlg.showModal();
   const info = await api.bambuInfo().catch(() => ({ found: false }));
   $('bxLocate').classList.toggle('hidden', info.found);
   if (!info.found) { $('bxStatus').textContent = 'Bambu Studio wasn’t found. It’s free from bambulab.com; install it, or locate it if it’s already installed.'; return; }
   const pref = ['Bambu Lab X1 Carbon 0.4 nozzle', 'Bambu Lab P1S 0.4 nozzle', 'Bambu Lab A1 0.4 nozzle'];
   const list = info.printers.filter(n => /0\.4 nozzle/.test(n));
-  $('bxPrinter').innerHTML = list.map(n => `<option ${n === pref.find(p => list.includes(p)) ? 'selected' : ''}>${esc(n)}</option>`).join('');
+  const last = localStorage.getItem('bambuPrinter');
+  const pick = list.includes(last) ? last : pref.find(p => list.includes(p));
+  $('bxPrinter').innerHTML = list.map(n => `<option ${n === pick ? 'selected' : ''}>${esc(n)}</option>`).join('');
   $('bxStatus').textContent = `Using ${info.label} (${info.exe}).`;
   $('bxExport').disabled = false;
 }
 $('bxClose').onclick = () => $('bambuDialog').close();
+$('bambuLeftBtn').onclick = () => openBambuExport();
 $('bxLocate').onclick = async () => { if (await api.bambuLocate()) openBambuExport(); };
 $('bxExport').onclick = async () => {
   const def = variantDef($('bxVersion').value);
+  try { localStorage.setItem('bambuPrinter', $('bxPrinter').value); } catch { /* only a convenience */ }
   $('bxExport').disabled = true; $('bxStatus').textContent = 'Converting and exporting with Bambu Studio… (a minute or two)';
   try {
     const r = await withBusy('bambu', 'Exporting for Bambu Lab…', () => api.exportBambu({ machine: $('bxPrinter').value, changes: def.changes, rotations: def.rotations || state.rotations, plateIndex: state.plateIndex, variantName: def.name, thumbs: fileThumbs() }));
-    if (r) { $('bambuDialog').close(); toast(`Saved the ${r.machine.replace(/ 0\.4 nozzle$/, '')} version (${r.how}). It’s a Bambu Studio project, ready to upload to MakerWorld.`, 9000, () => api.showInFolder(r.path)); }
+    if (r) { $('bambuDialog').close(); toast(`Saved the ${r.machine.replace(/ 0\.4 nozzle$/, '')} version (${r.how})${r.mixes ? `. ${r.mixes === 1 ? 'The color mix is' : `The ${r.mixes} color mixes are`} now ${r.mixes === 1 ? 'a filament' : 'filaments'} of ${r.mixes === 1 ? 'its' : 'their'} own in the blended color, so it needs ${r.filaments} filaments in the AMS` : ''}.${r.moved ? ` The model was moved ${r.moved} mm on the plate to make room for the purge tower.` : ''} It’s a Bambu Studio project, ready to upload to MakerWorld.`, 10000, () => api.showInFolder(r.path)); }
     else $('bxStatus').textContent = '';
   } catch (e) { $('bxStatus').textContent = cleanErr(e); }
   finally { $('bxExport').disabled = false; }
@@ -1183,6 +1188,7 @@ function renderResults() {
       <button class="btn" id="copyBtn" title="Copy a to-do list of these changes, to make them by hand in your slicer">Copy checklist</button>
       <button class="btn" id="presetBtn" title="Optional: save just the settings (without the model) as Orca presets you can import and reuse on other models">Save as Orca presets</button>
       <button class="btn primary" id="saveBtn" title="Save this model with the checked settings built in, as a project file you open in your slicer">Save as 3MF</button>
+      <button class="btn" id="bambuRecBtn" title="Save a Bambu Studio version of this model with these settings, to share on MakerWorld">For MakerWorld (Bambu)…</button>
       <button class="btn primary" id="sendRecBtn" ${state.info.available ? '' : 'disabled title="Set the Snapmaker Orca location in Settings to send prints"'}>Send to printer…</button>
     </div>
     <p class="hint save-hint"><b>Which should I use?</b> <b>Save as 3MF</b> saves this model with the checked settings built in: open it in your slicer and print. That’s all most people need. <b>Orca presets</b> are optional: just the settings, to reuse on other models. To pick a faster or finer version first, use <button class="link" id="toCompare">Compare slices</button>.</p>
@@ -1209,7 +1215,7 @@ function renderResults() {
     renderResults();
   });
   body.querySelectorAll('.setting input').forEach(i => i.addEventListener('input', onRowEdit));
-  $('copyBtn').onclick = copyChecklist; $('presetBtn').onclick = exportPresets; $('saveBtn').onclick = () => { save3mf(); guideEvent('saved'); };
+  $('copyBtn').onclick = copyChecklist; $('presetBtn').onclick = exportPresets; $('saveBtn').onclick = () => { save3mf(); guideEvent('saved'); }; $('bambuRecBtn').onclick = () => openBambuExport('recommended');
   $('toCompare').onclick = () => showTab('compare');
   $('sendRecBtn').onclick = () => openSend('recommended');
   updateCount(); refreshChecks();
@@ -1441,7 +1447,7 @@ function renderCompare() {
     <p class="hint">${esc(hm(sel.timeSeconds))} to print, ${fmt(sel.grams || 0)} g of filament${base && sel.id !== 'original' ? ` (original: ${esc(hm(base.timeSeconds))}, ${fmt(base.grams || 0)} g)` : ''}.</p>
     ${sel.warnings.length ? `<ul class="warn-list">${sel.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
     <h3>Use “${esc(sel.name)}”</h3>
-    <div class="row-btns" id="useButtons"><button class="btn primary" id="save3mfVariant">Save as 3MF</button> <button class="btn" id="sendVariant">Send to printer…</button> <button class="btn" id="orcaVariant">Open in slicer</button></div>
+    <div class="row-btns" id="useButtons"><button class="btn primary" id="save3mfVariant">Save as 3MF</button> <button class="btn" id="sendVariant">Send to printer…</button> <button class="btn" id="orcaVariant">Open in slicer</button> <button class="btn" id="bambuVariant" title="Save a Bambu Studio version of this one, to share on MakerWorld">For MakerWorld (Bambu)…</button></div>
     <p class="hint"><b>Save as 3MF</b> saves the model with this version’s settings built in, ready to open in your slicer and print. <button class="link" id="saveGcode">Save the G-code instead</button> (advanced: the finished print file, only needed to upload to a printer yourself, e.g. with Fluidd or a USB stick).</p>
     <details class="time-details" ${level() >= 3 ? 'open' : ''}><summary>Where the print time goes</summary>
       <div class="feature-bars">${feats.map(f => `<div class="fbar"><span>${esc(f.name)}</span><span class="track"><span class="fill" style="width:${Math.round(f.timeShare * 100)}%"></span></span><span class="n">${Math.round(f.timeShare * 100)}%, ${f.flowP95} mm³/s</span></div>`).join('')}</div>
@@ -1449,6 +1455,7 @@ function renderCompare() {
       ${(sel.corrections || []).length ? `<h3>Fixed automatically</h3><ul class="fix-list">${sel.corrections.map(c => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}
     </details>`;
   $('save3mfVariant').onclick = () => { save3mf(sel.id); guideEvent('saved'); };
+  $('bambuVariant').onclick = () => openBambuExport(sel.id);
   $('sendVariant').onclick = () => { openSend(sel.id); guideEvent('saved'); };
   $('orcaVariant').onclick = () => openInOrca(sel.id);
   $('saveGcode').onclick = async () => {

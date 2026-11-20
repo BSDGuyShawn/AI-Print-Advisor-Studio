@@ -6,8 +6,8 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: t
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' };
 const path = require('path');
 const fs = require('fs/promises');
-const { load3mf, analyzePlate, settingsSummary, buildPresets, applyChanges } = require('./src/threemf');
-const { expand: expandMix, parseMixes } = require('./src/mixed');
+const { load3mf, analyzePlate, settingsSummary, buildPresets, applyChanges, plateMembership, compose, setBuildTransforms } = require('./src/threemf');
+const { expand: expandMix, parseMixes, blendHex } = require('./src/mixed');
 const { getMachine, setMachine } = require('./src/machine');
 const { analyzeWithClaude, buildRows, buildSystemPrompt, buildUserContent } = require('./src/claude');
 const { buildChatPrompt, saveImages, parseChatAnswer } = require('./src/chatmode');
@@ -980,6 +980,66 @@ async function findBambuStudio() {
   const b = installedSlicers().find(x => x.kind === 'bambu-studio');
   return b ? b.exe : null;
 }
+// Put the purge (prime) tower where it has room to grow. Bambu's default spot for the X1 is near the back edge, and a
+// model with many colour changes per layer grows the tower past the bed (Bambu Studio then refuses the G-code). The
+// tower grows toward the back (+Y) from wipe_tower_y. In order of preference: Bambu's spot, the nearest spot where it
+// fits, or sliding the objects forward (or back) to make room. Returns { dx, dy } when the objects should move.
+function placePurgeTower(ps, proj, plateIndex, filamentsUsed = 2) {
+  if (filamentsUsed < 2) return null;
+  const pts = (ps.printable_area || []).map(p => String(p).split('x').map(Number)).filter(p => p.length === 2 && p.every(Number.isFinite));
+  if (pts.length < 3) return null;
+  const W = Math.max(...pts.map(p => p[0])), D = Math.max(...pts.map(p => p[1]));
+  const brim = Number(ps.prime_tower_brim_width) || 3, width = Number(ps.prime_tower_width) || 35;
+  const gap = (Number(ps.brim_width) || 5) + 5, edge = 3;
+  // Bambu Studio 2.x builds a ribbed tower that ends up roughly square, wider and deeper than prime_tower_width:
+  // measured 53-64 mm across with 4 and 7 filaments at 0.08-0.2 mm layers. Plan for a bit more, brim included.
+  const tw = Math.max(width + 2 * brim, 60 + 2 * filamentsUsed), need = tw;
+  const objects = [];
+  const mem = plateMembership(proj);
+  for (const it of proj.items) {
+    const m = mem.get(it.index);
+    if (!m || m.plate !== plateIndex || !m.bbox) continue;
+    objects.push({ x0: m.bbox.x0 - m.rect.x0 - gap, x1: m.bbox.x1 - m.rect.x0 + gap, y0: m.bbox.y0 - m.rect.y0 - gap, y1: m.bbox.y1 - m.rect.y0 + gap });
+  }
+  if (!objects.length) return null;
+  const fixed = [];   // areas the printer can't print on (e.g. the X1's cutter corner)
+  const ex = (ps.bed_exclude_area || []).map(p => String(p).split('x').map(Number)).filter(p => p.length === 2 && p.every(Number.isFinite));
+  if (ex.length >= 3) fixed.push({ x0: Math.min(...ex.map(p => p[0])) - edge, x1: Math.max(...ex.map(p => p[0])) + edge, y0: Math.min(...ex.map(p => p[1])) - edge, y1: Math.max(...ex.map(p => p[1])) + edge });
+  const hit = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+  const fitsAt = (x, y, obs) => x >= edge && x + tw <= W - edge && y >= edge && y + need <= D - edge && !obs.some(o => hit(o, { x0: x, x1: x + tw, y0: y, y1: y + need }));
+  const one = (k) => { const a = [].concat(ps[k]); return Number(a[plateIndex - 1] ?? a[0]); };
+  const curX = one('wipe_tower_x'), curY = one('wipe_tower_y');
+  const setAt = (k, v) => { const a = [].concat(ps[k]); while (a.length < plateIndex) a.push(a[a.length - 1] ?? '0'); a[plateIndex - 1] = String(+v.toFixed(1)); ps[k] = a; };
+  const put = (x, y, why) => { setAt('wipe_tower_x', x + brim); setAt('wipe_tower_y', y + brim); logLine(`bambu export: purge tower at ${Math.round(x + brim)}, ${Math.round(y + brim)} (${why}; about ${Math.round(need)} mm deep)`); };
+  const all = [...objects, ...fixed];
+  if (Number.isFinite(curX) && fitsAt(curX - brim, curY - brim, all)) return null;
+  let best = null;
+  for (let x = edge; x + tw <= W - edge; x += 1) for (let y = edge; y + need <= D - edge; y += 1) {
+    if (!fitsAt(x, y, all)) continue;
+    const dist = Number.isFinite(curX) ? Math.hypot(x + brim - curX, y + brim - curY) : 0;
+    if (!best || dist < best.dist) best = { x, y, dist };
+  }
+  if (best) { put(best.x, best.y, 'beside the model'); return null; }
+  // no room: slide the objects toward the front (tower behind them) or the back (tower in front)
+  const U = objects.reduce((u, o) => ({ x0: Math.min(u.x0, o.x0), x1: Math.max(u.x1, o.x1), y0: Math.min(u.y0, o.y0), y1: Math.max(u.y1, o.y1) }));
+  const tx = Number.isFinite(curX) ? Math.min(Math.max(edge, curX - brim), W - edge - tw) : edge;
+  const options = [];
+  for (const back of [true, false]) {
+    const ty = back ? D - edge - need : edge;
+    for (let x = tx, n = 0; n <= W; n++, x = (tx + n) % (W - tw - edge)) {
+      if (x < edge || !fitsAt(x, ty, fixed)) continue;
+      const dy = back ? ty - U.y1 : ty + need - U.y0;
+      const moved = objects.map(o => ({ ...o, y0: o.y0 + dy, y1: o.y1 + dy }));
+      if (U.y0 + dy < 0 || U.y1 + dy > D || moved.some(o => fixed.some(f => hit(o, f)))) break;
+      options.push({ x, y: ty, dy });
+      break;
+    }
+  }
+  if (!options.length) { logLine('bambu export: no room for the purge tower; left where Bambu put it'); return null; }
+  const o = options.sort((a, b) => Math.abs(a.dy) - Math.abs(b.dy))[0];
+  put(o.x, o.y, `objects moved ${Math.round(Math.abs(o.dy))} mm ${o.dy < 0 ? 'forward' : 'back'}`);
+  return { dx: 0, dy: o.dy };
+}
 ipcMain.handle('bambu-info', async () => { await S.ready;
   const exe = await findBambuStudio();
   if (!exe) return { found: false, printers: [] };
@@ -1008,7 +1068,7 @@ ipcMain.handle('export-bambu', async (_e, { machine, changes, rotations, plateIn
   const slots = (S.slots || [{ slot: 1, type: 'PLA' }]).map(x => ({ slot: x.slot, type: x.type, preset: lib.presetForMaterial(x.type) }));
   const saved = getMachine();
   setMachine(lib.machineFacts());
-  let out, how;
+  let out, how, mixes = [], ps0 = null, moved = 0;
   try {
     progress(`Converting to the ${lib.machine} with ${lib.slicer.label}…`);
     const proj = await load3mf(u1.buffer);
@@ -1020,27 +1080,61 @@ ipcMain.handle('export-bambu', async (_e, { machine, changes, rotations, plateIn
     // keep the U1 version's filament colours, one per filament
     const nFil = Array.isArray(ps.filament_settings_id) ? ps.filament_settings_id.length : 1;
     if (Array.isArray(u1ps.filament_colour)) ps.filament_colour = Array.from({ length: nFil }, (_, i) => u1ps.filament_colour[i] || (Array.isArray(ps.filament_colour) ? ps.filament_colour[Math.min(i, ps.filament_colour.length - 1)] : '#FFFFFF'));
+    // Snapmaker Orca colour mixes become ordinary filaments in the blended colour, numbered straight after the real
+    // ones like the mixes are, so painted areas and parts set to a mix keep their number. (Bambu Studio can blend
+    // too, but with one nozzle every blended layer is a filament swap and purge: a mixed turtle came out at 10 days
+    // and 3 kg on an X1 Carbon. On the U1's four toolheads blending is cheap.)
+    const u1Phys = Array.isArray(u1ps.filament_colour) ? u1ps.filament_colour.length : nFil;
+    mixes = (proj.mixes || []).filter(m => m.parts.length >= 2 && m.parts.every(p => p.slot >= 1 && p.slot <= nFil));
+    if (mixes.length && (u1Phys !== nFil || mixes.some((m, i) => m.id !== nFil + 1 + i))) { logLine('bambu export: colour mixes not numbered after the filaments; left out'); mixes = []; }
+    const nAll = nFil + mixes.length;
+    const srcOf = (i) => (i < nFil ? i : mixes[i - nFil].parts[0].slot - 1);   // a mix borrows its first component's settings
+    let filamentKeys = new Set();
+    try { filamentKeys = new Set(Object.keys(lib.flatten('filament', ps.filament_settings_id[0]))); } catch { /* the name pattern below still covers most */ }
     // every per-filament list must have one entry per filament (Bambu Studio's conversion can leave some at one,
-    // and then refuses to slice once there are two colours)
+    // and then refuses to slice once there are two colours); mixes get one too
     for (const [k, v] of Object.entries(ps)) {
-      if (!Array.isArray(v) || !v.length || v.length >= nFil) continue;
-      if (!/^filament_|^default_filament_colour$/.test(k)) continue;
-      ps[k] = Array.from({ length: nFil }, (_, i) => v[Math.min(i, v.length - 1)]);
+      if (!Array.isArray(v) || !v.length || v.length >= nAll) continue;
+      const perFilament = /^filament_|^default_filament_colour$/.test(k) || (filamentKeys.has(k) && v.length === nFil);
+      if (!perFilament || (v.length > nFil && v.length < nAll)) continue;
+      ps[k] = Array.from({ length: nAll }, (_, i) => v[Math.min(i < v.length ? i : srcOf(i), v.length - 1)]);
+    }
+    if (mixes.length) {
+      const colourOf = (slot) => ps.filament_colour[slot - 1];
+      for (let k = 0; k < mixes.length; k++) ps.filament_colour[nFil + k] = blendHex(mixes[k].parts, colourOf);
+      const per = (v) => Array(nAll).fill(v);
+      Object.assign(ps, { filament_is_mixed: per('0'), filament_mixed_components: per(''), filament_mixed_sublayer_ratios: per(''), filament_mixed_gradient: per('0'), filament_mixed_gradient_range: per(''), filament_mixed_gradient_curve: per(''), filament_mixed_gradient_per_part: per('0') });
+      ps.filament_self_index = Array.from({ length: nAll }, (_, i) => String(i + 1));
+      // these list the process, every filament, then the printer: Bambu Studio crashes if a filament is missing
+      for (const k of ['different_settings_to_system', 'inherits_group']) {
+        const v = ps[k];
+        if (Array.isArray(v) && v.length === nFil + 2) ps[k] = [...v.slice(0, -1), ...Array(mixes.length).fill(''), v[v.length - 1]];
+      }
     }
     // the purge table between filaments must be exactly filaments × filaments (Bambu Studio fails writing the
     // G-code otherwise); keep the existing values for the filaments in use
     if (Array.isArray(ps.flush_volumes_matrix)) {
       const m = Math.round(Math.sqrt(ps.flush_volumes_matrix.length)), old = ps.flush_volumes_matrix;
       ps.flush_volumes_matrix = [];
-      for (let i = 0; i < nFil; i++) for (let j = 0; j < nFil; j++) ps.flush_volumes_matrix.push(i === j ? '0' : (i < m && j < m ? old[i * m + j] : '280'));
+      for (let i = 0; i < nAll; i++) for (let j = 0; j < nAll; j++) ps.flush_volumes_matrix.push(i === j ? '0' : (i < m && j < m ? old[i * m + j] : '280'));
     }
-    if (Array.isArray(ps.flush_volumes_vector)) ps.flush_volumes_vector = Array.from({ length: nFil * 2 }, (_, i) => ps.flush_volumes_vector[Math.min(i, ps.flush_volumes_vector.length - 1)]);
+    if (Array.isArray(ps.flush_volumes_vector)) ps.flush_volumes_vector = Array.from({ length: nAll * 2 }, (_, i) => ps.flush_volumes_vector[Math.min(i, ps.flush_volumes_vector.length - 1)]);
     // the same safety fixes as for the U1, now with the Bambu printer's facts: e.g. a plate type the filaments
     // support (PETG isn't allowed on Cool Plate, which would leave the bed cold)
-    const ba = analyzePlate(await load3mf(base.buffer), plateIndex || 1, {}, { orient: false });
+    const bproj = await load3mf(base.buffer);
+    const ba = analyzePlate(bproj, plateIndex || 1, {}, { orient: false });
     const bfix = withCompat({ baseSettings: { ...ps, __converted: true }, usedSlots: ba.totals.extrudersUsed, objectCount: ba.totals.objectCount });
     applyChanges(ps, bfix.changes);
-    z.file('Metadata/project_settings.config', JSON.stringify(ps, null, 4));
+    try {
+      const shift = placePurgeTower(ps, bproj, plateIndex || 1, ba.totals.extrudersUsed.length);
+      if (shift) {
+        moved = Math.round(Math.abs(shift.dy));
+        const mem = plateMembership(bproj), updates = {};
+        for (const it of bproj.items) if ((mem.get(it.index) || {}).plate === (plateIndex || 1)) updates[it.index] = compose(it.buildTransform, [1, 0, 0, 0, 1, 0, 0, 0, 1, shift.dx, shift.dy, 0]);
+        z.file(bproj.rootPath, setBuildTransforms(await z.file(bproj.rootPath).async('string'), updates));
+      }
+    } catch (e) { logLine('bambu export: purge tower left where it was:', e.message); }
+    z.file('Metadata/project_settings.config', JSON.stringify(ps, null, 4)); ps0 = ps;
     await Slicer.plateBedTypes(z);
     progress('Saving it with Bambu Studio…');
     out = await slicer.exportRoundTrip(await z.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
@@ -1055,7 +1149,7 @@ ipcMain.handle('export-bambu', async (_e, { machine, changes, rotations, plateIn
   const model = await oz.file('3D/3dmodel.model').async('string');
   const application = (/<metadata name="Application">([^<]*)</.exec(model) || [])[1] || null;
   const printer = JSON.parse(await oz.file('Metadata/project_settings.config').async('string')).printer_settings_id;
-  return { path: r.filePath, machine: lib.machine, how, application, printer };
+  return { path: r.filePath, machine: lib.machine, how, application, printer, mixes: mixes.length, moved, filaments: Array.isArray(ps0 && ps0.filament_colour) ? ps0.filament_colour.length : null };
 });
 
 // ---------- filament inventory and colour remix ----------

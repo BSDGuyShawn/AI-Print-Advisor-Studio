@@ -9,7 +9,7 @@ You open a 3D model (a `.3mf` file, like the ones you download from MakerWorld o
 - **asks an AI (Claude) for the right settings** and explains every change in plain words,
 - **shows you what each version will look like**, how strong it will be and how long it takes,
 - **recolors multi-color models** with the filament you actually own,
-- **converts MakerWorld and Bambu Lab files** for your printer,
+- **converts MakerWorld and Bambu Lab files** for your printer, and saves Bambu Studio versions of your U1 models to **share on MakerWorld**,
 - **sends the print to your printer**,
 - and **helps you figure out what went wrong** when a print fails: mark where it failed on the 3D model and get likely causes and fixes.
 

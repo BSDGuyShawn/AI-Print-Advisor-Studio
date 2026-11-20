@@ -105,6 +105,7 @@
         <small class="cost-line" id="analyzeCost"></small>
         <button class="btn wide quick-save" id="quickSaveBtn" title="Convert this model for your printer with the automatic safety fixes and save it, without AI">Convert &amp; save as 3MF (no AI)</button>
         <button class="btn wide orca-btn" id="orcaBtn">Open in Snapmaker Orca</button>
+        <button class="link small" id="bambuLeftBtn" title="Save a Bambu Studio version of this model to share on MakerWorld (needs Bambu Studio, free from bambulab.com)">Share on MakerWorld: save a Bambu Studio version…</button>
         <p class="hint" id="keyHint"></p>
       </section>
     </aside>
@@ -442,7 +443,8 @@
     <div class="bx-body">
       <p>Makes a Bambu Studio project of this model for sharing on MakerWorld. It uses Bambu's own printer, quality and filament presets, keeps your tuned choices (walls, infill, supports, layer height, colors, orientation), and <b>Bambu Studio itself writes the final file</b>, so MakerWorld accepts it.</p>
       <label class="field"><span>Bambu printer</span><select id="bxPrinter"></select></label>
-      <label class="field"><span>Version</span><select id="bxVersion"><option value="recommended">Recommended (the checked settings)</option><option value="original">Original</option></select></label>
+      <label class="field"><span>Version</span><select id="bxVersion"></select></label>
+      <p class="hint">Snapmaker Orca color mixes become <b>a filament of their own in the blended color</b>, so the model looks the same. (Blending them on a Bambu AMS would swap spools on every layer: days longer and kilograms of purge.)</p>
       <p class="hint" id="bxStatus"></p>
       <p class="hint">Not test-printed on that printer? Say so in your MakerWorld description (e.g. “converted from a tested Snapmaker U1 profile”).</p>
       <div class="row-btns"><button class="btn primary" id="bxExport">Export</button> <button class="btn hidden" id="bxLocate">Locate Bambu Studio…</button></div>
