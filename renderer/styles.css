@@ -697,3 +697,6 @@ dialog.models h3 { margin: 16px 0 8px; font-size: 15px; }
 .models-tips p { margin: 0 0 4px; }
 .models-tips ul { margin: 0; padding-left: 18px; }
 .models-tips li { margin: 3px 0; }
+
+/* more solid filaments than toolheads */
+.slot-warn { margin: 8px 0; padding: 8px 10px; font-size: 12.5px; line-height: 1.4; border-left: 3px solid #E0A100; background: rgb(224 161 0 / .12); border-radius: 0 var(--radius-s) var(--radius-s) 0; }

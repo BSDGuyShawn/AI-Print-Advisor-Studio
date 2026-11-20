@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.26.1
+- **Every filament in the file is kept**: a project with more solid filaments than the printer has toolheads (for
+  example 5 colors plus 2 color mixes on the 4-toolhead U1) now shows all of them. Before, the 5th and later were
+  dropped from the list. A note under the toolheads says when there are more filaments than toolheads; that's
+  fine for files shared for Bambu printers with an AMS, which load 16 or more colors. You can also add filaments
+  past the toolhead count.
+
 ## 2.26.0
 - **Share on MakerWorld, easier to find**: "For MakerWorld (Bambu)…" buttons next to Save as 3MF (for the
   recommendations and for any version in Compare slices), and a "Share on MakerWorld" link under Open in Snapmaker

@@ -9,6 +9,8 @@ const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = se
 
 const TYPES = ['PLA', 'PLA Matte', 'PLA Silk', 'PLA-CF', 'PETG', 'PETG-HF', 'PETG-CF', 'PCTG', 'TPU', 'PVA', 'ABS', 'ASA'];
 const DEFAULT_COLORS = ['#2F8F9D', '#E8E4DA', '#C2412D', '#2B3A4A'];
+// filaments a project can list: more than the toolheads is allowed (a Bambu AMS setup loads 16 or more)
+const MAX_FILAMENTS = 32;
 
 const state = {
   file: null, info: { available: false, filaments: [], recipes: [] }, config: {},
@@ -922,7 +924,7 @@ async function loadPlate() {
   api.setAssembly({ assembly: $('fitTogether').checked, guess: state.assemblyGuess }).catch(() => {});
   let added = false;
   for (const e of a.totals.extrudersUsed) {
-    if (e <= 4 && !state.slots.find(s => s.slot === e)) { const type = state.slots[0]?.type || 'PETG'; state.slots.push({ slot: e, type, preset: matchPreset(type), color: DEFAULT_COLORS[(e - 1) % 4] }); added = true; }
+    if (e <= MAX_FILAMENTS && !state.slots.find(s => s.slot === e)) { const type = state.slots[0]?.type || 'PETG'; state.slots.push({ slot: e, type, preset: matchPreset(type), color: DEFAULT_COLORS[(e - 1) % 4] }); added = true; }
   }
   state.slots.sort((x, y) => x.slot - y.slot);
   renderMaterials();
@@ -942,6 +944,7 @@ function presetOptions(sel) {
   for (const f of state.info.filaments) (groups[f.group] ||= []).push(f);
   return Object.entries(groups).map(([g, list]) => `<optgroup label="${esc(g)}">${list.map(f => `<option value="${esc(f.name)}" ${f.name === sel ? 'selected' : ''}>${esc(f.name.replace(/ @U1.*$/, ''))}</option>`).join('')}</optgroup>`).join('');
 }
+const toolheadCount = () => Math.max(1, Number(state.info?.toolheads) || 4);
 function renderMaterials() {
   const used = new Set(state.analysis?.totals.extrudersUsed || [1]);
   const usePresets = state.info.filaments.length > 0;
@@ -966,14 +969,19 @@ function renderMaterials() {
     if (rm) rm.onclick = () => { state.slots = state.slots.filter(s => s !== slot); renderMaterials(); reprepare(); };
     row.querySelector('.sparkle-btn').onclick = () => { slot.sparkle = !sparkles(slot); saveSession(); renderMaterials(); };
   });
-  $('addSlotBtn').classList.toggle('hidden', state.slots.length >= 4);
+  $('addSlotBtn').classList.toggle('hidden', state.slots.length >= MAX_FILAMENTS);
+  $('addSlotBtn').textContent = state.slots.length >= toolheadCount() ? 'Add a filament' : 'Add a toolhead';
+  // more solid filaments than toolheads: allowed, with a warning
+  const extra = state.slots.length - toolheadCount();
+  $('slotWarn').classList.toggle('hidden', !(extra > 0 && toolheadCount() > 1));
+  if (extra > 0) $('slotWarn').innerHTML = `<b>${state.slots.length} solid filaments, but the ${esc(state.info.printerShort || 'printer')} has ${toolheadCount()} toolheads.</b> Filament${extra === 1 ? '' : 's'} ${state.slots.slice(toolheadCount()).map(s => `T${s.slot}`).join(', ')} ${extra === 1 ? 'has' : 'have'} no toolhead of ${extra === 1 ? 'its' : 'their'} own, so check the filament-to-toolhead assignment in Snapmaker Orca before printing it on the ${esc(state.info.printerShort || 'printer')}. That’s fine for a file you’ll share or export for Bambu printers with an AMS, which can load 16 or more colors.`;
   pushColors();
   renderShopping().catch(() => {});
 }
 $('addSlotBtn').onclick = () => {
-  const free = [1, 2, 3, 4].find(n => !state.slots.find(s => s.slot === n));
+  const free = Array.from({ length: MAX_FILAMENTS }, (_, i) => i + 1).find(n => !state.slots.find(s => s.slot === n));
   if (!free) return;
-  state.slots.push({ slot: free, type: 'PLA', preset: matchPreset('PLA'), color: DEFAULT_COLORS[free - 1] });
+  state.slots.push({ slot: free, type: 'PLA', preset: matchPreset('PLA'), color: DEFAULT_COLORS[(free - 1) % DEFAULT_COLORS.length] });
   state.slots.sort((x, y) => x.slot - y.slot);
   renderMaterials(); reprepare();
 };

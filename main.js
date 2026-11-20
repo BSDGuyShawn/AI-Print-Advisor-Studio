@@ -181,6 +181,7 @@ function slicerInfo() {
     available: !!(S.slicer && S.slicer.available), exe: S.slicer ? S.slicer.exe : null, profiles: !!(S.lib && S.lib.available),
     filaments: S.lib && S.lib.available ? S.lib.filamentChoices() : [],
     recipes: recipesFor(S.lib).map(r => ({ id: r.id, name: r.name, range: r.range, about: r.about, layer: r.layer })),
+    toolheads: getMachine().extruders || 4, multiMaterial: getMachine().multiMaterial || 'toolheads', printerShort: getMachine().short || 'printer',
   };
 }
 
@@ -201,9 +202,11 @@ function createWindow() {
   if (fileArg) win.webContents.once('did-finish-load', () => win.webContents.send('open-from-os', fileArg));
 }
 
+const MAX_FILAMENTS = 32;
 function fileFilaments(ps) {
   if (!ps || !Array.isArray(ps.filament_type)) return [];
-  return ps.filament_type.slice(0, 4).map((t, i) => ({
+  // every filament in the file, even more than the toolheads (AMS printers load 16 or more)
+  return ps.filament_type.slice(0, MAX_FILAMENTS).map((t, i) => ({
     slot: i + 1, type: t, color: (Array.isArray(ps.filament_colour) && ps.filament_colour[i]) || '#888888',
     preset: (Array.isArray(ps.filament_settings_id) && ps.filament_settings_id[i]) || '',
   }));
