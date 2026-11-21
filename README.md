@@ -15,13 +15,13 @@ You open a 3D model (a `.3mf` file, like the ones you download from MakerWorld o
 
 It also keeps a **filament library**: every spool you own, with photos, colors, where it's stored and how much is left.
 
-**Made for beginners:** a **guided tour** walks you through everything on a sample model before you open your own. Every recommendation says *why*, so you learn as you go. Words like "brim" or "infill" are explained when you hover over them, the **Glossary** has a picture for every term, and there's a **printable booklet** to keep next to your printer. Not sure where to get models? **Find models** lists the best free and paid sites, starting with **Snapmaker Space** (ready-to-print U1 files). The app **updates itself** with one click.
+**Made for beginners:** an optional **guided tour** walks you through everything on a sample model, and a **sample filament library** lets you see the Filament screen in action before you add your own. Every recommendation says *why*, so you learn as you go. Words like "brim" or "infill" are explained when you hover over them, the **Glossary** has a picture for every term, and there's a **printable booklet** to keep next to your printer. Not sure where to get models? **Find models** lists the best free and paid sites, starting with **Snapmaker Space** (ready-to-print U1 files). The app **updates itself** with one click.
 
 ### Free, with no middleman
 
 - **The app is completely free.** No subscription, no license, no account with the developer, no ads.
 - **For the AI features, your own Anthropic (Claude) API key is highly recommended.** It's pay-as-you-go and inexpensive: most analyses cost a few cents (about $0.04–0.10), so $5 of credit lasts 60 or more. There's no subscription.
-- **You set it up and manage it yourself**, directly with Anthropic (the guided tour shows you how). The app talks straight from your PC to Anthropic: there's no server or person in between, and the developer never sees your key, your models or your data. Your key is stored encrypted on your PC.
+- **You set it up and manage it yourself**, directly with Anthropic (the app shows you how the first time it starts). The app talks straight from your PC to Anthropic: there's no server or person in between, and the developer never sees your key, your models or your data. Your key is stored encrypted on your PC.
 - **Don't want to pay at all?** Use the free **chatbot mode**: the app gives you a prompt to paste into ChatGPT, Claude or Gemini (free plans work) and you paste the answer back.
 
 It's made for the **Snapmaker U1** with **Snapmaker Orca** (Snapmaker's slicer), and it can also save projects for **Bambu Lab** printers to share on MakerWorld.
@@ -51,8 +51,9 @@ It's made for the **Snapmaker U1** with **Snapmaker Orca** (Snapmaker's slicer),
 3. Right-click the zip → **Properties** → tick **Unblock** → **OK**. (This stops the "Windows protected your PC" warning. No Unblock box? Skip this step.)
 4. Right-click the zip → **Extract All…**. Pick a place you'll find again, like your **Documents** folder.
 5. Open the folder and double-click **`AI 3D Print Advisor Studio.exe`**, the only program in it. Leave the `app` folder next to it. (Tip: right-click it → **Send to → Desktop (create shortcut)**.)
-6. **The first time, a guided tour starts** (about 10 minutes). It walks you through every feature on a sample toy rocket, with results recorded from the real app: nothing is sliced, printed or sent to the AI, and nothing is set up yet. It also shows you the Glossary for learning the words, then sets up the real app with you: an Anthropic account and an API key just for this app (or the free chatbot instead), and finding Snapmaker Orca. Click **Finish the tour** at the end: the app restarts and is ready for your own models, with an empty filament library. The tour only runs once (you can take it again from Settings).
-7. Click the **gear** (top right) to add your API key (if you didn't during the tour) and your printers.
+6. **The first time, the app asks how much 3D printing experience you have.** If you're new to it, it offers a **guided tour** (about 10 minutes, optional): every feature on a sample toy rocket, with results recorded from the real app, so nothing is sliced, printed or sent to the AI. Leave it anytime with **Exit the tour**, or take it later from Settings.
+7. **A short setup window** then helps with the two things the app needs: the AI (an Anthropic API key just for this app, or the free chatbot instead) and Snapmaker Orca. Click **Later** to do it in Settings (the gear, top right), where you also add your printers.
+8. **The first time you open Filament**, choose to **explore the sample library** (a real collection of about 240 spools with photos) or **start with an empty one**. When you're done exploring, remove the samples in Settings (Filament library): anything you added yourself stays.
 
 > **Windows may show "Windows protected your PC."** That's normal for free apps from small developers that haven't paid for a code-signing certificate. Click **More info**, then **Run anyway**. To avoid the warning altogether, do the **Unblock** step above before extracting. If you'd like to check the files first, see [Is it safe?](#is-it-safe) below.
 
@@ -119,7 +120,7 @@ Found a security problem? See [SECURITY.md](SECURITY.md).
 - AI requests go straight from your computer to `api.anthropic.com` with your key. Printer requests go to your printers' local addresses.
 - **Run from source**: install [Node.js](https://nodejs.org/) 22+, then `npm install` and `npm start` in this folder (Electron 45).
 - **Build the release folders** (Windows): `python tools/build_release.py --electron <official Electron build, unzipped> --rcedit <rcedit.exe> --out <folder> …`; see the notes at the top of the script. Releases use Electron's own published Windows build (checksum-verified).
-- The first-launch guided tour replays answers recorded from the real app (`preload-demo.js`); the sample rocket is generated by `tools/make_demo_rocket.py` and is public domain (CC0).
+- The optional guided tour replays answers recorded from the real app (`preload-demo.js`); the sample rocket is generated by `tools/make_demo_rocket.py` and is public domain (CC0).
 
 ## License
 

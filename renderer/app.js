@@ -643,7 +643,67 @@ const openModels = () => { if (!$('modelsDialog').open) $('modelsDialog').showMo
 $('modelsBtn').onclick = openModels;
 $('findModelsLink').onclick = (e) => { e.stopPropagation(); openModels(); };
 $('modelsClose').onclick = () => $('modelsDialog').close();
-$('filamentBtn').onclick = () => showFilament(!document.body.classList.contains('filament-open'));
+$('filamentBtn').onclick = async () => {
+  const opening = !document.body.classList.contains('filament-open');
+  if (opening && !(await filamentIntro())) return;
+  showFilament(opening);
+};
+// The first time Filament is opened with an empty library: explore the sample library, or start empty.
+// Returns false when the window is closed without a choice (nothing opens).
+function filamentIntro() {
+  const c = state.config || {}, sm = c.samples || {};
+  if (api.demo || c.filamentIntroDone) return Promise.resolve(true);
+  const done = () => { c.filamentIntroDone = true; api.setConfig({ filamentIntroDone: true }).catch(() => {}); };
+  if (!sm.available || !sm.empty) { done(); return Promise.resolve(true); }
+  return new Promise((resolve) => {
+    const dlg = $('filIntroDialog');
+    let chose = false;
+    $('filIntroSamples').onclick = async () => {
+      chose = true; $('filIntroSamples').disabled = true;
+      try { c.samples = await api.filamentSamples('load'); toast('Sample library loaded. Remove it anytime in Settings (Filament library).', 6000); }
+      catch (e) { toast(`Couldn’t load the sample library: ${cleanErr(e)}`, 7000); }
+      $('filIntroSamples').disabled = false; done(); dlg.close(); resolve(true);
+    };
+    $('filIntroEmpty').onclick = () => { chose = true; done(); dlg.close(); resolve(true); };
+    dlg.addEventListener('close', () => { if (!chose) resolve(false); }, { once: true });
+    dlg.showModal();
+  });
+}
+// Load or remove the sample library. The Filament screen is closed first, so a save from it can't bring the
+// samples back, and reopened afterwards if it was showing.
+async function sampleAction(action) {
+  const open = document.body.classList.contains('filament-open');
+  const f = $('filamentView').querySelector('iframe');
+  if (f) { f.remove(); await new Promise(r => setTimeout(r, 400)); }
+  try {
+    state.config.samples = await api.filamentSamples(action);
+    state.config.filamentIntroDone = true; api.setConfig({ filamentIntroDone: true }).catch(() => {});
+    toast(action === 'clear' ? 'Sample filament removed. Your library is ready for your own spools.' : 'Sample library loaded. Click “Filament” at the top to explore it.', 6000);
+  } catch (e) { toast(cleanErr(e), 7000); }
+  if (open) showFilament(true);
+  renderSamples();
+}
+function renderSamples() {
+  const sm = (state.config && state.config.samples) || {};
+  const show = !api.demo && sm.available && (sm.loaded || sm.empty);
+  $('sampleField').classList.toggle('hidden', !show);
+  $('sampleConfirm').classList.add('hidden');
+  $('sampleBtn').classList.remove('hidden');
+  if (!show) return;
+  if (sm.loaded) {
+    $('sampleText').textContent = 'The sample filament library is loaded, so you can see what the Filament screen does. When you’re done exploring, remove it to start your own. Anything you added yourself stays.';
+    $('sampleBtn').textContent = 'Remove the sample filament…';
+  } else {
+    $('sampleText').textContent = 'Your filament library is empty. Want to see what it can do first? Load the sample library (about 240 spools with photos), then remove it here when you’re done.';
+    $('sampleBtn').textContent = 'Load the sample library';
+  }
+}
+$('sampleBtn').onclick = () => {
+  if ((state.config.samples || {}).loaded) { $('sampleConfirm').classList.remove('hidden'); $('sampleBtn').classList.add('hidden'); }
+  else sampleAction('load');
+};
+$('sampleNo').onclick = () => renderSamples();
+$('sampleYes').onclick = () => sampleAction('clear');
 
 
 // rough cost of getting recommendations, shown under the button
@@ -1952,7 +2012,7 @@ const GUIDE_STEPS = [
 // The guided tour (api.demo, the first launch): the sample rocket through every feature, with recorded results.
 // Finishing it unlocks the app for your own models (api.finishTour).
 const DEMO_STEPS = [
-  { id: 'open', title: 'Welcome to AI 3D Print Advisor Studio!', text: 'This one-time tour shows how the app works on a sample toy rocket. Everything is recorded from the real app: nothing is sliced, printed or sent to the AI. When you finish, the app unlocks for your own models. Click Open 3MF and choose “Demo Rocket”.', target: () => $('openBtn'), until: 'opened', skipIf: () => !!state.file },
+  { id: 'open', title: 'Welcome to AI 3D Print Advisor Studio!', text: 'This tour shows how the app works on a sample toy rocket. Everything is recorded from the real app: nothing is sliced, printed or sent to the AI. Leave it anytime with “Exit the tour” at the bottom right. Click Open 3MF and choose “Demo Rocket”.', target: () => $('openBtn'), until: 'opened', skipIf: () => !!state.file },
   { id: 'words', title: 'Learn the words as you go', text: 'New to 3D printing? Words with a dotted underline are explained: hover over one to see what it means, with a picture. The Glossary button at the top lists every word with its picture, and you can search it. It’s a great way to learn the terms: have a look now, or anytime.', target: () => $('glossaryBtn'), until: 'glossary' },
   { id: 'models', title: 'Where to find models', text: 'Click “Find models” at the top: it lists the best sites to download models, free and paid. Snapmaker Space is Snapmaker’s own site for the U1, where every model is a ready-to-print U1 file. Close it when you’re done looking.', target: () => $('modelsBtn'), until: 'models' },
   { id: 'inspect', title: 'Spot the problem', text: 'This rocket was saved lying on its side. Click “Overhangs” above the model: red areas would be printed over thin air and need supports. Drag to rotate, scroll to zoom.', target: () => $('viewerTools') },
@@ -1964,7 +2024,7 @@ const DEMO_STEPS = [
   { id: 'compare', title: 'Compare versions', text: 'Open “Compare slices”, click “Slice and compare”, then click a version to see how it will look, how strong it is and how long it takes.', target: () => document.querySelector('[data-tab=compare]'), until: 'compare-picked' },
   { id: 'finish', title: 'Save it or print it', text: '“Save as 3MF” keeps the model with these settings and “Send to printer…” prints it on your printer. In the tour they explain instead. Try “Send to printer…” to see the printer picker.', target: () => $('useButtons') || $('saveBtn') },
   { id: 'remix', title: 'Color remix', text: 'Click “Color remix…”: Identify parts with AI, Confirm parts, then Generate. Each scheme uses filament from your library. Apply “Deep Space Cruiser” to repaint the rocket.', target: () => $('remixBtn'), until: 'remixed' },
-  { id: 'filament', title: 'Your filament library', text: 'Click “Filament” at the top right: the library Color remix picks from, with photos, spools, locations and print settings. This is a sample library; yours starts empty after the tour.', target: () => $('filamentBtn'), until: 'filament' },
+  { id: 'filament', title: 'Your filament library', text: 'Click “Filament” at the top right: the library Color remix picks from, with photos, spools, locations and print settings. This is a sample library. After the tour, the first time you open Filament you can keep exploring it or start your own.', target: () => $('filamentBtn'), until: 'filament' },
   { id: 'history', title: 'When a print fails', text: 'Click “Back to model”, open “Print history” and click “Troubleshoot…” on the cancelled “Demo Rocket” print, then run it. The AI explains what went wrong and what to change.', target: () => document.querySelector('[data-tab=history]'), until: 'troubleshot' },
   { id: 'makerworld', title: 'MakerWorld files on a U1 (optional)', text: 'Using a Snapmaker U1 or another non-Bambu printer? Click Open 3MF and choose “Demo Rocket (MakerWorld version)” to see the app convert a Bambu Lab file. Bambu Lab owners open MakerWorld files as they are.', target: () => $('openBtn') },
   { id: 'limits', title: 'What no app can control', text: 'Settings are only part of a good print. Damp filament, a cold or drafty room and temperature swings, the type and brand of filament, and a dirty bed or a printer that needs calibrating can still spoil a print, however good the settings. AI can also make mistakes, especially with little to go on, so tell it what the part is for and read the changes. “Good to know” under every set of recommendations lists what to look after, and the Glossary window has printable cheat sheets (a 1-page sheet and a booklet) to keep next to your printer.', target: () => $('glossaryBtn') },
@@ -1975,7 +2035,7 @@ const DEMO_STEPS = [
     doneIf: () => tourAiReady() || (openDlg('settingsDialog') && ($('apiKey').value.trim().length > 20 || (document.querySelector('input[name=aiMode]:checked') || {}).value === 'chat')) },
   { id: 'slicer', title: 'Set up: Snapmaker Orca', text: 'The app slices with Snapmaker Orca, the free slicer for the U1, to measure your models and compare versions. It needs to be installed on this PC, and the app needs to know where. If the “Snapmaker Orca program” box below shows it was found, you’re fine. If not, install it (link below) and click Browse to pick snapmaker-orca.exe. Then click “Save settings”.', links: [['Download Snapmaker Orca', 'https://github.com/Snapmaker/OrcaSlicer/releases/latest']], target: () => $('slicerPath'),
     doneIf: () => !openDlg('settingsDialog') && tourSlicerReady() },
-  { id: 'done', title: 'You’re ready!', text: 'Click “Finish the tour” to start the real app. It restarts once in normal mode: every click is real (Snapmaker Orca slices your models, Claude reviews them), and your filament library starts empty. Nothing from the tour is kept except what you just set up. You can take this tour again from Settings.' },
+  { id: 'done', title: 'You’re ready!', text: 'Click “Finish the tour” to go back to the app. It restarts once in normal mode: every click is real (Snapmaker Orca slices your models, Claude reviews them). Nothing from the tour is kept except what you just set up. You can take this tour again from Settings.' },
 ];
 if (api.demo) GUIDE_STEPS.splice(0, GUIDE_STEPS.length, ...DEMO_STEPS);
 
@@ -2146,27 +2206,22 @@ function guideEvent(name) {
   if (ahead > 0) { GUIDE.i = ahead + 1; renderGuide(); }
   else if (name === 'analyzed') { const review = GUIDE_STEPS.findIndex(x => x.id === 'review'); if (GUIDE.i < review) { GUIDE.i = review; renderGuide(); } }
 }
-// The tour unlocks the real app only once the AI is set up (a saved key, or the free chatbot chosen) and
-// Snapmaker Orca is found (or the user says they'll install it later)
+// The tour's last steps help set up the AI (a saved key, or the free chatbot) and Snapmaker Orca. Finishing is
+// never blocked: anything not set up is offered again when the app starts.
 const tourAiReady = () => !!(state.config.realHasKey || state.config.realAiMode === 'chat');
 const tourSlicerReady = () => !!((state.config.realSlicer || {}).available || GUIDE.slicerLater);
 function gateFinish() {
   const ai = tourAiReady(), sl = tourSlicerReady();
-  $('guideNext').disabled = !(ai && sl);
-  const why = !ai ? 'To finish, add your API key in Settings and click Save settings (or choose Free chatbot). Use Back to see how.'
-    : !sl ? 'Snapmaker Orca wasn’t found. Set its location in Settings (Back shows how), or finish now and set it later.' : '';
+  $('guideNext').disabled = false;
+  const why = !ai ? 'The AI isn’t set up yet (Back shows how). You can finish anyway and set it up when the app starts.'
+    : !sl ? 'Snapmaker Orca wasn’t found. Set its location in Settings (Back shows how), or finish now and set it up when the app starts.' : '';
   if ($('guideWait').textContent !== why) $('guideWait').textContent = why;
   $('guideWait').classList.toggle('hidden', !why);
-  let later = $('guideSlicerLater');
-  if (ai && !sl && !later) {
-    later = document.createElement('button'); later.id = 'guideSlicerLater'; later.className = 'link'; later.textContent = 'Finish now, set up Snapmaker Orca later (slicing stays off until then)';
-    later.onclick = () => { GUIDE.slicerLater = true; later.remove(); gateFinish(); };
-    $('guideWait').after(later);
-  } else if (later && (sl || !ai)) later.remove();
+  const later = $('guideSlicerLater'); if (later) later.remove();
 }
 $('guideNext').onclick = () => {
   if (GUIDE_STEPS[GUIDE.i].id === 'done') {
-    if (api.tour) { if (!(tourAiReady() && tourSlicerReady())) { gateFinish(); return; } $('guideNext').disabled = true; $('guideNext').textContent = 'Starting the app…'; api.finishTour(); return; }
+    if (api.tour) { $('guideNext').disabled = true; $('guideNext').textContent = 'Starting the app…'; api.finishTour(); return; }
     stopGuide(true); return;
   }
   GUIDE.i++; renderGuide();
@@ -2179,8 +2234,9 @@ $('guideBtn').onclick = () => (GUIDE.on ? stopGuide() : startGuide(state.result 
 function maybeWelcome() {
   applyLevel();
   if (state.config.experience != null) {
-    if ((level() <= 1 || api.demo) && !state.config.guideDone && !GUIDE.on) startGuide(state.result ? GUIDE_STEPS.findIndex(x => x.id === 'review') : state.file ? 1 : 0);
-    return Promise.resolve();
+    return firstSetup().then(() => {
+      if ((level() <= 1 || api.demo) && !state.config.guideDone && !GUIDE.on) startGuide(state.result ? GUIDE_STEPS.findIndex(x => x.id === 'review') : state.file ? 1 : 0);
+    });
   }
   return new Promise((resolve) => {
     const dlg = $('welcomeDialog');
@@ -2189,11 +2245,65 @@ function maybeWelcome() {
       state.config.experience = xp;
       await api.setConfig({ experience: xp }).catch(() => {});
       applyLevel(); dlg.close();
+      // beginners are offered the guided tour (once); everyone else never sees it
+      if (xp <= 1 && await offerTour()) { resolve(); return; }
+      await firstSetup();
       if (xp <= 1 || api.demo) startGuide(state.file ? 1 : 0);
       else toast(xp === 3 ? 'Expert mode: tips are hidden and technical details shown. Change it anytime in Settings.' : 'Tips are on (the “?” buttons). Click “Guide” at the top for a step-by-step walkthrough anytime.', 6000);
       resolve();
     });
     dlg.addEventListener('cancel', (e) => e.preventDefault(), { once: true }); // a choice is needed; any choice is fine
+    dlg.showModal();
+  });
+}
+
+// The optional guided tour, offered once to beginners. true = they chose it (the app restarts into it).
+function offerTour() {
+  if (api.demo || !state.config.tourAvailable || state.config.tourOffered) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const dlg = $('tourOfferDialog');
+    state.config.tourOffered = true;
+    api.setConfig({ tourOffered: true }).catch(() => {});
+    $('tourOfferYes').onclick = () => { $('tourOfferYes').disabled = true; $('tourOfferYes').textContent = 'Starting the tour…'; api.restartTour(); resolve(true); };
+    $('tourOfferNo').onclick = () => { dlg.close(); resolve(false); };
+    dlg.addEventListener('cancel', (e) => { e.preventDefault(); dlg.close(); resolve(false); }, { once: true });
+    dlg.showModal();
+  });
+}
+// Once, after the experience question: the AI (own key or free chatbot) and Snapmaker Orca, whatever isn't set
+// up yet. "Later" is fine: Settings has both.
+function firstSetup() {
+  const c = state.config;
+  if (api.demo || c.setupOffered) return Promise.resolve();
+  const needAi = c.aiMode !== 'chat' && !c.hasKey, needSlicer = !(state.info && state.info.available);
+  const mark = () => { c.setupOffered = true; return api.setConfig({ setupOffered: true }).catch(() => {}); };
+  if (!needAi && !needSlicer) { mark(); return Promise.resolve(); }
+  return new Promise((resolve) => {
+    const dlg = $('setupDialog');
+    $('suAi').classList.toggle('hidden', !needAi);
+    $('suSlicerBox').classList.toggle('hidden', !needSlicer);
+    $('suKey').value = ''; $('suSlicer').value = c.slicerPath || '';
+    const sync = () => { $('suKey').disabled = (document.querySelector('input[name=suMode]:checked') || {}).value === 'chat'; };
+    document.querySelectorAll('input[name=suMode]').forEach(r => { r.onchange = sync; }); sync();
+    $('suBrowse').onclick = async () => { const p = await api.browseSlicer(); if (p) $('suSlicer').value = p; };
+    const finish = async (save) => {
+      const patch = { setupOffered: true };
+      if (save && needAi) {
+        patch.aiMode = (document.querySelector('input[name=suMode]:checked') || {}).value || 'api';
+        if (patch.aiMode === 'api' && $('suKey').value.trim()) patch.apiKey = $('suKey').value.trim();
+      }
+      if (save && needSlicer && $('suSlicer').value.trim()) patch.slicerPath = $('suSlicer').value.trim();
+      $('suSave').disabled = true;
+      try { await api.setConfig(patch); await loadConfig(); } catch (e) { toast(cleanErr(e), 6000); }
+      $('suSave').disabled = false;
+      c.setupOffered = true; dlg.close();
+      const left = [state.config.aiMode !== 'chat' && !state.config.hasKey ? 'the AI' : '', !(state.info && state.info.available) ? 'Snapmaker Orca' : ''].filter(Boolean);
+      toast(left.length ? `You can set up ${left.join(' and ')} anytime in Settings (the gear, top right).` : 'All set. Open a 3MF file to get started.', 6000);
+      resolve();
+    };
+    $('suSave').onclick = () => finish(true);
+    $('suLater').onclick = () => finish(false);
+    dlg.addEventListener('cancel', (e) => { e.preventDefault(); finish(false); }, { once: true });
     dlg.showModal();
   });
 }
@@ -2257,6 +2367,7 @@ function openSettings() {
     $('slicerPath').placeholder = rs.detected ? `Detected: ${rs.detected}` : 'Not found. Install it, then Browse to snapmaker-orca.exe';
     $('slicerStatus').textContent = rs.available ? `Found: ${rs.exe || rs.detected}. You’re set.` : 'Not found on this PC yet. Install Snapmaker Orca, then click Browse.';
   }
+  renderSamples();
   $('printerRows').innerHTML = '';
   (state.config.printers.length ? state.config.printers : [{}]).forEach(p => addPrinterRow(p));
   $('discoverResults').innerHTML = ''; $('discoverStatus').textContent = '';
@@ -2343,8 +2454,13 @@ $('updateCheckBtn').onclick = async () => {
 function offerBooklet() {
   if (!state.config.offerBooklet || api.tour || $('bookletDialog').open) return;
   state.config.offerBooklet = false;
-  api.setConfig({ bookletOffered: true }).catch(() => {});
-  setTimeout(() => { if (!document.querySelector('dialog[open]')) $('bookletDialog').showModal(); else state.config.offerBooklet = true; }, 1500);
+  // wait until no other window (setup, filament library…) is open, then offer it once
+  const tryShow = () => {
+    if (document.querySelector('dialog[open]')) { setTimeout(tryShow, 2000); return; }
+    api.setConfig({ bookletOffered: true }).catch(() => {});
+    $('bookletDialog').showModal();
+  };
+  setTimeout(tryShow, 1500);
 }
 $('bookletLater').onclick = () => $('bookletDialog').close();
 $('bookletOpen').onclick = () => { openCheatSheet('booklet'); $('bookletDialog').close(); };

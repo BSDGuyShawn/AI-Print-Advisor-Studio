@@ -17,6 +17,8 @@ const PHOTO_EXT = /\.(jpe?g|png|webp|gif)$/i;
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const day = () => new Date().toISOString().slice(0, 10);
 
+// one line of a purchase, for telling sample orders apart from your own
+const orderKey = (o) => JSON.stringify([o.asin, o.date, o.brand, o.line, o.grams, o.colors]);
 class FilamentStore {
   constructor(userData) {
     this.dir = path.join(userData, 'filament');
@@ -64,6 +66,80 @@ class FilamentStore {
     await fsp.copyFile(cur, target);
     const daily = (await fsp.readdir(this.backupsDir)).filter(n => /^state-\d{4}-\d{2}-\d{2}\.json$/.test(n)).sort();
     for (const old of daily.slice(0, Math.max(0, daily.length - KEEP_DAILY))) await fsp.unlink(path.join(this.backupsDir, old)).catch(() => {});
+  }
+
+  // ---------- the sample library ----------
+  // Empty: no spools, no filament of your own and no imported orders.
+  isEmpty() {
+    const { catalog, state } = this.load();
+    return !catalog.orders.length && (!state || (!Object.keys(state.spools || {}).length && !(state.custom || []).length));
+  }
+  sampleStatus(sampleDir) {
+    const available = fs.existsSync(path.join(sampleDir, 'catalog.json'));
+    return { available, loaded: fs.existsSync(this.file('samples.json')), empty: this.isEmpty() };
+  }
+  // Copy the sample library in (only into an empty library) and remember what's sample, so it can be removed
+  // later without touching anything added since.
+  async loadSamples(sampleDir) {
+    if (!fs.existsSync(path.join(sampleDir, 'catalog.json'))) throw new Error('this version has no sample library.');
+    if (!this.isEmpty()) throw new Error('your filament library already has filament in it.');
+    await this.writing;
+    await fsp.mkdir(this.imagesDir, { recursive: true });
+    const catalog = JSON.parse(await fsp.readFile(path.join(sampleDir, 'catalog.json'), 'utf8'));
+    // the tour's placeholder shop links go nowhere: without them the screen links the public product page
+    for (const o of catalog.orders || []) if (/^https?:\/\/demo\.invalid(\/|$)/i.test(o.url || '')) delete o.url;
+    let state = null;
+    try { state = JSON.parse(await fsp.readFile(path.join(sampleDir, 'state.json'), 'utf8')); } catch {}
+    const images = fs.existsSync(path.join(sampleDir, 'images')) ? await fsp.readdir(path.join(sampleDir, 'images')) : [];
+    for (const n of images) await fsp.copyFile(path.join(sampleDir, 'images', n), path.join(this.imagesDir, n));
+    await this.writeAtomic('catalog.json', JSON.stringify(catalog));
+    if (state) await this.writeAtomic('state.json', JSON.stringify(state)); else await fsp.unlink(this.file('state.json')).catch(() => {});
+    await fsp.unlink(this.file('stock.json')).catch(() => {});   // the Filament screen writes it when it opens
+    const spools = Object.values((state && state.spools) || {});
+    await this.writeAtomic('samples.json', JSON.stringify({
+      orders: (catalog.orders || []).map(orderKey), images,
+      spoolIds: spools.map(s => s.id), fids: [...new Set(spools.map(s => s.fid))], customIds: ((state && state.custom) || []).map(c => c.id),
+    }));
+  }
+  // Remove the sample filament: its orders, spools, filaments and photos. Anything added since stays.
+  async clearSamples() {
+    const marks = this.readJson('samples.json', null);
+    if (!marks) return;
+    await this.writing;
+    const { catalog, state } = this.load();
+    const sampleOrders = new Set(marks.orders || []), fids = new Set([...(marks.fids || []), ...(marks.customIds || [])]);
+    const spoolIds = new Set(marks.spoolIds || []);
+    // a copy of everything first, just in case
+    await fsp.mkdir(this.backupsDir, { recursive: true });
+    if (state) await fsp.writeFile(path.join(this.backupsDir, `state-before-removing-samples-${day()}.json`), JSON.stringify(state));
+    const orders = catalog.orders.filter(o => !sampleOrders.has(orderKey(o)));
+    await this.writeAtomic('catalog.json', JSON.stringify({ orders, prices: orders.length ? catalog.prices : {} }));
+    let keep = null;
+    if (state) {
+      const spools = Object.fromEntries(Object.entries(state.spools || {}).filter(([id, s]) => !spoolIds.has(id) && !fids.has(s.fid)));
+      const custom = (state.custom || []).filter(c => !fids.has(c.id));
+      if (Object.keys(spools).length || custom.length) {
+        const fil = Object.fromEntries(Object.entries(state.fil || {}).filter(([fid]) => !fids.has(fid)));
+        keep = { ...state, spools, custom, fil, deletedSrc: [] };
+      }
+    }
+    if (keep) {
+      await this.writeAtomic('state.json', JSON.stringify(keep));
+      // what's on hand, minus the samples (the Filament screen rewrites it in full when it opens)
+      const stock = this.readJson('stock.json', null);
+      if (stock && Array.isArray(stock.filaments)) {
+        stock.filaments = stock.filaments.filter(f => !fids.has(f.id));
+        stock.total = Object.keys(keep.spools).length;
+        await this.writeAtomic('stock.json', JSON.stringify(stock, null, 1));
+      }
+    } else {
+      // nothing of your own: back to a brand-new library (the Filament screen starts a fresh one)
+      await fsp.unlink(this.file('state.json')).catch(() => {});
+      await fsp.unlink(this.file('stock.json')).catch(() => {});
+    }
+    const still = keep ? JSON.stringify(keep) : '';
+    for (const n of marks.images || []) if (!still.includes(n)) await fsp.unlink(path.join(this.imagesDir, n)).catch(() => {});
+    await fsp.unlink(this.file('samples.json')).catch(() => {});
   }
 
   // What's on hand, in the shape Color remix and the shopping check use (the same as the old page's

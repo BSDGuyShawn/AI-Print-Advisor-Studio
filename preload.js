@@ -95,6 +95,7 @@ contextBridge.exposeInMainWorld('advisor', {
   showInFolder: (p) => ipcRenderer.invoke('show-in-folder', p),
   browseSlicer: () => ipcRenderer.invoke('browse-slicer'),
   restartTour: () => ipcRenderer.invoke('tour-restart'),
+  filamentSamples: (action) => ipcRenderer.invoke('filament-samples', action),
   openCheatSheet: (which) => ipcRenderer.invoke('open-cheatsheet', which),
   saveCheatSheet: (which) => ipcRenderer.invoke('save-cheatsheet', which),
   updateCheck: () => ipcRenderer.invoke('update-check'),

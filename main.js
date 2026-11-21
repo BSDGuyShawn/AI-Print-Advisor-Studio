@@ -40,9 +40,10 @@ const AI_FEATURES = { 'run-claude': 'Recommendations', 'parts-identify': 'Color 
 }
 
 // The guided tour: the app ships a demo/ folder (recorded results on a sample model, made by
-// tools/build_release.py). On the first launch the window uses preload-demo.js, which replays those answers:
-// nothing is sliced, saved, sent or asked of the AI, and filament edits stay in memory. Finishing the tour sets
-// tourDone in the settings and restarts the app normally (see decideTour and 'tour-finish').
+// tools/build_release.py). It's optional: beginners are offered it once after the first-launch experience
+// question, and anyone can start it from Settings. That sets tourRequested and restarts the app with
+// preload-demo.js, which replays those answers: nothing is sliced, saved, sent or asked of the AI, and filament
+// edits stay in memory. Finishing (or leaving) the tour restarts the app normally (see decideTour and 'tour-finish').
 const TOUR_DATA = require('fs').existsSync(path.join(__dirname, 'demo', 'recording.json'));
 let DEMO = false;   // this run is the tour
 // For testing only: run against a separate data folder so a test never touches your settings or filament.
@@ -80,15 +81,13 @@ if (!process.env.AIPA_USER_DATA) migrateFromOldName();   // a test data folder s
 Spend.init(app.getPath('userData'), (e, s) => { if (win && !win.isDestroyed()) win.webContents.send('spend', { usd: e.usd, feature: e.feature, month: s.month }); });
 
 const CONFIG_PATH = () => path.join(app.getPath('userData'), 'config.json');
-// Tour or not: once per launch. Runs until it's finished (tourDone true); Settings can ask for it again.
+// Tour or not: once per launch. Only when it was asked for (the first-launch offer or Settings).
 function decideTour() {
   if (!TOUR_DATA) return false;
   if (process.env.AIPA_TOUR) return process.env.AIPA_TOUR === '1';
   let cfg = {};
   try { cfg = JSON.parse(require('fs').readFileSync(CONFIG_PATH(), 'utf8')); } catch {}
-  // everyone takes it once, also people who used the app before the tour existed: it ends with the AI and
-  // slicer setup, and opening a big model of your own first can make a slow first impression
-  return cfg.tourDone !== true;
+  return cfg.tourRequested === true;
 }
 async function readConfig() { try { return JSON.parse(await fs.readFile(CONFIG_PATH(), 'utf8')); } catch { return {}; } }
 async function writeConfig(cfg) { await fs.mkdir(path.dirname(CONFIG_PATH()), { recursive: true }); await fs.writeFile(CONFIG_PATH(), JSON.stringify(cfg, null, 2)); }
@@ -1163,6 +1162,16 @@ const Parts = require('./src/parts');
 const GcodeCompat = require('./src/gcodecompat');
 const { FilamentStore } = require('./src/filament');
 const Fil = new FilamentStore(app.getPath('userData'));
+// the sample filament library (from the guided tour's data): new users can explore it, then remove it in Settings
+const SAMPLE_DIR = path.join(__dirname, 'demo', 'filament');
+const LAUNCHED_AT = Date.now();
+ipcMain.handle('filament-samples', async (_e, action) => {
+  if (DEMO) throw new Error('not in the tour');
+  if (action === 'load') await Fil.loadSamples(SAMPLE_DIR);
+  else if (action === 'clear') await Fil.clearSamples();
+  else throw new Error('unknown action');
+  return Fil.sampleStatus(SAMPLE_DIR);
+});
 // The filaments Color remix and the shopping check choose from: what's on hand on the Filament screen.
 async function inventory() {
   return Fil.stock() || { ok: false, error: 'You haven’t added any filament yet. Open Filament (top right) to add yours.' };
@@ -1800,7 +1809,7 @@ ipcMain.handle('save-cheatsheet', async (_e, which) => {
 // the tour: finished (remember it, keep the experience level picked in it, start the app for real), or asked for again
 ipcMain.handle('tour-finish', async (_e, { experience, explainWords } = {}) => {
   const cfg = await readConfig();
-  cfg.tourDone = true; cfg.guideDone = true;
+  cfg.tourDone = true; cfg.guideDone = true; cfg.tourOffered = true; delete cfg.tourRequested;
   if (Number.isInteger(experience) && experience >= 0 && experience <= 3 && cfg.experience == null) cfg.experience = experience;
   if (typeof explainWords === 'boolean' && !('explainWords' in cfg)) cfg.explainWords = explainWords;
   await writeConfig(cfg);
@@ -1808,7 +1817,7 @@ ipcMain.handle('tour-finish', async (_e, { experience, explainWords } = {}) => {
 });
 ipcMain.handle('tour-restart', async () => {
   const cfg = await readConfig();
-  cfg.tourDone = false;
+  cfg.tourRequested = true; cfg.tourOffered = true;
   await writeConfig(cfg);
   app.relaunch(); app.exit(0);
 });
@@ -1823,7 +1832,10 @@ ipcMain.handle('get-config', async () => { await S.ready;
     printers: (cfg.printers || []).map(p => ({ name: p.name, url: p.url, hasKey: !!p.apiKey })),
     slicer: slicerInfo(),
     autoUpdate: cfg.autoUpdate !== false, updatesSupported: app.isPackaged,
-    offerBooklet: !DEMO && cfg.tourDone === true && !cfg.bookletOffered,
+    // the booklet is offered on a later launch, not on top of the first-launch questions
+    offerBooklet: !DEMO && !cfg.bookletOffered && (cfg.tourDone === true || (cfg.setupOffered > 0 && cfg.setupOffered < LAUNCHED_AT)),
+    tourOffered: !!cfg.tourOffered, setupOffered: !!cfg.setupOffered, filamentIntroDone: !!cfg.filamentIntroDone,
+    samples: DEMO ? { available: false } : Fil.sampleStatus(SAMPLE_DIR),
     version: require('./package.json').version, homepage: /YOUR-GITHUB-USERNAME/.test(require('./package.json').homepage || '') ? null : require('./package.json').homepage,
   };
 });
@@ -1836,6 +1848,9 @@ ipcMain.handle('set-config', async (_e, patch) => { await S.ready;
   if (typeof patch.guideDone === 'boolean') cfg.guideDone = patch.guideDone;
   if (typeof patch.autoUpdate === 'boolean') cfg.autoUpdate = patch.autoUpdate;
   if (patch.bookletOffered === true) cfg.bookletOffered = true;
+  if (patch.tourOffered === true) cfg.tourOffered = true;
+  if (patch.setupOffered === true) cfg.setupOffered = Date.now();
+  if (patch.filamentIntroDone === true) cfg.filamentIntroDone = true;
   if (typeof patch.explainWords === 'boolean') cfg.explainWords = patch.explainWords; else if (patch.explainWords === null) delete cfg.explainWords;
   if (typeof patch.apiKey === 'string') {
     const key = patch.apiKey.trim();

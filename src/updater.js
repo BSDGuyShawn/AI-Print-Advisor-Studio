@@ -10,6 +10,7 @@
 const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
+const UPDATE_SCRIPT = 'apply-update.cmd';   // the update hand-over script, next to the app
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 
@@ -155,13 +156,16 @@ async function install({ fetch, info, execPath, title, pid, onProgress }) {
     'rmdir /s /q app-old',
     '(goto) 2>nul & del "%~f0"',
   ].join('\r\n');
-  const bat = path.join(L.root, 'apply-update.cmd');
+  const bat = path.join(L.root, UPDATE_SCRIPT);
   await fsp.writeFile(bat, script, 'utf8');
   return { bat, root: L.root, newLauncher };
 }
 
+// The hand-over script is run by its fixed name from its own folder, so no path ends up in the command line.
 function runHandOver(bat) {
-  const child = spawn('cmd.exe', ['/d', '/c', bat], { detached: true, stdio: 'ignore', windowsHide: true, cwd: path.dirname(bat) });
+  if (path.basename(bat) !== UPDATE_SCRIPT) throw new Error('unexpected update script');
+  // ".\" so cmd runs the one in this folder even where NoDefaultCurrentDirectoryInExePath is set
+  const child = spawn('cmd.exe', ['/d', '/c', '.\\' + UPDATE_SCRIPT], { detached: true, stdio: 'ignore', windowsHide: true, cwd: path.dirname(bat) });
   child.unref();
 }
 

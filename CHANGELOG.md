@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.27.0
+- **The guided tour is optional.** The app no longer starts in the tour. New users who say they're new to 3D printing
+  are offered it once; everyone else never sees the offer. Anyone can take it from Settings, and **Exit the tour**
+  (bottom right) leaves it anytime. Finishing it no longer requires setting up the AI first.
+- **A short setup window** on first launch for whatever isn't set up yet: the AI (your own API key or the free
+  chatbot) and Snapmaker Orca. "Later" is fine: Settings has both.
+- **Sample filament library**: the first time you open Filament (with an empty library), choose to explore the
+  sample library or start empty. Settings has a new **Filament library** section to remove the samples when you're
+  done (anything you added yourself stays, and a backup is kept), or to load them later. Before, the library was
+  only in the tour and came up empty afterwards.
+- The cheat-sheet booklet offer waits until no other window is open.
+- Security (code scanning): the updater starts its hand-over script by a fixed name instead of a full path, and the
+  cheat-sheet tool strips HTML tags completely.
+
 ## 2.26.1
 - **Every filament in the file is kept**: a project with more solid filaments than the printer has toolheads (for
   example 5 colors plus 2 color mixes on the 4-toolhead U1) now shows all of them. Before, the 5th and later were

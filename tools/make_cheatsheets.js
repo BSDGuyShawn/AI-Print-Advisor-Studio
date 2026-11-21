@@ -14,7 +14,13 @@ const VERSION = require(path.join(ROOT, 'package.json')).version;
 // the glossary's words and drawings (the module's export keywords dropped so it runs as a plain script)
 const src = fs.readFileSync(path.join(ROOT, 'renderer', 'glossary.js'), 'utf8').replace(/^export /gm, '');
 const { TERMS, PIC } = vm.runInNewContext(src + '\n;({ TERMS, PIC })', {});
-const strip = (s) => String(s || '').replace(/<[^>]+>/g, '');
+// plain text: tags removed until none are left (so nested leftovers like "<scr<b>ipt>" can't come back), then any
+// stray angle brackets
+const strip = (s) => {
+  let t = String(s || ''), prev;
+  do { prev = t; t = t.replace(/<[^<>]*>/g, ''); } while (t !== prev);
+  return t.replace(/[<>]/g, '');
+};
 
 // ---------- shared content ----------
 const STEPS = [

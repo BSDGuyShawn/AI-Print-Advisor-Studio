@@ -239,6 +239,12 @@
         </div>
         <div id="discoverResults"></div>
       </fieldset>
+      <fieldset class="samples hidden" id="sampleField">
+        <legend>Filament library</legend>
+        <p class="hint" id="sampleText"></p>
+        <div class="row-btns"><button type="button" class="btn" id="sampleBtn"></button></div>
+        <p class="sample-confirm hidden" id="sampleConfirm">Remove the sample filament, its spools and photos? Anything you added yourself stays. <button type="button" class="btn primary" id="sampleYes">Remove the samples</button> <button type="button" class="link" id="sampleNo">Keep them</button></p>
+      </fieldset>
       <fieldset class="updates">
         <legend>Updates</legend>
         <div class="row-btns">
@@ -248,7 +254,7 @@
         <label class="check"><input type="checkbox" id="autoUpdate"> Check automatically when the app starts and once a day</label>
         <small>Updates install in place, in the same folder. Your settings, API key, filament library and print history are kept.</small>
       </fieldset>
-      <p class="hint">Printable cheat sheets (PDF): <button type="button" class="link" data-sheet="quick">1-page quick sheet</button> · <button type="button" class="link" data-sheet="booklet">booklet with every word and picture</button> <button type="button" class="link hidden" id="tourAgain">· Take the guided tour again</button></p>
+      <p class="hint">Printable cheat sheets (PDF): <button type="button" class="link" data-sheet="quick">1-page quick sheet</button> · <button type="button" class="link" data-sheet="booklet">booklet with every word and picture</button> <button type="button" class="link hidden" id="tourAgain">· Take the guided tour</button></p>
       <p class="hint about" id="aboutLine"></p>
       <div class="dialog-actions">
         <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
@@ -436,6 +442,43 @@
         <button class="xp" data-xp="3" role="radio"><b>Experienced</b><span>I know slicers and troubleshooting well. Skip the tips.</span></button>
       </div>
       <p class="hint">This only changes how much help you see. Change it anytime in Settings.</p>
+    </div>
+  </dialog>
+
+  <dialog id="tourOfferDialog" class="welcome">
+    <div class="welcome-body">
+      <h2>Want a guided tour first?</h2>
+      <p>The tour shows every feature on a sample toy rocket, step by step: checking a model, getting recommendations, comparing versions, Color remix, the filament library and troubleshooting a failed print. Results are recorded from the real app, so nothing is sliced, printed or sent to the AI.</p>
+      <p class="hint">About 10 minutes. Leave it anytime with “Exit the tour”, and take it later from Settings.</p>
+      <div class="dialog-actions"><button type="button" class="btn ghost" id="tourOfferNo">No thanks</button> <button type="button" class="btn primary" id="tourOfferYes">Take the tour</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="setupDialog" class="welcome setup">
+    <div class="welcome-body">
+      <h2>Set up the app</h2>
+      <p>Change these anytime in Settings (the gear, top right).</p>
+      <section id="suAi">
+        <h3>The AI that reviews your models</h3>
+        <label class="su-opt"><input type="radio" name="suMode" value="api" checked><span><b>My own Claude API key</b> (recommended): the app does everything for you. Pay as you go, usually a few cents per analysis, no subscription. Make a free account at the <a href="https://platform.claude.com/" target="_blank" rel="noopener">Claude Console</a>, add a little credit under <a href="https://platform.claude.com/settings/billing" target="_blank" rel="noopener">Billing</a>, then <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">create a key</a> named “AI 3D Print Advisor Studio” and paste it here.</span></label>
+        <input type="password" id="suKey" class="su-key" placeholder="Paste your key (starts with sk-ant-)" autocomplete="off" spellcheck="false" aria-label="Claude API key">
+        <label class="su-opt"><input type="radio" name="suMode" value="chat"><span><b>Free chatbot</b>: copy and paste each request into ChatGPT, Claude or Gemini in your browser (free plans work).</span></label>
+      </section>
+      <section id="suSlicerBox">
+        <h3>Snapmaker Orca (the slicer)</h3>
+        <p class="hint" id="suSlicerStatus">The app slices with Snapmaker Orca, free from Snapmaker, to measure your models and compare versions. It wasn’t found on this PC. <a href="https://github.com/Snapmaker/OrcaSlicer/releases/latest" target="_blank" rel="noopener">Download it</a>, install it, then pick snapmaker-orca.exe.</p>
+        <div class="row-btns"><input type="text" id="suSlicer" class="su-key" placeholder="Not found yet" spellcheck="false" aria-label="Snapmaker Orca program"> <button type="button" class="btn" id="suBrowse">Browse…</button></div>
+      </section>
+      <div class="dialog-actions"><button type="button" class="btn ghost" id="suLater">Later</button> <button type="button" class="btn primary" id="suSave">Save</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="filIntroDialog" class="welcome">
+    <div class="welcome-body">
+      <h2>Your filament library</h2>
+      <p>This is where you keep every spool you own: photos, colors, where it’s stored, how much is left and the print settings. Color remix picks its colors from here.</p>
+      <p>The app comes with a <b>sample library</b> (a real collection of about 240 spools, with photos) so you can see what it does. Explore it, then remove it in Settings (Filament library) when you’re ready to add your own. Anything you add yourself is kept when you remove the samples.</p>
+      <div class="dialog-actions"><button type="button" class="btn ghost" id="filIntroEmpty">Start with an empty library</button> <button type="button" class="btn primary" id="filIntroSamples">Explore the sample library</button></div>
     </div>
   </dialog>
 

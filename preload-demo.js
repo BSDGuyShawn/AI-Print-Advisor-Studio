@@ -25,7 +25,7 @@ const NOTICES = {
   send: ['Nothing is sent to a printer in the tour', 'After the tour this uploads the print to the chosen Snapmaker U1 and starts it, with the filaments mapped to its toolheads.'],
   orca: ['The tour doesn’t open your slicer', 'After the tour this writes the project and opens it in Snapmaker Orca, then offers to reload your edits.'],
   export: ['Exporting is turned off in the tour', 'After the tour this saves the settings or the project as a file.'],
-  open: ['The tour only opens its sample models', 'Pick one of the sample models. To check your own models, finish the tour: the app then opens any .3mf.'],
+  open: ['The tour only opens its sample models', 'Pick one of the sample models. To check your own models, exit the tour (bottom right): the app then opens any .3mf.'],
   ai: ['No AI in the tour', 'After the tour this asks Claude with your own Anthropic API key (usually a few cents). In the tour everything shown was recorded earlier from the real app.'],
   remix: ['This scheme can’t be applied in the tour', 'The tour can apply “{name}”. After the tour you can apply any scheme.'],
   link: ['Shop links are switched off in the tour', 'After the tour this opens the store page where you bought the filament, so you can reorder it.'],
@@ -41,7 +41,7 @@ function notice(kind, vars = {}) {
   let dlg = document.getElementById('demoNotice');
   if (!dlg) {
     dlg = document.createElement('dialog'); dlg.id = 'demoNotice'; dlg.className = 'demo-notice';
-    dlg.innerHTML = '<h2></h2><p class="dn-text"></p><p class="dn-more">This is the <b>guided tour</b>: a sample model with recorded results. Finish the tour (the last step) to use the app with your own models, printers and filament.</p><div class="dn-btns"><button class="btn primary" autofocus>OK</button></div>';
+    dlg.innerHTML = '<h2></h2><p class="dn-text"></p><p class="dn-more">This is the <b>guided tour</b>: a sample model with recorded results. Exit the tour anytime (bottom right) to use the app with your own models, printers and filament.</p><div class="dn-btns"><button class="btn primary" autofocus>OK</button></div>';
     dlg.querySelector('button').onclick = () => dlg.close();
     document.body.appendChild(dlg);
   }
@@ -57,6 +57,8 @@ window.addEventListener('DOMContentLoaded', () => {
       background: rgb(194 65 45 / .78); color: #fff; padding: 8px 14px; border-radius: 10px; font: 600 12.5px/1.35 var(--font, sans-serif);
       box-shadow: 0 4px 16px rgb(0 0 0 / .25); backdrop-filter: blur(2px); }
     .demo-banner b { letter-spacing: .08em; }
+    .demo-banner .demo-exit { pointer-events: auto; margin-top: 6px; padding: 4px 12px; border-radius: 6px; border: 1px solid #fff; background: rgb(255 255 255 / .15); color: #fff; font: inherit; cursor: pointer; }
+    .demo-banner .demo-exit:hover { background: rgb(255 255 255 / .3); }
     .demo-notice { max-width: 460px; border: 1px solid var(--line, #ccc); border-radius: 10px; padding: 20px 22px; background: var(--raised, #fff); color: var(--ink, #111); }
     .demo-notice h2 { margin: 0 0 8px; font-size: 17px; }
     .demo-notice .dn-more { color: var(--muted, #666); font-size: 13px; }
@@ -68,7 +70,8 @@ window.addEventListener('DOMContentLoaded', () => {
   document.head.appendChild(css);
   const b = document.createElement('div');
   b.className = 'demo-banner';
-  b.innerHTML = '<b>GUIDED TOUR</b> · a sample model with recorded results: nothing is sliced, saved, printed or sent to AI. Finish the tour to use your own models and filament.';
+  b.innerHTML = '<b>GUIDED TOUR</b> · a sample model with recorded results: nothing is sliced, saved, printed or sent to AI.<br><button type="button" class="demo-exit">Exit the tour</button>';
+  b.querySelector('.demo-exit').onclick = (e) => { e.currentTarget.disabled = true; e.currentTarget.textContent = 'Starting the app…'; ipcRenderer.invoke('tour-finish', { experience: config.experience, explainWords: config.explainWords }); };
   document.body.appendChild(b);
 });
 
@@ -298,6 +301,8 @@ async function readReal() {
   try {
     const real = await ipcRenderer.invoke('get-config');
     config.realHasKey = real.hasKey; config.realAiMode = real.aiMode;
+    // the experience level picked before choosing the tour (not asked again)
+    if (config.experience == null && Number.isInteger(real.experience)) { config.experience = real.experience; if (typeof real.explainWords === 'boolean') config.explainWords = real.explainWords; }
     config.realSlicer = { path: real.slicerPath || '', detected: real.detectedSlicer || '', available: !!((real.slicer && real.slicer.available) || real.slicerPath || real.detectedSlicer), exe: (real.slicer && real.slicer.exe) || real.slicerPath || real.detectedSlicer };   // the tour doesn't load the slicer: found = installed or chosen
   } catch {}
 }
