@@ -5,7 +5,8 @@
   a spool on it: a spool you've scanned before opens, highlighted; a new one can be added with its brand, material,
   color, weight and temperatures filled in from the tag, or linked to a spool already in your library. Reads Bambu
   Lab, Snapmaker, Creality, QIDI, Anycubic and ELEGOO tags and the OpenSpool, OpenTag3D and TigerTag formats; cheap
-  NFC stickers make any other spool scannable. Tags are only read, never changed. The reader program
+  NFC stickers make any other spool scannable. Tags are only read, never changed. A scan on another screen opens
+  the Filament screen; untick **Scanning on another screen opens this one** to only use scans on that screen. The reader program
   (`tools/spoolscan`, built into `spoolscan/spoolscan.exe` by `tools/build_spoolscan.py`) ships with the app.
 - `npm test` runs the new tests (`test/`).
 

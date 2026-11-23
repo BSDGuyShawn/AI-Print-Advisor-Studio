@@ -644,7 +644,9 @@ let openFid = null, openPanel = null; // openPanel: {sid, kind:'weigh'|'use'|'hi
 // ======================================================================
 let scannedSid = null;   // the spool row to highlight after a scan
 let tagScan = null;      // the open "New spool tag" window: { scan, draft, match }
-let nfc = { state:'off', readers:[], enabled:false, reader:'' };
+let nfc = { state:'off', readers:[], enabled:false, reader:'', openAnywhere:true };
+// the Filament screen is showing (it stays loaded, hidden, while you work on a model)
+const screenOpen = () => { try { return window.parent.document.body.classList.contains('filament-open'); } catch { return true; } };
 const NFC_TEXT = {
   off: 'Off',
   starting: 'Starting…',
@@ -656,9 +658,10 @@ function nfcPanel() {
   if (nfc.tour) return `<p class="muted" style="margin:0;font-size:13px">The tag reader is off in the guided tour.</p>`;
   const ok = nfc.state === 'watching';
   const msg = nfc.error || NFC_TEXT[nfc.state] || nfc.state;
-  return `<p class="muted" style="margin:0 0 8px;font-size:13px">With a USB NFC reader (any PC/SC reader that reads MIFARE Classic, such as an ACR122U or ACR1252U), tap a spool on the reader: the spool opens here, or you can add it with its details filled in from the tag. Reads Bambu Lab, Snapmaker, Creality, QIDI, Anycubic, ELEGOO, OpenSpool, OpenTag3D and TigerTag tags. For any other spool, stick on a cheap NTAG215 sticker and link it once. Tags are only read, never changed. Prusa’s OpenPrintTag needs a reader that also does ISO 15693 (NFC-V).</p>
+  return `<p class="muted" style="margin:0 0 8px;font-size:13px">With a USB NFC reader (any PC/SC reader that reads MIFARE Classic, such as an ACR122U or ACR1252U), tap a spool on the reader: the spool opens here, or you can add it with its details filled in from the tag. Reads Bambu Lab, Snapmaker, Creality, QIDI, Anycubic, ELEGOO, OpenSpool, OpenTag3D and TigerTag tags. For any other spool, stick on a cheap NTAG215 sticker and link it once. Tags are only read, never changed. Untick <b>Scanning on another screen opens this one</b> to only use scans while this screen is open. Prusa’s OpenPrintTag needs a reader that also does ISO 15693 (NFC-V).</p>
     <div class="setrow"><label class="grow" style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-nfc-on ${nfc.enabled ? 'checked' : ''}> Scan spool tags</label></div>
     <div class="setrow"><span class="grow" data-nfc-status style="color:${ok ? 'var(--petg)' : nfc.state === 'error' || nfc.state === 'missing' ? 'var(--danger)' : 'var(--muted)'}">${ok ? '✓ ' : ''}${esc(msg)}${ok && nfc.readers?.length ? ` <span class="muted">(${esc(nfc.readers.join(', '))})</span>` : ''}</span></div>
+    <div class="setrow"><label class="grow" style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-nfc-anywhere ${nfc.openAnywhere !== false ? 'checked' : ''}> Scanning on another screen opens this one</label></div>
     <div class="setrow"><span class="grow">Only use the reader named <span class="muted">(optional, if you have several)</span></span><input type="text" style="width:160px" value="${esc(nfc.reader || '')}" data-nfc-reader placeholder="part of its name"></div>`;
 }
 async function nfcSet(patch) {
@@ -679,6 +682,7 @@ function startTagScanning() {
   if (pending) onTag(pending);
 }
 function onTag(scan) {
+  if (!screenOpen() && nfc.openAnywhere === false) return;   // the app window shows a note instead
   if (!scan || scan.status === 'read_error') return toast('Couldn’t read that tag. Hold the spool still on the reader and try again.', 4000);
   if (shot && shot.busy) return toast('A spool tag was scanned. Scan it again once Claude has finished reading.', 5000);
   if ($('#overlay').classList.contains('open') && $('#addForm')) return toast('A spool tag was scanned. Finish or cancel adding the filament, then scan it again.', 5000);
@@ -1059,6 +1063,7 @@ document.addEventListener('mousemove', e => {
 $('#view-settings').addEventListener('change', e => {
   const t = e.target, d = t.dataset;
   if (t.matches('[data-nfc-on]')) return nfcSet({ enabled: t.checked });
+  if (t.matches('[data-nfc-anywhere]')) return nfcSet({ openAnywhere: t.checked });
   if (t.matches('[data-nfc-reader]')) return nfcSet({ reader: t.value });
   if (d.locname) { const l = state.locations.find(x => x.id === d.locname); l.name = t.value.trim() || l.name; }
   else if (d.locprinter) state.locations.find(x => x.id === d.locprinter).printer = t.checked;

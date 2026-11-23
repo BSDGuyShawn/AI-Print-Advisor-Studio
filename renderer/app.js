@@ -828,15 +828,22 @@ function showFilament(on) {
   if (on) { view.querySelector('iframe').focus(); guideEvent('filament'); }
   else { SHOP.key = ''; renderShopping(); }   // what's on hand may have changed
 }
-// A spool tag scanned on the NFC reader (turned on in Filament → Settings) opens the Filament screen. The screen
-// itself handles the scan (it listens too); a scan that opens the screen for the first time waits here for it.
-let nfcPending = null;
+// A spool tag scanned on the NFC reader (turned on in Filament → Settings) opens the Filament screen, unless
+// "Open the Filament screen when a spool is scanned" is off: then scans only count while that screen is open.
+// The screen itself handles the scan (it listens too); a scan that opens the screen for the first time waits here.
+let nfcPending = null, nfcOpenAnywhere = true;
 window.__takeNfcPending = () => { const t = nfcPending; nfcPending = null; return t; };
-if (api.onNfcTag) api.onNfcTag((scan) => {
-  if (!scan || scan.status === 'read_error') return;
-  if (!$('filamentView').querySelector('iframe')) nfcPending = scan;
-  if (!document.body.classList.contains('filament-open')) showFilament(true);
-});
+if (api.onNfcTag) {
+  api.nfcStatus().then(s => { nfcOpenAnywhere = s.openAnywhere !== false; }).catch(() => {});
+  api.onNfcStatus(s => { if (typeof s.openAnywhere === 'boolean') nfcOpenAnywhere = s.openAnywhere; });
+  api.onNfcTag((scan) => {
+    if (!scan || scan.status === 'read_error') return;
+    if (document.body.classList.contains('filament-open')) return;
+    if (!nfcOpenAnywhere) return toast('Spool tag scanned. Open Filament (top right) to use it.', 4000);
+    if (!$('filamentView').querySelector('iframe')) nfcPending = scan;
+    showFilament(true);
+  });
+}
 $('glossaryBtn').onclick = () => { glossary.open(); guideEvent('glossary'); };
 // where to download models (links open in the browser through the window-open handler)
 const openModels = () => { if (!$('modelsDialog').open) $('modelsDialog').showModal(); guideEvent('models'); };

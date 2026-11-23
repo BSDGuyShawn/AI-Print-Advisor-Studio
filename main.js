@@ -1249,18 +1249,22 @@ ipcMain.handle('filament-fetch', async (_e, { url, as }) => {
 const { TagReader } = require('./src/nfc');
 const Nfc = new TagReader({ appDir: __dirname, log: (...a) => logLine(...a) });
 const toWindow = (channel, data) => { if (win && !win.isDestroyed()) win.webContents.send(channel, data); };
-Nfc.on('status', (s) => toWindow('nfc-status', s));
+// openAnywhere: a scan anywhere in the app opens the Filament screen (default); off: scans only count there
+let nfcOpenAnywhere = true;
+Nfc.on('status', (s) => toWindow('nfc-status', { ...s, openAnywhere: nfcOpenAnywhere }));
 Nfc.on('tag', (t) => { logLine(`spool tag scanned: ${t.status} ${t.decoder || ''} ${t.spoolId}`); toWindow('nfc-tag', t); });
 Nfc.on('read-error', (e) => toWindow('nfc-read-error', e));
 async function applyNfcConfig() {
   if (DEMO) return Nfc.stop();
   const cfg = await readConfig();
   const n = cfg.nfc || {};
+  nfcOpenAnywhere = n.openAnywhere !== false;
   if (n.enabled) { Nfc.stop(); Nfc.start({ reader: n.reader || '' }); } else Nfc.stop();
 }
+const nfcSettings = (n) => ({ ...Nfc.status, enabled: !DEMO && !!n.enabled, reader: n.reader || '', openAnywhere: n.openAnywhere !== false });
 ipcMain.handle('nfc-status', async () => {
   const cfg = await readConfig();
-  return { ...Nfc.status, enabled: !DEMO && !!(cfg.nfc && cfg.nfc.enabled), reader: (cfg.nfc && cfg.nfc.reader) || '' };
+  return nfcSettings(cfg.nfc || {});
 });
 ipcMain.handle('nfc-set', async (_e, patch) => {
   if (DEMO) throw new Error('not in the tour');
@@ -1268,9 +1272,11 @@ ipcMain.handle('nfc-set', async (_e, patch) => {
   const n = { ...(cfg.nfc || {}) };
   if (patch && typeof patch.enabled === 'boolean') n.enabled = patch.enabled;
   if (patch && typeof patch.reader === 'string') n.reader = patch.reader.trim().slice(0, 100);
+  if (patch && typeof patch.openAnywhere === 'boolean') n.openAnywhere = patch.openAnywhere;
+  const restart = !patch || typeof patch.enabled === 'boolean' || typeof patch.reader === 'string';
   cfg.nfc = n; await writeConfig(cfg);
-  await applyNfcConfig();
-  return { ...Nfc.status, enabled: !!n.enabled, reader: n.reader || '' };
+  if (restart) await applyNfcConfig(); else nfcOpenAnywhere = n.openAnywhere !== false;
+  return nfcSettings(n);
 });
 
 // Color remix, step 1: cut the plate into patches along its grooves; the window shows them, the AI groups them

@@ -190,7 +190,7 @@ Many spools have a small tag inside: Bambu Lab, Snapmaker, Creality, QIDI, Anycu
 - **A spool without a tag**: stick a cheap NFC sticker (NTAG213/215) on it, scan it and link it to the spool. From then on it opens like any other.
 - A spool's tags are listed in its history (**⋯**), with **Unlink** if you move a sticker.
 
-The app only reads tags; it never changes them. Scanning works anywhere in the app: a scan opens the Filament screen. Prusa's OpenPrintTag uses a different kind of tag (ISO 15693) that most of these readers can't read.
+The app only reads tags; it never changes them. Scanning works anywhere in the app: a scan opens the Filament screen. To only use scans while the Filament screen is open, untick **Scanning on another screen opens this one** in Filament → Settings. Prusa's OpenPrintTag uses a different kind of tag (ISO 15693) that most of these readers can't read.
 
 ![Filament library](images/09-filament-library.jpg)
 
