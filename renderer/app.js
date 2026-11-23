@@ -601,11 +601,17 @@ async function rxShowBig(i) {
 }
 $('rxBigBack').onclick = rxShowGrid;
 
+// one filament spelled out: its color, brand and line, then material, finish and what's on hand
+function filDetail(f) {
+  const finish = f.finish && !String(f.line || '').toLowerCase().includes(String(f.finish).toLowerCase()) ? f.finish : '';
+  const meta = [f.type, finish, f.spools ? `${f.spools} spool${f.spools === 1 ? '' : 's'}` : '', f.remainingG > 0 ? `${(f.remainingG / 1000).toFixed(1)} kg left` : ''].filter(Boolean).join(' · ');
+  return `<span class="fil-d"><span class="fil-name">${esc(f.color || f.name || '')}</span> <span class="fil-brand">${esc(`${f.brand || ''} ${f.line || ''}`.trim() || String(f.name || '').replace(f.color || '', '').trim())}</span>${meta ? `<span class="fil-meta">${esc(meta)}</span>` : ''}</span>`;
+}
 function renderRemix() {
   $('rxResults').innerHTML = RX.variations.map((v, i) => `<div class="rx-card" data-i="${i}">
     <img src="${RX.previews[i]}" alt="${esc(v.name)}" data-preview="${i}" title="Click to see it larger in 3D">
     ${v.style ? `<span class="rx-tag">${esc((RX_STYLES.find(x => x[0] === v.style) || [0, v.style])[1])}</span>` : ''}<h3>${esc(v.name)}</h3><p>${esc(v.description)}</p>
-    <ul class="rx-tools">${v.tools.map(t => `<li><span class="sw" style="background:${esc(t.hex)}"></span><b>T${t.tool}${t.from ? ` from ${t.from} mm` : ''}</b> ${esc(t.name)} <span class="muted">${esc(t.type)}${t.spools ? `, ${t.spools} spool${t.spools === 1 ? '' : 's'}` : ''}</span></li>`).join('')}</ul>
+    <ul class="rx-tools">${v.tools.map(t => `<li><span class="sw" style="background:${esc(t.hex)}"></span><b class="th">T${t.tool}${t.from ? ` from ${t.from} mm` : ''}</b>${filDetail(t)}</li>`).join('')}</ul>
     ${v.pauses.length ? `<p class="hint">${v.pauses.length} filament swap${v.pauses.length === 1 ? '' : 's'} during the print.</p>` : ''}
     ${v.notes.length ? `<ul class="rx-notes">${v.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
     <div class="row-btns"><button class="btn primary" data-apply="${i}">Apply to model</button></div>
@@ -700,7 +706,8 @@ function swRender() {
   $('rxSwList').innerHTML = !pool.length ? `<li class="hint" style="display:block">No ${esc($('rxSwMaterial').selectedOptions[0].text)} filament on hand. Pick another material.</li>` : swSlots().map(s => {
     const f = swFil(SW.picks[s.slot]), pct = Math.round((SW.areas[s.slot] || 0) * 100);
     return `<li data-slot="${s.slot}"><span class="sw" style="background:${esc(s.color)}" title="Now: ${esc((s.preset || s.type).replace(/ @U1.*$/, ''))}, ${esc(s.color)}"></span><b>T${s.slot}</b><span class="muted" title="How much of the model’s surface this color covers">${pct < 1 ? '<1' : pct}%</span><span aria-hidden="true">→</span><span class="sw" style="background:${esc(f ? f.hex : s.color)}"></span>
-      <select aria-label="New filament for T${s.slot}"><option value="">Keep this color</option>${f && !pool.includes(f) ? `<option value="${esc(f.id)}">${esc(f.name)}</option>` : ''}${groups}</select></li>`;
+      <select aria-label="New filament for T${s.slot}"><option value="">Keep this color</option>${f && !pool.includes(f) ? `<option value="${esc(f.id)}">${esc(f.name)}</option>` : ''}${groups}</select>
+      ${f ? `<div class="rx-sw-detail">${filDetail(f)}</div>` : ''}</li>`;
   }).join('');
   $('rxSwList').querySelectorAll('li[data-slot]').forEach(li => {
     const sel = li.querySelector('select'), slot = +li.dataset.slot;
@@ -708,7 +715,7 @@ function swRender() {
     sel.onchange = () => { if (sel.value) SW.picks[slot] = sel.value; else delete SW.picks[slot]; SW.sel = -1; swRender(); };
   });
   if (SW.viewer) { const L = filamentLooks(swSlotsWith()); SW.viewer.setFilamentColors(L.colors, L.sparkle); }
-  $('rxSwApply').disabled = !swSlots().some(s => SW.picks[s.slot]);
+  $('rxSwApply').disabled = $('rxSwApply2').disabled = !swSlots().some(s => SW.picks[s.slot]);
   swCost(); swRenderSchemes();
 }
 $('rxSwMaterial').onchange = () => swRender();
@@ -766,20 +773,29 @@ $('rxSwGo').onclick = async () => {
   finally { swCost(); }
 };
 function swRenderSchemes() {
-  $('rxSwResults').innerHTML = SW.schemes.map((v, i) => `<button type="button" class="rx-sw-card ${i === SW.sel ? 'sel' : ''}" data-i="${i}">
-    <img src="${SW.previews[i] || ''}" alt="">
-    <span>${v.style ? `<span class="rx-tag">${esc((RX_STYLES.find(x => x[0] === v.style) || [0, v.style])[1])}</span>` : ''}<b>${esc(v.name)}</b><span class="muted">${esc(v.description)}</span>
-    <span class="dots">${Object.entries(v.picks).map(([slot, fid]) => { const f = swFil(fid); return f ? `<i style="background:${esc(f.hex)}" title="T${slot}: ${esc(f.name)}"></i>` : ''; }).join('')}</span>
-    ${v.notes && v.notes.length ? `<span class="rx-notes">${esc(v.notes.join(' '))}</span>` : ''}</span></button>`).join('');
+  $('rxSwResults').innerHTML = SW.schemes.map((v, i) => `<div class="rx-sw-card ${i === SW.sel ? 'sel' : ''}" data-i="${i}" title="Click to try it on the model">
+    <div class="rx-sw-top"><img src="${SW.previews[i] || ''}" alt="">
+    <div>${v.style ? `<span class="rx-tag">${esc((RX_STYLES.find(x => x[0] === v.style) || [0, v.style])[1])}</span>` : ''}<b>${esc(v.name)}</b><span class="muted">${esc(v.description)}</span></div></div>
+    <ul class="rx-tools">${swSlots().map(s => { const f = swFil(v.picks[s.slot]); return `<li><span class="sw" style="background:${esc(s.color)}" title="Now"></span><span class="arrow" aria-hidden="true">→</span><span class="sw" style="background:${esc(f ? f.hex : s.color)}"></span><b class="th">T${s.slot}</b>${f ? filDetail(f) : '<span class="fil-d muted">keeps its color</span>'}</li>`; }).join('')}</ul>
+    ${v.notes && v.notes.length ? `<span class="rx-notes">${esc(v.notes.join(' '))}</span>` : ''}
+    <div class="row-btns"><button type="button" class="btn small" data-try="${i}">${i === SW.sel ? 'On the model ✓' : 'Try on the model'}</button> <button type="button" class="btn primary small" data-apply="${i}">Apply to model</button></div>
+  </div>`).join('');
+  $('rxSwApplyEnd').classList.toggle('hidden', !SW.schemes.length);
 }
-$('rxSwResults').onclick = (e) => {
-  const c = e.target.closest('[data-i]'); if (!c) return;
-  const v = SW.schemes[+c.dataset.i]; if (!v) return;
-  SW.picks = { ...v.picks }; SW.sel = +c.dataset.i;
+function swTry(i) {
+  const v = SW.schemes[i]; if (!v) return false;
+  SW.picks = { ...v.picks }; SW.sel = i;
   const pool = swPool();
   if (Object.values(v.picks).some(id => !pool.some(f => f.id === id))) $('rxSwMaterial').value = 'any';
   swRender();
+  return true;
+}
+$('rxSwResults').onclick = (e) => {
+  const ap = e.target.closest('[data-apply]');
+  if (ap) { if (swTry(+ap.dataset.apply)) $('rxSwApply').onclick(); return; }
+  const c = e.target.closest('[data-i]'); if (c) swTry(+c.dataset.i);
 };
+$('rxSwApply2').onclick = () => $('rxSwApply').onclick();
 $('rxSwApply').onclick = async () => {
   const changed = swSlots().filter(s => swFil(SW.picks[s.slot]));
   if (!changed.length) return;

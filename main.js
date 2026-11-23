@@ -1325,7 +1325,7 @@ ipcMain.handle('remix-run', async (_e, { styles, custom, extras, material, image
   const variations = Remix.finalizeVariations(answer, { regions: seg.regions, inventory: pool, maxColors, extras });
   S.remix.variations = variations;
   logLine(`remix: ${styles.map(x => `${x.id}×${x.count}`).join(', ')}, ${variations.length} variations`);
-  return { subject: answer.subject || '', variations: variations.map(v => ({ ...v, tools: v.tools.map(t => ({ tool: t.tool, from: t.from, fid: t.fid, name: `${t.filament.brand} ${t.filament.line} ${t.filament.color}`.replace(/\s+/g, ' '), color: t.filament.color, type: t.filament.type, finish: t.filament.finish, hex: Inv.mainHex(t.filament), spools: t.filament.spools, remainingG: t.filament.remainingG })) })) };
+  return { subject: answer.subject || '', variations: variations.map(v => ({ ...v, tools: v.tools.map(t => ({ tool: t.tool, from: t.from, fid: t.fid, name: `${t.filament.brand} ${t.filament.line} ${t.filament.color}`.replace(/\s+/g, ' '), color: t.filament.color, brand: t.filament.brand, line: t.filament.line, type: t.filament.type, finish: t.filament.finish, hex: Inv.mainHex(t.filament), spools: t.filament.spools, remainingG: t.filament.remainingG })) })) };
 });
 
 // Paint the chosen scheme into the model; the window then sets the toolheads and prepares it as usual.

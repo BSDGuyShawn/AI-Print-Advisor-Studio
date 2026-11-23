@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.28.1
+- **Color remix schemes show the full filament for each color**: color, brand and line, material, finish, spools on
+  hand and how much is left, in both Swap colors and recoloring by parts. Swap colors also shows it under each color
+  you pick, and each scheme lists what every toolhead changes from and to.
+- **Apply to model** on every Swap colors scheme and at the bottom of the list, so there's no scrolling back up.
+
 ## 2.28.0
 - **Color remix: Swap colors**, a simpler way to recolor that opens first. The model keeps its painting exactly as
   it is; each of its colors gets another filament from your library. Pick them by hand, click **Closest match** (the
