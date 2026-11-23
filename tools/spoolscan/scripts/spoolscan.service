@@ -1,0 +1,15 @@
+# systemd user service. Install:
+#   mkdir -p ~/.config/systemd/user && cp scripts/spoolscan.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now spoolscan
+#   journalctl --user -u spoolscan -f      # watch it
+[Unit]
+Description=spoolscan filament tag scanner
+After=pcscd.socket
+
+[Service]
+ExecStart=%h/.local/bin/spoolscan watch --quiet --out %h/spoolscan/spools.jsonl --latest %h/spoolscan/latest.json
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

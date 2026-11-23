@@ -9,6 +9,11 @@ AI 3D Print Advisor Studio is licensed under the GNU Affero General Public Licen
 | [JSZip](https://stuk.github.io/jszip/) 3.10.1 | Reading and writing .3mf files (zip archives) | MIT (dual-licensed MIT or GPLv3; used under MIT) |
 | [ws](https://github.com/websockets/ws) 8.18.0 | Talking to printers over Moonraker's websocket | MIT |
 | [electron-builder](https://www.electron.build/) | Packaging (build tool only, not shipped) | MIT |
+| spoolscan (`tools/spoolscan`, shipped built as `spoolscan/spoolscan.exe`) | Reading spool tags (NFC/RFID) with a USB reader | GPL-3.0-or-later (compatible with this project's AGPL-3.0, section 13) |
+| [OpenRFID](https://github.com/suchmememanyskill/OpenRFID) tag decoders (`tools/spoolscan/spoolscan/_vendor/openrfid`, unmodified) | Decoding Bambu Lab, Snapmaker, Creality, QIDI, Anycubic, ELEGOO, OpenSpool, OpenTag3D, SpoolEase and TigerTag tags | GPL-3.0 |
+| [pyscard](https://github.com/LudovicRousseau/pyscard) (bundled in spoolscan.exe) | Talking to PC/SC smart-card readers | LGPL-2.1-or-later |
+| [cryptography](https://cryptography.io/) (bundled in spoolscan.exe) | Tag key derivation and signature checks | Apache-2.0 or BSD-3-Clause |
+| [Python](https://www.python.org/) runtime (bundled in spoolscan.exe by [PyInstaller](https://pyinstaller.org/)) | Running spoolscan | PSF License; PyInstaller bootloader GPL-2.0 with a linking exception |
 
 ## Data derived from Snapmaker Orca
 
@@ -18,6 +23,10 @@ AI 3D Print Advisor Studio is licensed under the GNU Affero General Public Licen
 
 The app does not include Snapmaker Orca itself. It uses the copy you install.
 
+## Spool tag formats
+
+The tag layouts and keys spoolscan uses come from public community research: [Bambu-Research-Group/RFID-Tag-Guide](https://github.com/Bambu-Research-Group/RFID-Tag-Guide) (Bambu Lab), the Creality CFS research ([cfs-programmer](https://github.com/MakaiView/cfs-programmer)), OpenRFID (Snapmaker and others) and [ELEGOO's published tag guide](https://github.com/ELEGOO-3D/ELEGOO-RFID-Tag-Guide). spoolscan only reads tags; it can't write or copy them.
+
 ## Trademarks
 
-Snapmaker, Snapmaker U1 and Snapmaker Orca are trademarks of Snapmaker. Claude is a trademark of Anthropic. ChatGPT is a trademark of OpenAI. Gemini is a trademark of Google. This project is not affiliated with or endorsed by any of them.
+Snapmaker, Snapmaker U1 and Snapmaker Orca are trademarks of Snapmaker. Bambu Lab, Creality, QIDI, Anycubic, ELEGOO and MIFARE are trademarks of their owners. Claude is a trademark of Anthropic. ChatGPT is a trademark of OpenAI. Gemini is a trademark of Google. This project is not affiliated with or endorsed by any of them.

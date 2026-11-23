@@ -1,0 +1,3 @@
+Vendored from https://github.com/suchmememanyskill/OpenRFID
+Commit a13bc9e181374e182f61db4e69abf9fa1786cc29 (2026-09-25)
+License: GPL-3.0 (see LICENSE). Only src/tag, src/filament, src/config and src/reader/scan_result.py are included, unmodified.
