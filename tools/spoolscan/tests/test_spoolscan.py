@@ -332,7 +332,7 @@ def test_unrecognized_classic_reports_what_was_probed():
 
 
 def test_reselect_with_pyscard_decorator_wrapper(monkeypatch):
-    """pyscard returns a CardConnectionDecorator without .hcard (the crash Shawn hit)."""
+    """pyscard returns a CardConnectionDecorator without .hcard."""
     import spoolscan.pcsc as pcsc
 
     class Inner:
