@@ -1,0 +1,5 @@
+# PR #10's Python reader (removed since, still in history): a SHA-256 hash used to check a public tag key, and a line of code. Not secrets.
+0c7130ac76a142ff3f79141469441f06c97b107c:tools/spoolscan/build/lib/spoolscan/_vendor/openrfid/tag/creality/constants.py:generic-api-key:40
+0c7130ac76a142ff3f79141469441f06c97b107c:tools/spoolscan/build/lib/spoolscan/_vendor/openrfid/tag/snapmaker/processor.py:generic-api-key:168
+0c7130ac76a142ff3f79141469441f06c97b107c:tools/spoolscan/spoolscan/_vendor/openrfid/tag/creality/constants.py:generic-api-key:40
+0c7130ac76a142ff3f79141469441f06c97b107c:tools/spoolscan/spoolscan/_vendor/openrfid/tag/snapmaker/processor.py:generic-api-key:168
