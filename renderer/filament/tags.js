@@ -18,7 +18,7 @@
     const m = String(material || '').toUpperCase().replace(/\s+/g, '');
     const mods = (modifiers || []).map(x => String(x).toUpperCase());
     let t = m;
-    if (/^PA|NYLON/.test(m)) t = 'Nylon';
+    if (m.startsWith('PA') || m.includes('NYLON')) t = 'Nylon';
     else if (mods.includes('CF') && !m.endsWith('-CF')) t = `${m}-CF`;
     return types.includes(t) ? t : (types.includes(m) ? m : 'Other');
   }
