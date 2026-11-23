@@ -6,6 +6,8 @@
   a full page per printer: live camera, the print's preview pictures, progress and layers, **elapsed time, time left,
   estimated duration and end time**, toolhead temperatures with each filament's color, bed and enclosure, fans and
   speed, lifetime totals, pause / resume / cancel (each confirmed), **timelapse videos** and **final photos**.
+- Hover over a printer in the bar for a bigger card: a larger picture of the print, time left, end time, elapsed,
+  estimated duration, layer, filament used and the toolheads.
 - Built in from U1 Studio and the Home Assistant dashboard's scripts, so nothing else has to run: the Snapmaker U1
   camera keep-alive, a photo at 99 % while the part is still on the bed, layer-by-layer preview pictures drawn from the
   G-code, and the print stages (preparing, printing, cooling, ready to remove). Time left is worked out like Home

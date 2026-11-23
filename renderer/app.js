@@ -3118,7 +3118,66 @@ function renderKpiBar() {
     <button type="button" class="btn ghost kpi-open" data-mon-open="">Print Monitor</button>`;
   if (bar.__html !== html) { bar.innerHTML = html; bar.__html = html; }   // only when something shows differently
 }
-$('kpiBar').addEventListener('click', (e) => { const b = e.target.closest('[data-mon-open]'); if (b) api.openMonitor(b.dataset.monOpen || undefined); });
+$('kpiBar').addEventListener('click', (e) => { const b = e.target.closest('[data-mon-open]'); if (b) { hideKpiPeek(); api.openMonitor(b.dataset.monOpen || undefined); } });
+// Hovering a printer in the bar shows a bigger card: a larger picture of the print and its details
+const kpiPeek = document.createElement('div');
+kpiPeek.className = 'kpi-peek hidden';
+kpiPeek.setAttribute('role', 'tooltip');
+kpiPeek.dataset.noGloss = '';   // no word explanations inside it
+document.body.appendChild(kpiPeek);
+let peekId = null, peekTimer = null;
+function hideKpiPeek() { clearTimeout(peekTimer); peekId = null; kpiPeek.classList.add('hidden'); }
+function renderKpiPeek() {
+  const p = peekId && KPI.state && KPI.state.printers.find(x => x.id === peekId);
+  if (!p) return hideKpiPeek();
+  const now = Date.now() / 1000, t = p.time || {}, j = p.job || {};
+  const active = ['printing', 'paused', 'preparing'].includes(p.stage), done = ['cooling', 'ready', 'waiting'].includes(p.stage);
+  const pct = Math.round((p.progress || 0) * 1000) / 10;
+  const ps = (p.status && p.status.print_stats) || {}, info = ps.info || {};
+  const name = String(ps.filename || j.filename || '').replace(/\.gcode$/i, '').split('/').pop().replace(/_/g, ' ');
+  const dur = (s) => (s == null || !isFinite(s) ? '—' : `${Math.floor(s / 3600)} h ${String(Math.round((s % 3600) / 60)).padStart(2, '0')} min`);
+  const clock = (ts) => new Date(ts * 1000).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  const elapsed = j.started_at ? ((done && j.ended_at ? j.ended_at : now) - j.started_at) : null;
+  const label = { printing: 'Printing', preparing: 'Heating up', paused: 'Paused', cooling: 'Done · bed cooling', ready: 'Done · ready to remove', waiting: 'Idle', idle: 'Idle', error: 'Error', cancelled: 'Cancelled', offline: 'Offline' }[p.stage] || 'Offline';
+  const row = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`;
+  const heads = ['extruder', 'extruder1', 'extruder2', 'extruder3'].map((e, i) => {
+    const h = p.status && p.status[e]; if (!h) return '';
+    const ptc = (p.status && p.status.print_task_config) || {}, raw = (ptc.filament_color_rgba || [])[i];
+    const hex = raw == null ? '' : (typeof raw === 'number' ? raw.toString(16).padStart(8, '0') : String(raw).replace('#', '')).slice(0, 6);
+    const active = p.status.toolhead && p.status.toolhead.extruder === e;
+    return `<span class="kp-head${active ? ' on' : ''}" title="Toolhead ${i + 1}">${/^[0-9a-f]{6}$/i.test(hex) ? `<i style="background:#${hex}"></i>` : ''}T${i + 1} ${Math.round(h.temperature || 0)}°C</span>`;
+  }).join('');
+  kpiPeek.innerHTML = `${p.thumb ? `<img src="/api/monitor/p/${encodeURIComponent(p.id)}/thumbnail?v=${esc(p.thumb_v)}" alt="">` : ''}
+    <div class="kp-body"><div class="kp-name">${esc(p.name)}</div>
+    <div class="kp-st st-${esc(p.stage.replace(/^klippy_.*/, 'offline'))}">${esc(label)}${active || done ? ` · ${pct}%` : ''}</div>
+    ${name ? `<div class="kp-file">${esc(name)}</div>` : ''}
+    ${active || done ? `<div class="kpi-prog"><i style="width:${active || done ? pct : 0}%"></i></div>` : ''}
+    <div class="kp-rows">
+      ${active ? row('Time left', dur(t.left)) + row('Ends', t.left != null ? clock(now + t.left) : '—') : ''}
+      ${active || done ? row(done ? 'Print took' : 'Elapsed', dur(elapsed)) : ''}
+      ${active && elapsed != null && t.left != null ? row('Estimated duration', dur(elapsed + t.left)) : ''}
+      ${info.total_layer ? row('Layer', `${info.current_layer || 0} / ${info.total_layer}`) : ''}
+      ${ps.filament_used ? row('Filament used', `${(ps.filament_used / 1000).toFixed(1)} m`) : ''}
+    </div>
+    ${heads ? `<div class="kp-heads">${heads}</div>` : ''}
+    <div class="kp-hint">Click to open it in the Print Monitor</div></div>`;
+  kpiPeek.classList.remove('hidden');
+}
+$('kpiBar').addEventListener('mouseover', (e) => {
+  const c = e.target.closest('.kpi-card');
+  if (!c) return;
+  if (peekId === c.dataset.monOpen && !kpiPeek.classList.contains('hidden')) return;
+  clearTimeout(peekTimer);
+  peekTimer = setTimeout(() => {
+    peekId = c.dataset.monOpen;
+    renderKpiPeek();
+    const r = c.getBoundingClientRect(), w = kpiPeek.offsetWidth;
+    kpiPeek.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
+    kpiPeek.style.top = `${r.bottom + 6}px`;
+  }, 180);
+});
+$('kpiBar').addEventListener('mouseleave', hideKpiPeek);
+$('kpiBar').addEventListener('mouseout', (e) => { if (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest('.kpi-card')) { if (e.target.closest('.kpi-card')) hideKpiPeek(); } });
 $('monitorBtn').onclick = () => api.openMonitor();
 if (api.onMonitor) {
   api.onMonitor((msg) => {
@@ -3127,6 +3186,7 @@ if (api.onMonitor) {
       const i = KPI.state.printers.findIndex(p => p.id === msg.printer.id);
       if (i >= 0) KPI.state.printers[i] = msg.printer; else return refreshKpiBar();
       renderKpiBar();
+      if (peekId === msg.printer.id) renderKpiPeek();
     } else if (msg.type === 'state') refreshKpiBar();
   });
   refreshKpiBar();

@@ -804,3 +804,26 @@ body.has-kpi { --kpi-h: 64px; }
 .kpi-card.st-offline .kpi-st, .kpi-card.st-idle .kpi-st, .kpi-card.st-waiting .kpi-st { color: var(--muted); }
 :root[data-theme="dark"] .kpi-card.st-printing .kpi-st { color: #a78bfa; }
 .kpi-open { flex: none; }
+
+/* the enlarged printer card, on hover */
+.kpi-peek { position: fixed; z-index: 60; width: 340px; background: var(--raised); color: var(--ink); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .35); overflow: hidden; pointer-events: none; animation: kpiPeek .14s ease-out; }
+@keyframes kpiPeek { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
+.kpi-peek img { display: block; width: 100%; height: 220px; object-fit: contain; background: #1c2430; }
+.kp-body { padding: 12px 14px 12px; display: flex; flex-direction: column; gap: 5px; }
+.kp-name { font-weight: 700; font-size: 16px; }
+.kp-st { font-weight: 600; font-size: 14px; }
+.kp-st.st-printing { color: #6d5bd0; } .kp-st.st-preparing, .kp-st.st-paused { color: #d97706; } .kp-st.st-cooling { color: #2563eb; }
+.kp-st.st-ready { color: #16a34a; } .kp-st.st-error, .kp-st.st-cancelled { color: var(--danger); } .kp-st.st-offline, .kp-st.st-idle, .kp-st.st-waiting { color: var(--muted); }
+:root[data-theme="dark"] .kp-st.st-printing { color: #a78bfa; }
+.kp-file { font-size: 13.5px; color: var(--muted); }
+.kpi-peek .kpi-prog { height: 6px; margin: 2px 0 4px; }
+.kp-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+.kp-rows div { display: flex; flex-direction: column; }
+.kp-rows span { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.kp-rows b { font-size: 14.5px; font-variant-numeric: tabular-nums; }
+.kp-heads { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+.kp-head { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); }
+.kp-head.on { border-color: #ef4444; }
+.kp-head i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, .25); }
+.kp-hint { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
