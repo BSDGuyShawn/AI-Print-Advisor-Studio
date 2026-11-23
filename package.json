@@ -5,7 +5,8 @@
   "description": "Free desktop helper for the Snapmaker U1: checks your .3mf, recommends Snapmaker Orca settings with AI, compares real slices, sends to your printers and troubleshoots failed prints.",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "test": "node --test test/*.test.js"
   },
   "author": "Jamison",
   "license": "AGPL-3.0-only",

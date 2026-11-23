@@ -1243,6 +1243,36 @@ ipcMain.handle('filament-fetch', async (_e, { url, as }) => {
   return JSON.parse(buf.toString('utf8'));
 });
 
+// ---------- Spool tags (NFC/RFID): scan a spool's tag with a USB reader (src/nfc.js, tools/spoolscan) ----------
+// Off until turned on in Filament → Settings. Each scan goes to the window, which opens the Filament screen on
+// that spool (or offers to add it). Nothing is ever written to a tag.
+const { TagReader } = require('./src/nfc');
+const Nfc = new TagReader({ appDir: __dirname, log: (...a) => logLine(...a) });
+const toWindow = (channel, data) => { if (win && !win.isDestroyed()) win.webContents.send(channel, data); };
+Nfc.on('status', (s) => toWindow('nfc-status', s));
+Nfc.on('tag', (t) => { logLine(`spool tag scanned: ${t.status} ${t.decoder || ''} ${t.spoolId}`); toWindow('nfc-tag', t); });
+Nfc.on('read-error', (e) => toWindow('nfc-read-error', e));
+async function applyNfcConfig() {
+  if (DEMO) return Nfc.stop();
+  const cfg = await readConfig();
+  const n = cfg.nfc || {};
+  if (n.enabled) { Nfc.stop(); Nfc.start({ reader: n.reader || '' }); } else Nfc.stop();
+}
+ipcMain.handle('nfc-status', async () => {
+  const cfg = await readConfig();
+  return { ...Nfc.status, enabled: !DEMO && !!(cfg.nfc && cfg.nfc.enabled), reader: (cfg.nfc && cfg.nfc.reader) || '' };
+});
+ipcMain.handle('nfc-set', async (_e, patch) => {
+  if (DEMO) throw new Error('not in the tour');
+  const cfg = await readConfig();
+  const n = { ...(cfg.nfc || {}) };
+  if (patch && typeof patch.enabled === 'boolean') n.enabled = patch.enabled;
+  if (patch && typeof patch.reader === 'string') n.reader = patch.reader.trim().slice(0, 100);
+  cfg.nfc = n; await writeConfig(cfg);
+  await applyNfcConfig();
+  return { ...Nfc.status, enabled: !!n.enabled, reader: n.reader || '' };
+});
+
 // Color remix, step 1: cut the plate into patches along its grooves; the window shows them, the AI groups them
 // into named parts, the user checks and corrects them. Parts confirmed before for this shape come back as they were.
 const partsDir = () => path.join(app.getPath('userData'), 'parts');
@@ -1944,6 +1974,7 @@ else {
     DEMO = decideTour();
     // window first; everything slow happens after it is on screen, with progress shown in the app
     createWindow();
+    applyNfcConfig().catch(e => logLine('spool tag reader:', e));
     buildMenu().catch(e => logLine('menu failed:', e));
     cleanUpAfterUpdate();
     scheduleUpdateChecks();
@@ -1968,4 +1999,5 @@ else {
     })();
   });
   app.on('window-all-closed', () => app.quit());
+  app.on('will-quit', () => Nfc.stop());
 }

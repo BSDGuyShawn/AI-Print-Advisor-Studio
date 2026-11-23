@@ -32,6 +32,7 @@ const NOTICES = {
   key: ['Your API key is saved', 'The tour itself only replays recorded results, so the key isn’t used yet. Once you finish the tour, the app uses it for real AI advice on your own models.'],
   printers: ['Printer setup is switched off in the tour', 'After the tour you add your printers here (address and API key) to send prints and see their history.'],
   ts: ['The tour troubleshoots one sample print', 'Open the troubleshooter on the cancelled “Demo Rocket” print. After the tour any print from your printers can be troubleshot.'],
+  nfc: ['The spool tag reader is off in the tour', 'After the tour you can turn it on in Filament → Settings: tap a spool’s NFC/RFID tag on a USB reader and the Filament screen opens that spool, or offers to add it.'],
   files: ['Files are switched off in the tour', 'After the tour this opens or saves files on your computer.'],
   generic: ['Not available in the tour', 'The tour uses recorded results. Finish the tour to do this for real.'],
 };
@@ -248,6 +249,10 @@ contextBridge.exposeInMainWorld('advisor', {
   filamentClaude: failing('ai', 'Tour: reading screenshots and finding photos need the app after the tour and your API key.'),
   filamentFetch: failing('ai', 'Tour: looking up store photos needs the app after the tour.'),
   filamentOpenFolder: blocked('files'),
+  // spool tag scanning needs the reader hardware: off in the tour
+  nfcStatus: async () => ({ state: 'off', readers: [], enabled: false, reader: '', tour: true }),
+  nfcSet: failing('nfc'),
+  onNfcTag: () => () => {}, onNfcStatus: () => () => {}, onNfcReadError: () => () => {},
   remixPrepare: (a) => replay('remix-prepare', [a], { delay: 900, steps: ['Cutting the model into patches…'] }),
   partsIdentify: (a) => withCost('Color remix: parts', 0.08, replay('parts-identify', [a], { delay: 5000, steps: ['Identifying the parts of the model…'] })),
   partsConfirm: (a) => replay('parts-confirm', [a], { delay: 600 }),

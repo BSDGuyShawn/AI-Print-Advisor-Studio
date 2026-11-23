@@ -10,6 +10,7 @@ const ORDERS = BOOT.catalog.orders || [];   // purchase history imported from th
 const PRICES = BOOT.catalog.prices || {};
 let saveTimer = null, saveErr = false;   // see persist()
 // An error from the app arrives as "Error invoking remote method 'x': Error: <message>"; keep the message.
+const T = window.SpoolTags;   // spool tag (NFC/RFID) helpers, renderer/filament/tags.js
 const ipcMessage = e => String(e && e.message || e).replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, '');
 
 // ======================================================================
@@ -177,6 +178,7 @@ function newSpool(fid, o = {}) {
   state.spools[id] = { id, fid, src:o.src || null, status, rem: o.rem ?? (status === 'empty' ? 0 : f.grams), loc:o.loc || '',
     price:o.price ?? null, bought:o.bought || today(), opened:null, used:null, emptyG:null,
     log:[{ t:nowISO(), type:'created', note:o.note || (o.src ? 'Imported from order' : 'Added') }] };
+  if (o.tags && o.tags.length) { state.spools[id].tags = [...o.tags]; o.tags.forEach(tid => logEv(state.spools[id], 'tag', { id:tid })); }
   return state.spools[id];
 }
 function syncSources() {
@@ -499,11 +501,11 @@ function renderSpools(fil) {
 }
 function exportCSV() {
   const fil = Object.fromEntries(allFilaments().map(f => [f.id, f]));
-  const head = ['Spool','Brand','Line','Type','Finish','Color','Status','Remaining g','Spool size g','Location','Bought','Price','Opened','Last used','Order ID (ASIN / SKU)','Notes'];
+  const head = ['Spool','Brand','Line','Type','Finish','Color','Status','Remaining g','Spool size g','Location','Bought','Price','Opened','Last used','Order ID (ASIN / SKU)','Notes','Spool tags'];
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const lines = Object.values(state.spools).sort((a, b) => a.id.localeCompare(b.id)).map(s => {
     const f = fil[s.fid];
-    return [s.id, f.brand, f.line, f.type, f.finish, f.color, ST[s.status].l, s.rem, f.grams, locName(s.loc), s.bought, s.price, s.opened, s.used, s.src?.split('|')[0], f.fx.notes].map(q).join(',');
+    return [s.id, f.brand, f.line, f.type, f.finish, f.color, ST[s.status].l, s.rem, f.grams, locName(s.loc), s.bought, s.price, s.opened, s.used, s.src?.split('|')[0], f.fx.notes, (s.tags || []).join(' ')].map(q).join(',');
   });
   download(`filament-spools-${today()}.csv`, [head.map(q).join(','), ...lines].join('\r\n'), 'text/csv');
 }
@@ -577,6 +579,8 @@ function evText(e) {
     case 'weigh': return `Weighed: ${e.rem} g left${e.gross != null ? ` (scale ${e.gross} g)` : ''}`;
     case 'use': return `Used ${-e.delta} g${e.note ? ' (' + e.note + ')' : ''}, ${e.rem} g left`;
     case 'weight': return `Set remaining to ${e.rem} g`;
+    case 'tag': return `Linked ${T.tagLabel(e.id)}`;
+    case 'untag': return `Unlinked ${T.tagLabel(e.id)}`;
     default: return e.type;
   }
 }
@@ -593,6 +597,7 @@ function renderSettings(fil) {
       <div class="setrow"><span class="grow">${hasKey ? '<b style="color:var(--petg)">✓ API key set</b>' : '<span class="muted">No API key set yet</span>'}</span>
         <button class="btn small" data-app-settings>Open Settings</button></div>
     </div>
+    <div class="panel"><h3>Spool tag reader <small>· NFC / RFID</small></h3>${nfcPanel()}</div>
     <div class="panel"><h3>Storage locations</h3>
       <p class="muted" style="margin:0 0 8px;font-size:13px">Tick <b>Printer</b> for toolheads or AMS slots. Moving a spool into one marks it <i>Loaded</i>.</p>
       ${state.locations.map(l => `<div class="setrow"><input type="text" class="grow" value="${esc(l.name)}" data-locname="${l.id}">
@@ -630,6 +635,175 @@ function renderSettings(fil) {
 // Filament detail modal (with per-spool rows)
 // ======================================================================
 let openFid = null, openPanel = null; // openPanel: {sid, kind:'weigh'|'use'|'hist'}
+
+// ======================================================================
+// Spool tags (NFC/RFID): tap a spool on a USB reader (turned on in Settings, read by the app with tools/spoolscan)
+//   a tag linked to a spool → that spool opens, highlighted
+//   a new tag              → add it as a new spool (filled in from the tag) or link it to a spool you have
+// Tags are only read, never written. A spool remembers its tags in spool.tags (see tags.js for the ids).
+// ======================================================================
+let scannedSid = null;   // the spool row to highlight after a scan
+let tagScan = null;      // the open "New spool tag" window: { scan, draft, match }
+let nfc = { state:'off', readers:[], enabled:false, reader:'' };
+const NFC_TEXT = {
+  off: 'Off',
+  starting: 'Starting…',
+  no_service: 'Waiting for a reader. Plug in your USB NFC reader.',
+  no_reader: 'No reader found. Plug in your USB NFC reader.',
+  watching: 'Ready. Tap a spool’s tag on the reader.',
+};
+function nfcPanel() {
+  if (nfc.tour) return `<p class="muted" style="margin:0;font-size:13px">The tag reader is off in the guided tour.</p>`;
+  const ok = nfc.state === 'watching';
+  const msg = nfc.error || NFC_TEXT[nfc.state] || nfc.state;
+  return `<p class="muted" style="margin:0 0 8px;font-size:13px">With a USB NFC reader (any PC/SC reader that reads MIFARE Classic, such as an ACR122U or ACR1252U), tap a spool on the reader: the spool opens here, or you can add it with its details filled in from the tag. Reads Bambu Lab, Snapmaker, Creality, QIDI, Anycubic, ELEGOO, OpenSpool, OpenTag3D and TigerTag tags. For any other spool, stick on a cheap NTAG215 sticker and link it once. Tags are only read, never changed. Prusa’s OpenPrintTag needs a reader that also does ISO 15693 (NFC-V).</p>
+    <div class="setrow"><label class="grow" style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-nfc-on ${nfc.enabled ? 'checked' : ''}> Scan spool tags</label></div>
+    <div class="setrow"><span class="grow" data-nfc-status style="color:${ok ? 'var(--petg)' : nfc.state === 'error' || nfc.state === 'missing' ? 'var(--danger)' : 'var(--muted)'}">${ok ? '✓ ' : ''}${esc(msg)}${ok && nfc.readers?.length ? ` <span class="muted">(${esc(nfc.readers.join(', '))})</span>` : ''}</span></div>
+    <div class="setrow"><span class="grow">Only use the reader named <span class="muted">(optional, if you have several)</span></span><input type="text" style="width:160px" value="${esc(nfc.reader || '')}" data-nfc-reader placeholder="part of its name"></div>`;
+}
+async function nfcSet(patch) {
+  try { nfc = { ...nfc, ...(await api.nfcSet(patch)) }; } catch (e) { toast(ipcMessage(e), 6000); }
+  if (ui.view === 'settings') render();
+}
+function startTagScanning() {
+  if (!api.onNfcTag) return;
+  const offs = [
+    api.onNfcTag(scan => { try { onTag(scan); } catch (e) { console.error(e); } }),
+    api.onNfcStatus(s => { nfc = { ...nfc, ...s, error: s.error || null }; if (ui.view === 'settings') render(); }),
+    api.onNfcReadError(() => toast('Couldn’t read that tag. Hold the spool still on the reader and try again.', 4000)),
+  ];
+  window.addEventListener('pagehide', () => offs.forEach(off => { try { off && off(); } catch {} }));
+  api.nfcStatus().then(s => { nfc = { ...nfc, ...s }; if (ui.view === 'settings') render(); }).catch(() => {});
+  // a scan that opened this screen arrives before this page was ready to listen
+  const pending = window.parent.__takeNfcPending?.();
+  if (pending) onTag(pending);
+}
+function onTag(scan) {
+  if (!scan || scan.status === 'read_error') return toast('Couldn’t read that tag. Hold the spool still on the reader and try again.', 4000);
+  if (shot && shot.busy) return toast('A spool tag was scanned. Scan it again once Claude has finished reading.', 5000);
+  if ($('#addForm')) return toast('A spool tag was scanned. Finish or cancel adding the filament, then scan it again.', 5000);
+  const s = T.spoolForTag(state.spools, scan.spoolId);
+  if (s) return showScannedSpool(s);
+  openTagDialog(scan);
+}
+function showScannedSpool(s) {
+  if (shot) { shot.urls.forEach(u => URL.revokeObjectURL(u)); shot = null; }
+  tagScan = null;
+  openDetail(s.fid);
+  scannedSid = s.id;
+  renderSpoolBox();
+  $('#spoolbox')?.querySelector(`[data-sid="${s.id}"]`)?.scrollIntoView({ block:'center', behavior:'smooth' });
+  const f = filDef(s.fid);
+  toast(`Spool #${s.id}: ${f.color} (${ST[s.status].l}, ${s.rem} g)`, 3500);
+}
+function openTagDialog(scan) {
+  if (shot) { shot.urls.forEach(u => URL.revokeObjectURL(u)); shot = null; }
+  const draft = T.draftFromTag(scan, FIL_TYPES);
+  const match = draft ? T.matchFilament(draft, allFilaments()) : null;
+  tagScan = { scan, draft, match };
+  openFid = null; openPanel = null; scannedSid = null;
+  renderTagDialog();
+  $('#overlay').classList.add('open');
+}
+function tagSummary(scan, draft) {
+  const f = scan.filament;
+  if (!f || !draft) return `<p class="muted" style="margin:6px 0 0">This tag has no filament details (tag ${esc(scan.tag.uid)}${scan.tag.type ? ', ' + esc(scan.tag.type.replace('Mifare', 'MIFARE ')) : ''}). Link it to one of your spools, and scanning it will open that spool.</p>`;
+  const bits = [`${esc(draft.brand)} ${esc(f.material)}${f.modifiers.length ? ' ' + esc(f.modifiers.join(' ')) : ''}`,
+    f.weightG ? fmtKg(f.weightG) : '', f.diameterMm ? `${f.diameterMm} mm` : '',
+    draft.nozzle ? `nozzle ${esc(draft.nozzle)} °C` : '', draft.bed ? `bed ${esc(draft.bed)} °C` : '', draft.dry ? `dry ${esc(draft.dry)}` : '',
+    scan.extras?.materialId ? `code ${esc(scan.extras.materialId)}` : '', f.made && !/^1970|^2026-01-01$/.test(f.made) ? `made ${fmtDate(f.made)}` : ''].filter(Boolean);
+  const sw = Array.isArray(draft.hex) ? draft.hex : [draft.hex];
+  return `<div class="tagsum"><span class="dot big-swatch" style="background:${swatchBg(sw.length > 1 ? sw : sw[0])}"></span>
+    <div><b>${esc(bits[0])}</b><div class="muted" style="font-size:13px">${bits.slice(1).join(' · ')}</div>
+    <div class="muted" style="font-size:12px">Color ${esc(sw.join(' / '))} · read from the tag</div></div></div>`;
+}
+function spoolOptionLabel(s, f) {
+  return `#${s.id} · ${f.color} · ${f.brand} ${f.line} · ${ST[s.status].l} · ${s.rem} g${s.tags?.length ? ' · has a tag' : ''}`;
+}
+function renderTagDialog() {
+  const { scan, draft, match } = tagScan;
+  const fil = Object.fromEntries(allFilaments().map(f => [f.id, f]));
+  const linkable = Object.values(state.spools).filter(s => s.status !== 'archived' && s.status !== 'empty');
+  const mid = match?.filament.id;
+  // the matching filament's spools first, then untagged ones, then the rest
+  linkable.sort((a, b) => (b.fid === mid) - (a.fid === mid) || (!!a.tags?.length) - (!!b.tags?.length) || a.id.localeCompare(b.id));
+  const locSel = `<select class="sel" data-tagloc><option value="">— no location —</option>${state.locations.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select>`;
+  const stSel = `<select class="sel" data-tagstatus><option value="new">Sealed</option><option value="opened">Opened</option></select>`;
+  const m = match?.filament;
+  const linkHtml = `<div class="tagopt"><h3>${m || draft ? 'Or link this tag to a spool you already have' : 'Link this tag to a spool'}</h3>
+      ${linkable.length ? `<div class="tagrow"><select class="sel" data-taglink style="flex:1 1 360px;width:auto;max-width:100%">${linkable.map(s => `<option value="${s.id}">${esc(spoolOptionLabel(s, fil[s.fid]))}${s.fid === mid ? ' ✓ matches' : ''}</option>`).join('')}</select>
+        <button class="btn ${m || draft ? '' : 'primary'}" data-tag-link>Link tag</button></div>` : '<p class="muted" style="margin:0">No spools to link yet.</p>'}
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Good for spools you added before (from an order or a screenshot) and for NFC stickers you put on spools yourself.</p></div>`;
+  $('#modal').innerHTML = `<button class="x" data-close>×</button><div class="tagdlg">
+    <h2>New spool tag</h2>
+    ${tagSummary(scan, draft)}
+    ${draft ? `<div class="tagopt"><div class="tagrow"><span class="muted" style="font-size:13px">New spools go in</span>${locSel}<span class="muted" style="font-size:13px">as</span>${stSel}</div></div>` : ''}
+    ${m ? `<div class="tagopt"><h3>Add a spool of a filament you have</h3>
+      <div class="tagrow">${itemSwatch(m, '')}<b>${esc(m.color)}</b><span class="muted">${esc(m.brand)} ${esc(m.line)} · ${esc(m.finish)} · ${fmtKg(m.grams)} · ${m.qty} in stock</span>
+      <span class="spacer"></span><button class="btn primary" data-tag-addto="${esc(m.id)}">Add spool</button></div></div>` : ''}
+    ${m ? linkHtml : ''}
+    ${draft ? `<div class="tagopt"><h3>${m ? 'Or add' : 'Add'} it as a new filament</h3>
+      <form class="add" id="tagForm" style="padding:0">
+        <label>Color name<input name="color" required placeholder="e.g. ${esc(draft.colorGuess)}" ${m ? '' : 'autofocus'}></label>
+        <label>Brand<input name="brand" required value="${esc(draft.brand)}"></label>
+        <label>Type<select name="type">${FIL_TYPES.map(x => `<option ${x === draft.type ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+        <label>Product line<input name="line" value="${esc(draft.line)}"></label>
+        <label>Finish<select name="finish">${FINISHES.map(x => `<option ${x === draft.finish ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+        <label>Swatch color<input type="color" name="hex" value="${esc(Array.isArray(draft.hex) ? draft.hex[0] : draft.hex)}"></label>
+        <label>Spool size (g)<input type="number" name="grams" min="1" step="1" value="${draft.grams}"></label>
+        <div class="actions full" style="margin-top:0"><button class="btn ${m ? '' : 'primary'}" type="submit">Add filament and spool</button></div>
+      </form></div>` : ''}
+    ${m ? '' : linkHtml}
+  </div>`;
+  $('#tagForm')?.addEventListener('submit', ev => { ev.preventDefault(); addTagFilament(new FormData(ev.target)); });
+  if (m) $('[data-tag-addto]')?.focus(); else if (!draft) $('[data-taglink]')?.focus(); else $('#tagForm [name=color]')?.focus();
+}
+// the nozzle/bed/drying temperatures from the tag, for a filament that has none of its own yet
+function fillTemps(fid, draft) {
+  const f = allFilaments().find(x => x.id === fid); if (!f || !draft) return;
+  const fx = (state.fil[fid] ||= {});
+  if (!fx.nozzle && !f.spec?.n && draft.nozzle) fx.nozzle = draft.nozzle;
+  if (!fx.bed && !f.spec?.b && draft.bed) fx.bed = draft.bed;
+  if (!fx.dry && !f.spec?.d && draft.dry) fx.dry = draft.dry;
+}
+function addTaggedSpool(fid) {
+  const { scan, draft } = tagScan;
+  const status = $('[data-tagstatus]')?.value || 'new', loc = $('[data-tagloc]')?.value || '';
+  const s = newSpool(fid, { tags:[scan.spoolId], note:'Added by scanning its tag' });
+  if (status === 'opened') setStatus(s, 'opened');
+  if (loc) setLoc(s, loc);
+  fillTemps(fid, draft);
+  persist();
+  showScannedSpool(s);
+  toast(`Added spool #${s.id}`, 3000);
+}
+function addTagFilament(fd) {
+  const { draft } = tagScan;
+  const rec = { id:'c-' + Date.now().toString(36), brand:fd.get('brand').trim(), type:fd.get('type'), line:fd.get('line').trim() || fd.get('type'),
+    finish:fd.get('finish'), color:fd.get('color').trim(), fams: draft.fams,
+    hex: Array.isArray(draft.hex) ? draft.hex : fd.get('hex'), grams:+fd.get('grams') || 1000, img:'', note:'Added by scanning its spool tag', added:today() };
+  if (!rec.color || !rec.brand) return toast('Enter a color name and a brand');
+  if (!Array.isArray(rec.hex)) rec.fams = [T.familyOf(rec.hex)];
+  state.custom.push(rec);
+  addTaggedSpool(rec.id);
+}
+function linkTag(sid) {
+  const s = state.spools[sid]; if (!s) return;
+  const id = tagScan.scan.spoolId;
+  const prev = T.spoolForTag(state.spools, id);   // a tag belongs to one spool
+  if (prev && prev !== s) { prev.tags = prev.tags.filter(x => x !== id); logEv(prev, 'untag', { id }); }
+  s.tags = [...new Set([...(s.tags || []), id])];
+  logEv(s, 'tag', { id });
+  persist();
+  showScannedSpool(s);
+  toast(`Tag linked to spool #${s.id}`, 3000);
+}
+$('#overlay').addEventListener('click', e => {
+  if (!tagScan) return;
+  const a = e.target.closest('[data-tag-addto]');
+  if (a) return addTaggedSpool(a.dataset.tagAddto);
+  if (e.target.closest('[data-tag-link]')) return linkTag($('[data-taglink]').value);
+});
 function openDetail(fid) {
   openFid = fid; openPanel = null;
   const f = allFilaments().find(x => x.id === fid); if (!f) return;
@@ -688,8 +862,8 @@ function renderSpoolBox() {
     ${visible.map(s => {
       const lvl = lowLevel(s);
       const panel = openPanel?.sid === s.id ? subPanel(s, f) : '';
-      return `<div class="srow" data-sid="${s.id}">
-        <span class="sid">#${s.id}</span>
+      return `<div class="srow ${scannedSid === s.id ? 'scanned' : ''}" data-sid="${s.id}">
+        <span class="sid">#${s.id}${s.tags?.length ? ` <span class="tagmark" title="Has a spool tag: scanning it opens this spool">🏷</span>` : ''}</span>
         <select data-sstatus>${STATUSES.map(x => `<option value="${x.k}" ${x.k === s.status ? 'selected' : ''}>${x.l}</option>`).join('')}</select>
         <select data-sloc>${locOpts(s.loc)}</select>
         <div class="remcell"><input type="number" min="0" step="1" value="${s.rem}" data-srem title="Grams of filament left"><span class="muted">g</span>
@@ -721,12 +895,13 @@ function subPanel(s, f) {
       <button class="btn small primary" data-douse>Subtract</button>
       <button class="btn small danger" data-delspool style="margin-left:auto">Delete this spool</button></div>`;
   return `<div class="sub-panel"><div class="hist">
+      ${(s.tags || []).map(tid => `<div><span><b>Spool tag</b></span><span>${esc(T.tagLabel(tid))} <button class="btn small" data-untag="${esc(tid)}">Unlink</button></span></div>`).join('')}
       <div><span><b>Bought</b></span><span>${fmtDate(s.bought)}${s.price != null ? ' · ' + fmt$(s.price) : ''}${s.opened ? ` · opened ${fmtDate(s.opened)}` : ''}${s.used ? ` · last used ${fmtDate(s.used)}` : ''}</span></div>
       ${[...s.log].reverse().map(e => `<div><span>${fmtDT(e.t)}</span><span>${esc(evText(e))}</span></div>`).join('')}
     </div></div>`;
 }
 function closeModal() {
-  $('#overlay').classList.remove('open'); openFid = null; openPanel = null;
+  $('#overlay').classList.remove('open'); openFid = null; openPanel = null; tagScan = null; scannedSid = null;
   if (shot) { shot.urls.forEach(u => URL.revokeObjectURL(u)); shot = null; }
   render();
 }
@@ -883,6 +1058,8 @@ document.addEventListener('mousemove', e => {
 
 $('#view-settings').addEventListener('change', e => {
   const t = e.target, d = t.dataset;
+  if (t.matches('[data-nfc-on]')) return nfcSet({ enabled: t.checked });
+  if (t.matches('[data-nfc-reader]')) return nfcSet({ reader: t.value });
   if (d.locname) { const l = state.locations.find(x => x.id === d.locname); l.name = t.value.trim() || l.name; }
   else if (d.locprinter) state.locations.find(x => x.id === d.locprinter).printer = t.checked;
   else if (d.emptyw !== undefined) { if (t.value === '') delete state.settings.empty[d.emptyw]; else state.settings.empty[d.emptyw] = +t.value; }
@@ -964,6 +1141,8 @@ $('#overlay').addEventListener('click', e => {
     const fx = (state.fil[openFid] ||= {}); const n = +rate.dataset.rate; fx.rating = fx.rating === n ? 0 : n; persist();
     document.querySelectorAll('[data-rate]').forEach(b => b.classList.toggle('on', fx.rating >= +b.dataset.rate)); return;
   }
+  const ut = t.closest('[data-untag]');
+  if (ut && s) { s.tags = (s.tags || []).filter(x => x !== ut.dataset.untag); if (!s.tags.length) delete s.tags; logEv(s, 'untag', { id:ut.dataset.untag }); persist(); renderSpoolBox(); return toast('Tag unlinked'); }
   if (t.closest('[data-edit]')) return openForm(state.custom.find(c => c.id === openFid));
   if (t.closest('[data-delfil]')) {
     const b = t.closest('[data-delfil]');
@@ -1438,3 +1617,4 @@ document.addEventListener('keydown', e => {
 });
 
 render();
+startTagScanning();

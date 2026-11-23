@@ -72,6 +72,13 @@ contextBridge.exposeInMainWorld('advisor', {
   filamentClaude: (body) => ipcRenderer.invoke('filament-claude', body),
   filamentFetch: (a) => ipcRenderer.invoke('filament-fetch', a),
   filamentOpenFolder: () => ipcRenderer.invoke('filament-open-folder'),
+  // spool tag scanning (NFC/RFID reader). The on… calls return a function that stops listening, so the Filament
+  // screen (an iframe that can reload) doesn't pile up listeners.
+  nfcStatus: () => ipcRenderer.invoke('nfc-status'),
+  nfcSet: (patch) => ipcRenderer.invoke('nfc-set', patch),
+  onNfcTag: (cb) => { const h = (_e, t) => cb(t); ipcRenderer.on('nfc-tag', h); return () => ipcRenderer.removeListener('nfc-tag', h); },
+  onNfcStatus: (cb) => { const h = (_e, s) => cb(s); ipcRenderer.on('nfc-status', h); return () => ipcRenderer.removeListener('nfc-status', h); },
+  onNfcReadError: (cb) => { const h = (_e, s) => cb(s); ipcRenderer.on('nfc-read-error', h); return () => ipcRenderer.removeListener('nfc-read-error', h); },
   remixPrepare: (a) => ipcRenderer.invoke('remix-prepare', a),
   partsIdentify: (a) => ipcRenderer.invoke('parts-identify', a),
   partsConfirm: (a) => ipcRenderer.invoke('parts-confirm', a),

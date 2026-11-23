@@ -828,6 +828,15 @@ function showFilament(on) {
   if (on) { view.querySelector('iframe').focus(); guideEvent('filament'); }
   else { SHOP.key = ''; renderShopping(); }   // what's on hand may have changed
 }
+// A spool tag scanned on the NFC reader (turned on in Filament → Settings) opens the Filament screen. The screen
+// itself handles the scan (it listens too); a scan that opens the screen for the first time waits here for it.
+let nfcPending = null;
+window.__takeNfcPending = () => { const t = nfcPending; nfcPending = null; return t; };
+if (api.onNfcTag) api.onNfcTag((scan) => {
+  if (!scan || scan.status === 'read_error') return;
+  if (!$('filamentView').querySelector('iframe')) nfcPending = scan;
+  if (!document.body.classList.contains('filament-open')) showFilament(true);
+});
 $('glossaryBtn').onclick = () => { glossary.open(); guideEvent('glossary'); };
 // where to download models (links open in the browser through the window-open handler)
 const openModels = () => { if (!$('modelsDialog').open) $('modelsDialog').showModal(); guideEvent('models'); };

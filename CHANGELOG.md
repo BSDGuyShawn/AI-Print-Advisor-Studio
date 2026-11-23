@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+- **Scan spool tags (NFC/RFID).** Plug in a USB NFC reader, tick **Scan spool tags** in Filament → Settings and tap
+  a spool on it: a spool you've scanned before opens, highlighted; a new one can be added with its brand, material,
+  color, weight and temperatures filled in from the tag, or linked to a spool already in your library. Reads Bambu
+  Lab, Snapmaker, Creality, QIDI, Anycubic and ELEGOO tags and the OpenSpool, OpenTag3D and TigerTag formats; cheap
+  NFC stickers make any other spool scannable. Tags are only read, never changed. The reader program
+  (`tools/spoolscan`, built into `spoolscan/spoolscan.exe` by `tools/build_spoolscan.py`) ships with the app.
+- `npm test` runs the new tests (`test/`).
+
 ## 2.28.1
 - **Color remix schemes show the full filament for each color**: color, brand and line, material, finish, spools on
   hand and how much is left, in both Swap colors and recoloring by parts. Swap colors also shows it under each color

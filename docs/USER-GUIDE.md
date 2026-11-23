@@ -168,12 +168,29 @@ Click **Filament** (top right). Click **Back to model** to return.
 - **Inventory**: every filament you own, grouped by type and color, with photos. Click one for its spools, print settings and history.
 - **Spools**: a table of every spool: sealed, opened, loaded in a printer, empty.
 - **Dashboard**: totals, what's running low, what's loaded in each printer.
-- **Settings**: your storage places (shelves, dry boxes, printer slots), empty-spool weights for weighing, labels and backups.
+- **Settings**: your storage places (shelves, dry boxes, printer slots), empty-spool weights for weighing, labels and backups, and the spool tag reader.
 
 **Adding filament**
 
 - **+ Add filament**: type the brand, color, material and number of spools.
 - **📷 From screenshot**: take a screenshot of your **order page** (Amazon or any store), a receipt or a product page, and drop or paste it (Ctrl+V) into the app. Claude reads it and lists the filament for you to check before adding. Product photos are cut from the screenshot; **Find missing photos online** looks up the brand's own store for the rest.
+
+- **Scan a spool's tag**: see below.
+
+**Scanning spool tags (NFC/RFID)**
+
+Many spools have a small tag inside: Bambu Lab, Snapmaker, Creality, QIDI, Anycubic and ELEGOO, plus the open OpenSpool, OpenTag3D and TigerTag formats. With a USB NFC reader you can tap a spool on it instead of searching the list.
+
+1. Plug in a USB NFC reader. Any "PC/SC" smart-card reader that reads MIFARE Classic works (for example an ACR122U, ACR1252U or a Cryptnox reader); Windows needs no driver for most of them.
+2. In **Filament → Settings**, tick **Scan spool tags**. The line below it says **Ready** when the reader is found.
+3. Tap a spool on the reader (hold it still for a second). Bambu Lab spools have a tag on each side; either works.
+
+- **A spool you've scanned before** opens straight away, highlighted, so you can mark it opened, load it into a toolhead, weigh it or mark it empty.
+- **A new tag** opens **New spool tag**, filled in from the tag (brand, material, color, weight, temperatures). If you already have that filament, **Add spool** adds one more. You can also **link the tag to a spool you already have** (one you added from an order or a screenshot), or add it as a new filament: tags don't carry a color name, so type one.
+- **A spool without a tag**: stick a cheap NFC sticker (NTAG213/215) on it, scan it and link it to the spool. From then on it opens like any other.
+- A spool's tags are listed in its history (**⋯**), with **Unlink** if you move a sticker.
+
+The app only reads tags; it never changes them. Scanning works anywhere in the app: a scan opens the Filament screen. Prusa's OpenPrintTag uses a different kind of tag (ISO 15693) that most of these readers can't read.
 
 ![Filament library](images/09-filament-library.jpg)
 

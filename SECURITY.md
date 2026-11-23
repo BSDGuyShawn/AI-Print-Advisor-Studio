@@ -11,6 +11,7 @@ Please **don't** post security problems in public issues. Use GitHub's private r
   - `api.anthropic.com`, only when you click an AI button, with your own API key;
   - your **printers** on your home network (addresses you enter or that it finds on your network);
   - a filament brand's **online store**, only when you click "Find missing photos online", to fetch a product photo.
+- **Spool tag reader (optional, off until you turn it on):** runs the bundled `spoolscan.exe` in the background to read NFC/RFID tags from a USB reader. It has no network access of its own and only reads tags (it has no command to write or copy one). Its output is checked before it reaches the window.
 - **Stores** settings, filament and history in `%APPDATA%\AI 3D Print Advisor Studio`. API keys (Anthropic and printers) are encrypted with Windows' own protection (Electron `safeStorage` / DPAPI) and never written to logs, backups or exports.
 - **No telemetry**, analytics, ads or auto-updates.
 
