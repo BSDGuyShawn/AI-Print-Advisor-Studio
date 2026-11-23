@@ -298,3 +298,11 @@ legend { padding: 0 8px; font-weight: 700; color: var(--text); }
 .times .trow { display: flex; flex-direction: column; gap: 2px; }
 .times .trow .muted { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
 .times .trow b { font-size: 18px; font-variant-numeric: tabular-nums; }
+
+/* lifetime print time strip on the All printers page */
+.life { display: grid; grid-template-columns: minmax(260px, 2fr) repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: var(--gap); }
+.life .card { padding: 12px 14px; display: flex; flex-direction: column; justify-content: center; gap: 2px; color: inherit; text-decoration: none; }
+.life .life-all { flex-direction: row; align-items: center; gap: 12px; }
+.life .lv { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.life .ll { font-size: 12.5px; color: var(--muted); }
+.life a.card:hover { border-color: var(--line2); }

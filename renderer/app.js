@@ -3080,6 +3080,7 @@ $('monImport').onclick = async () => {
 
 // ---------- the printing bar on the main screen ----------
 const KPI = { state: null, timer: null };
+const kpiHours = (s) => { const h = (s || 0) / 3600; return h >= 100 ? `${Math.round(h).toLocaleString()} h` : `${Math.floor(h)} h ${String(Math.round(((s || 0) % 3600) / 60)).padStart(2, '0')} m`; };
 const kpiTime = (s) => (s == null || !isFinite(s) ? '--:--' : `${Math.floor(s / 3600)}:${String(Math.round((s % 3600) / 60)).padStart(2, '0')}`);
 async function refreshKpiBar() {
   try { const r = await fetch('/api/monitor/state', { cache: 'no-store' }); KPI.state = await r.json(); }
@@ -3113,7 +3114,12 @@ function renderKpiBar() {
       ${active ? `<span class="kpi-sub">${left != null ? `${kpiTime(left)} left · ends ${clock(now + left)}` : 'estimating…'}</span>` : name && ['cooling', 'ready'].includes(p.stage) ? `<span class="kpi-sub">${esc(name)}</span>` : ''}
       ${active ? `<span class="kpi-prog"><i style="width:${pct}%"></i></span>` : ''}</span></button>`;
   };
+  // lifetime print time from each printer's own history (Moonraker's job totals)
+  const life = ps.map(p => ({ name: p.name, s: (p.totals && p.totals.total_print_time) || 0, jobs: (p.totals && p.totals.total_jobs) || 0 }));
+  const lifeAll = life.reduce((t, x) => t + x.s, 0), jobsAll = life.reduce((t, x) => t + x.jobs, 0);
+  const lifeTip = life.map(x => `${x.name}: ${kpiHours(x.s)} printed, ${Math.round(x.jobs)} prints`).join('\n') + `\nAll printers: ${kpiHours(lifeAll)}, ${Math.round(jobsAll)} prints`;
   const html = `<div class="kpi-sum"><b>${printing.length}</b> printing${next ? `<span>next done ${clock(next)}</span>` : ''}${ready ? `<span class="kpi-ready">${ready} ready to remove</span>` : ''}</div>
+    ${lifeAll ? `<div class="kpi-sum kpi-life" title="${esc(lifeTip)}"><b>${kpiHours(lifeAll)}</b> printed<span>all printers · ${Math.round(jobsAll).toLocaleString()} prints</span></div>` : ''}
     <div class="kpi-cards">${ps.map(card).join('')}</div>
     <button type="button" class="btn ghost kpi-open" data-mon-open="">Print Monitor</button>`;
   if (bar.__html !== html) { bar.innerHTML = html; bar.__html = html; }   // only when something shows differently
@@ -3160,6 +3166,7 @@ function renderKpiPeek() {
       ${ps.filament_used ? row('Filament used', `${(ps.filament_used / 1000).toFixed(1)} m`) : ''}
     </div>
     ${heads ? `<div class="kp-heads">${heads}</div>` : ''}
+    ${p.totals && p.totals.total_print_time ? `<div class="kp-life">Lifetime: <b>${kpiHours(p.totals.total_print_time)}</b> printed · ${Math.round(p.totals.total_jobs || 0).toLocaleString()} prints · ${((p.totals.total_filament_used || 0) / 1000).toFixed(0)} m of filament</div>` : ''}
     <div class="kp-hint">Click to open it in the Print Monitor</div></div>`;
   kpiPeek.classList.remove('hidden');
 }

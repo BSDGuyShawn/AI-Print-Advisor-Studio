@@ -410,8 +410,20 @@
   }
 
   // ---------------------------------------------------------------- all printers side by side
+  // lifetime print time: every printer and all together (from each printer's own history)
+  function lifeHTML() {
+    const ps = store.order.map((id) => store.printers[id]).filter(Boolean);
+    const t = (p) => (p.totals && p.totals.total_print_time) || 0, j = (p) => (p.totals && p.totals.total_jobs) || 0, f = (p) => (p.totals && p.totals.total_filament_used) || 0;
+    const all = ps.reduce((a, p) => a + t(p), 0);
+    if (!all) return '';
+    const hrs = (s) => { const h = s / 3600; return h >= 100 ? `${Math.round(h).toLocaleString()} h` : `${Math.floor(h)} h ${String(Math.round((s % 3600) / 60)).padStart(2, '0')} m`; };
+    return `<div class="life">
+      <div class="card life-all"><span style="color:#f59e0b">${icon('history', 28)}</span><div><div class="lv">${hrs(all)}</div><div class="ll">printed on all printers · ${Math.round(ps.reduce((a, p) => a + j(p), 0)).toLocaleString()} prints · ${(ps.reduce((a, p) => a + f(p), 0) / 1000).toFixed(0)} m of filament</div></div></div>
+      ${ps.map((p) => `<a class="card life-one" href="#/p/${esc(p.id)}"><div class="lv">${hrs(t(p))}</div><div class="ll">${esc(p.name)} · ${Math.round(j(p)).toLocaleString()} prints</div></a>`).join('')}
+    </div>`;
+  }
   function overviewView(el) {
-    el.innerHTML = `<div class="ov">${store.order.map((id) => `<section class="card ovc" data-p="${esc(id)}">
+    el.innerHTML = `<div data-life></div><div class="ov">${store.order.map((id) => `<section class="card ovc" data-p="${esc(id)}">
         <a class="hdr" href="#/p/${esc(id)}" style="color:inherit;text-decoration:none"><span class="nm grow ellipsis" data-k="name"></span><span class="pill" data-k="pill"></span></a>
         <div class="camera" data-cam></div>
         <div data-k="progress"></div>
@@ -424,6 +436,7 @@
     });
     return {
       update() {
+        setHTML(el.querySelector('[data-life]'), lifeHTML());
         for (const { id, sec, cam } of parts) {
           const p = store.printers[id];
           if (!p) continue;
