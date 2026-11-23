@@ -254,6 +254,8 @@ contextBridge.exposeInMainWorld('advisor', {
   nfcSet: failing('nfc'),
   onNfcTag: () => () => {}, onNfcStatus: () => () => {}, onNfcWriteProgress: () => () => {},
   nfcPorts: async () => ({ ports: [] }), nfcTestPort: failing('nfc'), nfcWrite: failing('nfc'), nfcWriteCancel: async () => true,
+  phoneStatus: async () => ({ tour: true, enabled: false, running: false, devices: [] }), phoneSet: failing('generic'), phonePair: failing('generic'),
+  phoneRemove: async () => ({}), onPhoneStatus: () => () => {}, onFilamentChanged: () => () => {},
   remixPrepare: (a) => replay('remix-prepare', [a], { delay: 900, steps: ['Cutting the model into patches…'] }),
   partsIdentify: (a) => withCost('Color remix: parts', 0.08, replay('parts-identify', [a], { delay: 5000, steps: ['Identifying the parts of the model…'] })),
   partsConfirm: (a) => replay('parts-confirm', [a], { delay: 600 }),

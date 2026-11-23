@@ -1170,6 +1170,7 @@ ipcMain.handle('filament-samples', async (_e, action) => {
   if (action === 'load') await Fil.loadSamples(SAMPLE_DIR);
   else if (action === 'clear') await Fil.clearSamples();
   else throw new Error('unknown action');
+  Fil.bump();   // open screens (the app's and phones') reload
   return Fil.sampleStatus(SAMPLE_DIR);
 });
 // The filaments Color remix and the shopping check choose from: what's on hand on the Filament screen.
@@ -1183,17 +1184,21 @@ ipcMain.handle('inventory-status', async () => {
 });
 
 // ---------- the Filament screen (renderer/filament/) ----------
-ipcMain.handle('filament-load', async () => {
+// These calls serve the app's own Filament screen (over IPC) and paired phones (src/phone/server.js) alike.
+async function filamentLoad() {
   const cfg = await readConfig();
   return { ...Fil.load(), imagesBase: 'app://filament/images/', hasKey: !!(await getApiKey()),
-    printers: (cfg.printers || []).map(p => p.name).filter(Boolean) };
-});
+    printers: (cfg.printers || []).map(p => p.name).filter(Boolean), linkBase: Phone && Phone.http ? Phone.linkBase() : null };
+}
+ipcMain.handle('filament-load', () => filamentLoad());
+// a stale save (another device saved first) comes back as an error starting with STALE, which the screen handles
 ipcMain.handle('filament-save', (_e, data) => Fil.save(data));
 ipcMain.handle('filament-has-key', async () => !!(await getApiKey()));
 ipcMain.handle('filament-open-folder', async () => { await fs.mkdir(Fil.backupsDir, { recursive: true }); return shell.openPath(Fil.backupsDir); });
 // Claude for the Filament screen (reading screenshots, finding product pages). The screen builds the request;
 // the key is added here and never goes to the page.
-ipcMain.handle('filament-claude', async (_e, body) => {
+ipcMain.handle('filament-claude', (_e, body) => filamentClaude(body));
+async function filamentClaude(body) {
   const key = await getApiKey();
   if (!key) throw new Error('Add your Anthropic API key in Settings first (the gear at the top right).');
   const { betas, ...rest } = body || {};
@@ -1214,12 +1219,13 @@ ipcMain.handle('filament-claude', async (_e, body) => {
   if (res.status === 529 || res.status >= 500) throw new Error('Anthropic is busy right now. Try again in a minute.');
   if (res.status === 400 && /credit|balance|billing/i.test(msg)) throw new Error(`Your Anthropic account needs credits: ${msg}`);
   throw new Error(`Anthropic turned the request down: ${msg}`);
-});
+}
 // A web page or image for the Filament screen, fetched here (no browser CORS limits): a store's product data
 // (Shopify's /products/<name>.js) or its product photo. https only, size-limited. Uses Chromium's network stack
 // (Windows certificates and proxy settings, like a browser). Stores briefly refuse bursts of requests (429), so
 // those are retried after a pause.
-ipcMain.handle('filament-fetch', async (_e, { url, as }) => {
+ipcMain.handle('filament-fetch', (_e, arg) => filamentFetch(arg));
+async function filamentFetch({ url, as } = {}) {
   let u; try { u = new URL(url); } catch { throw new Error('Bad address.'); }
   if (u.protocol !== 'https:') throw new Error('Only https addresses can be fetched.');
   let res;
@@ -1241,7 +1247,7 @@ ipcMain.handle('filament-fetch', async (_e, { url, as }) => {
   }
   if (as === 'text') return buf.toString('utf8').slice(0, 2_000_000);
   return JSON.parse(buf.toString('utf8'));
-});
+}
 
 // ---------- Spool tags (NFC/RFID): scan a spool's tag, or write your filament to a blank NFC sticker (src/nfc.js)
 // Off until turned on in Settings. Each scan goes to the window, which opens the Filament screen on that spool (or
@@ -1287,7 +1293,7 @@ ipcMain.handle('nfc-test-port', async (_e, port) => {
   return (await Nfc.testPort(port.toUpperCase())) || { ok: false, error: 'The tag reader didn’t answer.' };
 });
 // Write a filament to the next blank sticker tapped. filament: see src/nfc/encoders.js normalize()
-ipcMain.handle('nfc-write', async (_e, { filament, overwriteUid } = {}) => {
+ipcMain.handle('nfc-write', async (_e, { filament, overwriteUid, spool } = {}) => {
   if (DEMO) throw new Error('not in the tour');
   const n = nfcConfig(await readConfig());
   if (!n.enabled) return { status: 'error', message: 'Turn on spool tags in Settings first.' };
@@ -1296,9 +1302,64 @@ ipcMain.handle('nfc-write', async (_e, { filament, overwriteUid } = {}) => {
   for (const k of ['brand', 'type', 'subtype', 'colorName', 'hex', 'hex2']) if (typeof filament[k] === 'string') f[k] = filament[k].slice(0, 80);
   for (const k of ['weight', 'diameter', 'nozzleMin', 'nozzleMax', 'bedMin', 'bedMax', 'dryTemp', 'dryHours']) if (Number.isFinite(filament[k])) f[k] = filament[k];
   const uid = typeof overwriteUid === 'string' && /^[0-9A-F]{8,20}$/.test(overwriteUid) ? overwriteUid : null;
+  // with phone access on, the sticker also links to the spool's page, so tapping it with a phone opens the spool
+  if (phoneCfg.stickerLinks && Phone.http && typeof spool === 'string' && /^[A-Za-z0-9_-]{1,24}$/.test(spool)) f.link = `${Phone.linkBase()}/s/${spool}`;
   return Nfc.write({ format: n.writeFormat, filament: f, overwriteUid: uid, overwriteAny: !n.confirmOverwrite, timeoutMs: 90000 });
 });
 ipcMain.handle('nfc-write-cancel', () => { Nfc.cancelWrite(); return true; });
+
+// ---------- Phone access: the Filament library on phones on the home network (src/phone/server.js) ----------
+// Off until turned on in Settings → Phone access. Phones pair by scanning a one-time QR code.
+const { PhoneServer } = require('./src/phone/server');
+const PHONE_DEFAULTS = { enabled: false, port: 8765, https: false, httpsPort: 8766, linkHost: 'name', readerToPhones: true, stickerLinks: true, devices: [] };
+let phoneCfg = { ...PHONE_DEFAULTS };
+let phoneSaveTimer = null;
+const Phone = new PhoneServer({
+  appDir: __dirname, imagesDir: Fil.imagesDir, dataDir: app.getPath('userData'), log: (...a) => logLine(...a),
+  api: { load: filamentLoad, save: (d) => Fil.save(d), claude: filamentClaude, fetch: filamentFetch, hasKey: async () => !!(await getApiKey()) },
+  conf: {
+    get: () => phoneCfg,
+    // paired devices and last-seen times: saved a moment later, so a busy phone doesn't rewrite config.json constantly
+    set: (c) => { phoneCfg = c; clearTimeout(phoneSaveTimer); phoneSaveTimer = setTimeout(async () => { const cfg = await readConfig(); cfg.phone = phoneCfg; await writeConfig(cfg); }, 1500); },
+  },
+});
+Phone.on('status', (s) => toWindow('phone-status', s));
+// every change to the inventory (from the app or a phone) tells the other screens to refresh
+Fil.onChange = (rev) => { toWindow('filament-changed', { rev }); Phone.broadcast('changed', { rev }); };
+// a scan on the PC's reader also opens the spool on phones that have the page open (Settings)
+Nfc.on('tag', (t) => { if (phoneCfg.readerToPhones) Phone.broadcast('nfc-tag', t); });
+function phoneConfigFrom(cfg) {
+  const c = { ...PHONE_DEFAULTS, ...((cfg && cfg.phone) || {}) };
+  c.devices = Array.isArray(c.devices) ? c.devices : [];
+  return c;
+}
+async function applyPhoneConfig() {
+  phoneCfg = phoneConfigFrom(await readConfig());
+  if (!DEMO && phoneCfg.enabled) await Phone.start(); else await Phone.stop();
+  toWindow('phone-status', Phone.status());
+}
+const phoneView = () => ({ ...Phone.status(), enabled: phoneCfg.enabled, port: phoneCfg.port, https: phoneCfg.https, httpsPort: phoneCfg.httpsPort,
+  linkHost: phoneCfg.linkHost, readerToPhones: phoneCfg.readerToPhones, stickerLinks: phoneCfg.stickerLinks, tour: DEMO || undefined });
+ipcMain.handle('phone-status', () => phoneView());
+ipcMain.handle('phone-set', async (_e, patch) => {
+  if (DEMO) throw new Error('not in the tour');
+  const p = patch && typeof patch === 'object' ? patch : {};
+  const c = { ...phoneCfg };
+  for (const k of ['enabled', 'https', 'readerToPhones', 'stickerLinks']) if (typeof p[k] === 'boolean') c[k] = p[k];
+  for (const k of ['port', 'httpsPort']) if (Number.isInteger(p[k]) && p[k] >= 1024 && p[k] <= 65535) c[k] = p[k];
+  if (c.port === c.httpsPort) c.httpsPort = c.port + 1;
+  if (p.linkHost === 'name' || p.linkHost === 'ip') c.linkHost = p.linkHost;
+  const restart = ['enabled', 'https', 'port', 'httpsPort'].some(k => c[k] !== phoneCfg[k]);
+  phoneCfg = c;
+  const cfg = await readConfig(); cfg.phone = c; await writeConfig(cfg);
+  if (restart) { if (c.enabled) await Phone.start(); else await Phone.stop(); }
+  return phoneView();
+});
+ipcMain.handle('phone-pair', () => {
+  if (DEMO || !Phone.http) throw new Error('Turn on phone access first.');
+  return Phone.newPairCode();
+});
+ipcMain.handle('phone-remove', (_e, id) => { if (typeof id === 'string') Phone.removeDevice(id); return phoneView(); });
 
 // Color remix, step 1: cut the plate into patches along its grooves; the window shows them, the AI groups them
 // into named parts, the user checks and corrects them. Parts confirmed before for this shape come back as they were.
@@ -2002,6 +2063,7 @@ else {
     // window first; everything slow happens after it is on screen, with progress shown in the app
     createWindow();
     applyNfcConfig().catch(e => logLine('spool tag reader:', e));
+    applyPhoneConfig().catch(e => logLine('phone access:', e));
     buildMenu().catch(e => logLine('menu failed:', e));
     cleanUpAfterUpdate();
     scheduleUpdateChecks();
@@ -2026,5 +2088,5 @@ else {
     })();
   });
   app.on('window-all-closed', () => app.quit());
-  app.on('will-quit', () => Nfc.stop());
+  app.on('will-quit', () => { Nfc.stop(); Phone.stop(); });
 }

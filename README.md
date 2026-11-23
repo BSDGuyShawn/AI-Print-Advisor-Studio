@@ -13,7 +13,7 @@ You open a 3D model (a `.3mf` file, like the ones you download from MakerWorld o
 - **sends the print to your printer**,
 - and **helps you figure out what went wrong** when a print fails: mark where it failed on the 3D model and get likely causes and fixes.
 
-It also keeps a **filament library**: every spool you own, with photos, colors, where it's stored and how much is left. With an NFC reader (a USB reader, or an Arduino with a PN532 shield) you can **tap a spool's tag** (Bambu Lab, Snapmaker, Creality, QIDI, Anycubic, ELEGOO and more) to open or add it, and **write your own filament to NFC stickers**.
+It also keeps a **filament library**: every spool you own, with photos, colors, where it's stored and how much is left. With an NFC reader (a USB reader, or an Arduino with a PN532 shield) you can **tap a spool's tag** (Bambu Lab, Snapmaker, Creality, QIDI, Anycubic, ELEGOO and more) to open or add it, and **write your own filament to NFC stickers**. And it's on your **phone** too: pair it once and your filament library opens in the phone's browser on your home Wi-Fi.
 
 **Made for beginners:** an optional **guided tour** walks you through everything on a sample model, and a **sample filament library** lets you see the Filament screen in action before you add your own. Every recommendation says *why*, so you learn as you go. Words like "brim" or "infill" are explained when you hover over them, the **Glossary** has a picture for every term, and there's a **printable booklet** to keep next to your printer. Not sure where to get models? **Find models** lists the best free and paid sites, starting with **Snapmaker Space** (ready-to-print U1 files). The app **updates itself** with one click.
 

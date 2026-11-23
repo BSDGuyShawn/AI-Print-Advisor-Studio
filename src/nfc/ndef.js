@@ -77,4 +77,25 @@ function mimeMessage(mimeType, payload) {
   return Buffer.concat([Buffer.from([0x03]), len, record, Buffer.from([0xFE])]);
 }
 
-module.exports = { parseNdef, uriOf, mimeMessage, URI_PREFIXES };
+// A URI record's payload: the shortest matching prefix code, then the rest of the address
+function uriPayload(url) {
+  let code = 0;
+  for (let i = 1; i < URI_PREFIXES.length; i++) if (url.startsWith(URI_PREFIXES[i]) && URI_PREFIXES[i].length > (URI_PREFIXES[code] || '').length) code = i;
+  return Buffer.concat([Buffer.from([code]), Buffer.from(url.slice(URI_PREFIXES[code].length), 'utf8')]);
+}
+// An NDEF message TLV with several records: [{ tnf: 1|2, type: 'U' | mime type, payload }]
+function message(records) {
+  const recs = records.map((r, i) => {
+    const type = Buffer.from(r.type, 'ascii');
+    const short = r.payload.length < 256;
+    let head = (i === 0 ? 0x80 : 0) | (i === records.length - 1 ? 0x40 : 0) | (short ? 0x10 : 0) | r.tnf;
+    const plen = short ? Buffer.from([r.payload.length])
+      : Buffer.from([(r.payload.length >>> 24) & 255, (r.payload.length >>> 16) & 255, (r.payload.length >>> 8) & 255, r.payload.length & 255]);
+    return Buffer.concat([Buffer.from([head, type.length]), plen, type, r.payload]);
+  });
+  const body = Buffer.concat(recs);
+  const len = body.length < 0xFF ? Buffer.from([body.length]) : Buffer.from([0xFF, body.length >> 8, body.length & 255]);
+  return Buffer.concat([Buffer.from([0x03]), len, body, Buffer.from([0xFE])]);
+}
+
+module.exports = { parseNdef, uriOf, mimeMessage, message, uriPayload, URI_PREFIXES };

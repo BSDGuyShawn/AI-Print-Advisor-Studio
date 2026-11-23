@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.30.0
+- **Your filament library on your phone** (iPhone and Android), on your home Wi-Fi: turn on **Settings → Phone access**,
+  click **Pair a phone** and scan the QR code. Look things up, update spools (open, empty, move, weigh, log grams),
+  and add filament, including from a photo of an order (read by Claude with the API key on your PC). Changes show up
+  on the PC and other phones at once. Add it to the Home Screen to use it like an app. Works while the app is open on
+  the PC; only paired phones get in.
+- **Scan spools with the phone**: printed labels now have a QR code that opens the spool (the phone's camera app is
+  enough), stickers the app writes link to their spool (tap with the phone), and a scan on the PC's NFC reader opens
+  the spool on the phone too. An optional **secure address** adds a Scan button inside the page (camera, and NFC on
+  Android), after the phone trusts the app's own certificate once.
+- Phones that can’t find the PC by name (some Android phones) use its address, and labels and stickers link to that
+  address too; Settings says so (reserve the address in your router).
+- **Linking a tag to a spool** narrows it down step by step (type → brand → color → filament → spool) instead of one
+  long list; a step with one choice picks itself, and the spool is shown to confirm.
+- NTAG203/213 stickers, too small for the filament's details, now get the spool link instead.
+- The Filament screen saves safely when several screens edit at once (a save based on old data is refused and reloads).
+
 ## 2.29.0
 - **Spool tags (NFC/RFID).** Turn it on in **Settings → Spool tags** and tap a spool on an NFC reader: a spool
   you've scanned before opens, highlighted; a new one can be added with its brand, material, color, weight and

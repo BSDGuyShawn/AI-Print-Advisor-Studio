@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Filament Inventory</title>
-<!-- Same rules as the main window, plus product photos served by the app from its data folder (app://filament/). -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob: app://filament; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self'">
+<!-- Same rules as the main window, plus product photos served by the app from its data folder (app://filament/).
+     On a phone (Phone access) the page may also check whether the PC answers by its name, <pc>.local. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob: app://filament; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self' http://*.local:*">
 <style>
 :root{
   --bg:#E6E9EC; --surface:#ffffff; --surface-2:#F0F2F4; --text:#18232E; --muted:#586774; --border:#CBD2D8;
@@ -207,6 +208,10 @@ textarea{width:100%;min-height:60px;border:1px solid var(--border);border-radius
 .tagrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .tagrow .spacer{flex:1}
 .tagrow .dot{width:22px;height:22px}
+.pickrow{display:flex;flex-wrap:wrap;gap:10px}
+.pick{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--muted);flex:1 1 150px;min-width:0}
+.pick select{width:100%;max-width:none}
+.pickconfirm{margin-top:12px;padding:10px 12px;background:var(--surface-2);border-radius:12px}
 .srow{display:grid;grid-template-columns:52px 130px minmax(140px,1fr) 190px auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px}
 .srow select,.srow input{padding:5px 7px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);width:100%}
 .srow .remcell{display:flex;align-items:center;gap:6px}
@@ -280,6 +285,9 @@ table.review .note{font-size:11.5px;color:var(--warn);margin-top:3px}
 .sheet .lbl b{font-size:10.5pt}
 .roll .lbl{width:2.25in;height:1.25in;padding:.08in .1in;font-size:9pt;break-after:page}
 .roll .lbl .sw{width:.7in;height:.7in}
+.lbl .t{flex:1;min-width:0}
+.lbl .qr{width:.82in;height:.82in;flex:none;image-rendering:pixelated}
+.roll .lbl .qr{width:.95in;height:.95in}
 .roll .lbl b{font-size:11.5pt}
 
 @media (max-width:760px){
@@ -360,6 +368,7 @@ table.review .note{font-size:11.5px;color:var(--warn);margin-top:3px}
 <div id="printArea"></div>
 <input type="file" id="importFile" accept=".json,application/json" hidden>
 
+<script src="../../node_modules/qrcode-generator/dist/qrcode.js"></script>
 <script src="specs.js"></script>
 <script src="tags.js"></script>
 <script src="boot.js"></script>

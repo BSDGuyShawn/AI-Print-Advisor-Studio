@@ -50,6 +50,7 @@ Everything AI 3D Print Advisor Studio can do, in one list. New to 3D printing? S
 - **Spool tracking**: sealed, opened, drying, loaded, empty; grams left; where it's stored; history.
 - **Weigh-ins**: enter the scale reading, the app subtracts the empty spool.
 - **Scan spool tags (NFC/RFID)**: tap a Bambu Lab, Snapmaker, Creality, QIDI, Anycubic or ELEGOO spool (or OpenSpool, OpenTag3D, SpoolEase, TigerTag) and that spool opens, or is added with its brand, material, color, weight and temperatures filled in from the tag. Works with USB NFC readers (ACR122U, ACR1252U, Cryptnox, HID Omnikey…), an Arduino with a PN532 shield, or a PN532 board.
+- **On your phone** (iPhone and Android, home Wi-Fi): pair with a QR code, then look up, update and add filament from the phone's browser (Home Screen app). Changes sync live with the PC. Spool labels get a QR code that opens the spool; stickers the app writes open it with a tap; scans on the PC's reader show up on the phone. Optional secure address for scanning inside the page (camera; NFC on Android).
 - **Write your own filament to NFC stickers** (OpenSpool or OpenTag3D on NTAG215/216), linked to the spool so scanning it opens that spool. Other tools that read OpenSpool understand it too. Brand tags are never written.
 - **Add from a screenshot** of any order page, receipt or product page (read by Claude), with photos cut out automatically and **missing photos found online** from the brand's store.
 - **Manufacturer print settings** and Snapmaker Orca presets for many brands.

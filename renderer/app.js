@@ -2624,6 +2624,84 @@ async function saveNfcSettings() {
     openAnywhere: $('nfcAnywhere').checked, writeFormat: $('nfcFormat').value, confirmOverwrite: $('nfcConfirm').checked };
   try { NFC = { ...NFC, ...(await api.nfcSet(patch)) }; } catch (e) { toast(String(e.message || e), 5000); }
 }
+// ---------- Settings: phone access (the Filament library on phones on the home network, src/phone) ----------
+let PH = { devices: [] };
+let phonePairTimer = null;
+const ago = (t) => {
+  if (!t) return 'never';
+  const m = Math.round((Date.now() - t) / 60000);
+  return m < 2 ? 'just now' : m < 60 ? `${m} min ago` : m < 48 * 60 ? `${Math.round(m / 60)} h ago` : new Date(t).toLocaleDateString();
+};
+function renderPhoneStatus() {
+  const el = $('phoneStatus');
+  if (!el) return;
+  let text, cls = '';
+  if (!$('phoneOn').checked) text = PH.enabled ? 'Turns off when you save settings.' : 'Off.';
+  else if (!PH.enabled) text = 'Starts when you save settings.';
+  else if (PH.error) { text = PH.error; cls = 'bad'; }
+  else if (PH.running) {
+    const u = PH.urls || {};
+    text = `✓ On at ${u.name}${u.ips && u.ips.length ? ` (also ${u.ips.join(', ')})` : ''}${u.https ? ` · secure: ${u.https}` : ''}`;
+    if (PH.linkVia && PH.linkVia.because) text += ` · Links on labels and stickers use ${PH.linkBase}, because ${PH.linkVia.because} can’t find this PC by name: reserve that address for this PC in your router so it doesn’t change.`;
+    cls = 'ok';
+  } else text = 'Starting…';
+  el.textContent = text;
+  el.className = `nfc-status ${cls}`;
+  $('phonePairBtn').disabled = !PH.running;
+  const devs = PH.devices || [];
+  $('phoneDevices').innerHTML = devs.length ? `<small><b>Paired phones</b></small>${devs.map(d => `<div class="phone-dev"><span class="grow">${esc(d.name)} <small>· paired ${new Date(d.paired).toLocaleDateString()} · last seen ${ago(d.lastSeen)}${d.localOk === false ? ' · <span style="color:var(--warn)">can’t find this PC by name, so links use its address</span>' : ''}</small></span><button type="button" class="link" data-phone-remove="${esc(d.id)}">Remove</button></div>`).join('')}` : '';
+}
+async function renderPhoneSettings() {
+  const tour = !!api.tour;
+  $('phoneTour').classList.toggle('hidden', !tour);
+  $('phoneOn').disabled = tour;
+  const s = (await api.phoneStatus().catch(() => null)) || {};
+  PH = { ...PH, ...s };
+  $('phoneOn').checked = !!s.enabled;
+  $('phoneReader').checked = s.readerToPhones !== false;
+  $('phoneStickers').checked = s.stickerLinks !== false;
+  $('phoneLinkHost').value = s.linkHost === 'ip' ? 'ip' : 'name';
+  $('phoneHttps').checked = !!s.https;
+  $('phonePort').value = s.port || 8765;
+  $('phonePair').classList.add('hidden');
+  const showOpts = () => $('phoneOpts').classList.toggle('hidden', !$('phoneOn').checked || tour);
+  showOpts();
+  $('phoneOn').onchange = () => { showOpts(); renderPhoneStatus(); };
+  $('phonePairBtn').onclick = async () => {
+    try {
+      const r = await api.phonePair();
+      const q = window.qrcode(0, 'M'); q.addData(r.url); q.make();
+      $('phoneQr').src = q.createDataURL(5, 2);
+      $('phonePairUrl').textContent = r.url;
+      $('phonePair').classList.remove('hidden');
+      clearInterval(phonePairTimer);
+      const tick = () => {
+        const left = Math.max(0, Math.round((r.expires - Date.now()) / 1000));
+        $('phonePairExp').textContent = left ? `(works for ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}, once)` : '(expired: click Pair a phone again)';
+        if (!left) { clearInterval(phonePairTimer); $('phoneQr').style.opacity = '.2'; } else $('phoneQr').style.opacity = '';
+      };
+      tick(); phonePairTimer = setInterval(tick, 1000);
+    } catch (e) { toast(String(e.message || e).replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, ''), 5000); }
+  };
+  $('phoneDevices').onclick = async (e) => {
+    const b = e.target.closest('[data-phone-remove]');
+    if (!b) return;
+    PH = { ...PH, ...(await api.phoneRemove(b.dataset.phoneRemove)) };
+    renderPhoneStatus();
+  };
+  renderPhoneStatus();
+}
+if (api.onPhoneStatus) api.onPhoneStatus(s => { PH = { ...PH, ...s }; if ($('settingsDialog').open) renderPhoneStatus(); });
+async function savePhoneSettings() {
+  clearInterval(phonePairTimer);
+  if (api.tour || !api.phoneSet) return;
+  const port = parseInt($('phonePort').value, 10);
+  const patch = { enabled: $('phoneOn').checked, readerToPhones: $('phoneReader').checked, stickerLinks: $('phoneStickers').checked,
+    linkHost: $('phoneLinkHost').value, https: $('phoneHttps').checked };
+  if (port >= 1024 && port <= 65535) { patch.port = port; patch.httpsPort = port + 1; }
+  try { PH = { ...PH, ...(await api.phoneSet(patch)) }; } catch (e) { toast(String(e.message || e), 5000); }
+  if (PH.error) toast(`Phone access: ${PH.error}`, 8000);
+}
 function openSettings() {
   const sel = $('modelSelect');
   const known = [...sel.options].some(o => o.value === state.config.model);
@@ -2662,6 +2740,7 @@ function openSettings() {
   $('autoUpdate').checked = state.config.autoUpdate !== false;
   $('updateStatus').textContent = UPDATE.info && UPDATE.info.available ? `Version ${UPDATE.info.latest} is available.` : `You have version ${state.config.version || ''}.`;
   renderNfcSettings();
+  renderPhoneSettings();
   $('settingsDialog').showModal();
   guideEvent('settings');
 }
@@ -2844,6 +2923,7 @@ $('settingsDialog').addEventListener('close', async () => {
   const before = state.info.available;
   await api.setConfig(patch);
   await saveNfcSettings();
+  await savePhoneSettings();
   await loadConfig();
   state.history = null;
   toast('Settings saved.', 2500);

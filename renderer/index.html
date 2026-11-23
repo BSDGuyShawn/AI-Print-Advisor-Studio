@@ -261,6 +261,27 @@
         </div>
         <p class="hint hidden" id="nfcTour">Spool tags are off in the guided tour.</p>
       </fieldset>
+      <fieldset class="nfc phone" id="phoneField">
+        <legend>Phone access</legend>
+        <label class="check"><input type="checkbox" id="phoneOn"> <b>Open my filament library on phones on my home Wi-Fi</b></label>
+        <small>Look things up, update spools and add filament from your phone, in its browser (add it to the Home Screen to use it like an app). Only phones you pair can open it, and only on your home network, while the app is open on this PC.</small>
+        <p class="nfc-status" id="phoneStatus" aria-live="polite"></p>
+        <div class="nfc-opts" id="phoneOpts">
+          <div class="row-btns"><button type="button" class="btn" id="phonePairBtn">Pair a phone</button></div>
+          <div class="phone-pair hidden" id="phonePair">
+            <img id="phoneQr" alt="QR code to pair a phone">
+            <div><b>Scan this with the phone’s camera</b> and open the link. <small id="phonePairExp"></small><br><small>Or type this on the phone: <code id="phonePairUrl"></code></small><br><small>Phone and PC must be on the same Wi-Fi. If Windows asks whether to allow the app on networks, allow <b>Private</b> networks.</small><br><small><b>Phone can’t connect?</b> Windows may be blocking the app: <b>Windows Security → Firewall &amp; network protection → Allow an app through firewall → Change settings</b>, then tick <b>Private</b> for AI 3D Print Advisor Studio.</small></div>
+          </div>
+          <div id="phoneDevices"></div>
+          <label class="check"><input type="checkbox" id="phoneReader"> Scanning a spool on this PC’s NFC reader also opens it on the phones</label>
+          <label class="check"><input type="checkbox" id="phoneStickers"> NFC stickers you write link to their spool, so tapping them with a phone opens it</label>
+          <label class="field"><span>Links on labels and stickers use</span>
+            <select id="phoneLinkHost"><option value="name">This PC’s name, or its address if a paired phone can’t use the name</option><option value="ip">Always this PC’s address</option></select></label>
+          <label class="check"><input type="checkbox" id="phoneHttps"> <b>Secure address</b> for scanning inside the phone page (camera, and NFC on Android). Each phone trusts the app’s certificate once; the page explains how.</label>
+          <label class="field"><span>Port <small>(change only if another program uses it)</small></span><input type="number" id="phonePort" min="1024" max="65535" style="width:110px"></label>
+        </div>
+        <p class="hint hidden" id="phoneTour">Phone access is off in the guided tour.</p>
+      </fieldset>
       <fieldset class="samples hidden" id="sampleField">
         <legend>Filament library</legend>
         <p class="hint" id="sampleText"></p>
@@ -599,6 +620,7 @@
 
   <div class="toast hidden" id="toast" role="status"></div>
 
+  <script src="../node_modules/qrcode-generator/dist/qrcode.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

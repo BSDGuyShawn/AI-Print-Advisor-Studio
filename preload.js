@@ -83,6 +83,13 @@ contextBridge.exposeInMainWorld('advisor', {
   nfcTestPort: (port) => ipcRenderer.invoke('nfc-test-port', port),
   nfcWrite: (a) => ipcRenderer.invoke('nfc-write', a),
   nfcWriteCancel: () => ipcRenderer.invoke('nfc-write-cancel'),
+  // phone access (the Filament library on phones on the home network) and live inventory updates
+  phoneStatus: () => ipcRenderer.invoke('phone-status'),
+  phoneSet: (patch) => ipcRenderer.invoke('phone-set', patch),
+  phonePair: () => ipcRenderer.invoke('phone-pair'),
+  phoneRemove: (id) => ipcRenderer.invoke('phone-remove', id),
+  onPhoneStatus: (cb) => { const h = (_e, s) => cb(s); ipcRenderer.on('phone-status', h); return () => ipcRenderer.removeListener('phone-status', h); },
+  onFilamentChanged: (cb) => { const h = (_e, s) => cb(s); ipcRenderer.on('filament-changed', h); return () => ipcRenderer.removeListener('filament-changed', h); },
   remixPrepare: (a) => ipcRenderer.invoke('remix-prepare', a),
   partsIdentify: (a) => ipcRenderer.invoke('parts-identify', a),
   partsConfirm: (a) => ipcRenderer.invoke('parts-confirm', a),

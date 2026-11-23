@@ -6,7 +6,7 @@
 // Bambu Lab and Snapmaker tags can't be made: those are signed by the manufacturer.
 'use strict';
 
-const { mimeMessage } = require('./ndef');
+const { message, uriPayload } = require('./ndef');
 const { OT3D, OT3D_MIME, OT3D_VERSION } = require('./decoders');
 const VALID = new Set(require('./data/brands.json').validMaterials);
 
@@ -51,24 +51,25 @@ function normalize(f) {
     nozzleMin: Math.min(nozzleMin, nozzleMax), nozzleMax: Math.max(nozzleMin, nozzleMax),
     bedMin: clampTemp(f.bedMin), bedMax: clampTemp(f.bedMax) ?? clampTemp(f.bedMin),
     dryTemp: clampTemp(f.dryTemp), dryHours: Number.isFinite(+f.dryHours) && +f.dryHours > 0 ? Math.min(255, Math.round(+f.dryHours)) : null,
+    link: typeof f.link === 'string' && /^https?:\/\/[^\s]{1,150}$/.test(f.link) ? f.link : null,
   };
 }
 
-// OpenSpool JSON. Optional fields are dropped (least useful first) until it fits the sticker.
-function openSpool(f, capacity) {
+// OpenSpool JSON records, fullest first: optional fields are dropped (least useful last) until it fits the sticker.
+function openSpool(f) {
   const j = { protocol: 'openspool', version: '1.0', type: f.type, color_hex: f.hex, brand: f.brand,
     min_temp: String(f.nozzleMin), max_temp: String(f.nozzleMax) };
   const optional = [
     ['subtype', f.subtype], ['weight', String(f.weight)], ['diameter', String(f.diameter)],
     ['bed_min_temp', f.bedMin ? String(f.bedMin) : ''], ['bed_max_temp', f.bedMax ? String(f.bedMax) : ''],
   ].filter(([, v]) => v);
-  const build = (n) => mimeMessage('application/json', Buffer.from(JSON.stringify({ ...j, ...Object.fromEntries(optional.slice(0, n)) }), 'utf8'));
-  for (let n = optional.length; n >= 0; n--) { const m = build(n); if (!capacity || m.length <= capacity) return m; }
-  throw new Error('This sticker is too small for the filament’s details. Use an NTAG215 or NTAG216.');
+  const out = [];
+  for (let n = optional.length; n >= 0; n--) out.push({ tnf: 2, type: 'application/json', payload: Buffer.from(JSON.stringify({ ...j, ...Object.fromEntries(optional.slice(0, n)) }), 'utf8') });
+  return out;
 }
 
 // OpenTag3D binary record, laid out by the official schema (same file the reader uses)
-function openTag3D(f, capacity) {
+function openTag3D(f) {
   const payload = Buffer.alloc(parseInt(OT3D.core.address_range.end, 16) + 1);
   const field = Object.fromEntries(OT3D.core.fields.map(x => [x.id, x]));
   const putInt = (id, value) => {
@@ -98,16 +99,28 @@ function openTag3D(f, capacity) {
   putInt('dry_time', f.dryHours);
   putInt('density', DENSITY[f.type] || 1.24);
   putInt('weight', f.weight);
-  const m = mimeMessage(OT3D_MIME, payload);
-  if (capacity && m.length > capacity) throw new Error('An OpenTag3D record needs an NTAG215 or NTAG216 sticker. Use one of those, or switch to OpenSpool in Settings.');
-  return m;
+  return [{ tnf: 2, type: OT3D_MIME, payload }];
 }
 
 const FORMATS = { openspool: openSpool, opentag3d: openTag3D };
-// The NDEF message (TLV, from page 4) to write. capacity = the sticker's data area in bytes (from its CC).
+// The NDEF message (TLV, from page 4) to write. capacity = the sticker's data area in bytes (from its CC; 0 = no limit).
+// With a link (phone access on), its URI record goes first, so tapping the sticker with a phone opens the spool's
+// page (phones open the first record); readers of OpenSpool/OpenTag3D look through all the records. If the
+// filament's details don't fit next to the link, the sticker gets the link alone (result.linkOnly).
 function encodeTag(format, filament, capacity) {
-  const enc = FORMATS[format] || openSpool;
-  return enc(normalize(filament), capacity);
+  const f = normalize(filament);
+  const fits = (m) => !capacity || m.length <= capacity;
+  const link = f.link ? { tnf: 1, type: 'U', payload: uriPayload(f.link) } : null;
+  for (const rec of (FORMATS[format] || openSpool)(f)) {
+    const m = message(link ? [link, rec] : [rec]);
+    if (fits(m)) return m;
+  }
+  if (link) {
+    const m = message([link]);
+    if (fits(m)) return Object.assign(m, { linkOnly: true });
+  }
+  throw new Error(format === 'opentag3d' ? 'An OpenTag3D record needs an NTAG215 or NTAG216 sticker. Use one of those, or switch to OpenSpool in Settings.'
+    : 'This sticker is too small for the filament’s details. Use an NTAG215 or NTAG216.');
 }
 
 module.exports = { encodeTag, normalize, FORMATS: Object.keys(FORMATS) };

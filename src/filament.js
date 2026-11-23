@@ -19,11 +19,19 @@ const day = () => new Date().toISOString().slice(0, 10);
 
 // one line of a purchase, for telling sample orders apart from your own
 const orderKey = (o) => JSON.stringify([o.asin, o.date, o.brand, o.line, o.grams, o.colors]);
+// Several screens can edit it at once (the app's Filament screen and phones, see src/phone): every save names the
+// revision it started from, and a save based on an older one is refused (error code STALE), so one screen never
+// silently overwrites another's change. `onChange(rev)` is called after each change.
 class FilamentStore {
   constructor(userData) {
     this.dir = path.join(userData, 'filament');
     this.writing = Promise.resolve();   // saves run one after another, never interleaved
+    this.rev = 1;          // the newest accepted save
+    this.savedRev = 1;     // the newest save that's on disk: what load() reports, and what other screens are told
+    this.onChange = () => {};
   }
+  // a change that's already on disk (samples loaded or removed): tell the other screens
+  bump() { this.rev++; this.savedRev = this.rev; try { this.onChange(this.rev); } catch {} return this.rev; }
   file(name) { return path.join(this.dir, name); }
   get imagesDir() { return this.file('images'); }
   get backupsDir() { return this.file('backups'); }
@@ -40,12 +48,13 @@ class FilamentStore {
 
   load() {
     const catalog = this.readJson('catalog.json', null) || {};
-    return { catalog: { orders: Array.isArray(catalog.orders) ? catalog.orders : [], prices: catalog.prices || {} }, state: this.readJson('state.json', null) };
+    return { catalog: { orders: Array.isArray(catalog.orders) ? catalog.orders : [], prices: catalog.prices || {} }, state: this.readJson('state.json', null), rev: this.savedRev };
   }
 
-  save({ state, stock }) {
+  save({ state, stock, rev }) {
     if (!state || state.v !== 2 || typeof state.spools !== 'object' || !Array.isArray(state.custom)) throw new Error('the inventory data looks damaged, so it wasn’t saved.');
     if (!stock || !Array.isArray(stock.filaments)) throw new Error('the on-hand list is missing.');
+    if (rev != null && rev !== this.rev) throw Object.assign(new Error('STALE: changed on another device in the meantime.'), { code: 'STALE' });
     const run = async () => {
       await fsp.mkdir(this.dir, { recursive: true });
       await this.dailyBackup();
@@ -53,7 +62,13 @@ class FilamentStore {
       await this.writeAtomic('stock.json', JSON.stringify(stock, null, 1));
     };
     this.writing = this.writing.then(run, run);
-    return this.writing;
+    const next = ++this.rev;
+    // only once it's written: a screen that reloads on this news must get this data, not the file before it
+    return this.writing.then(() => {
+      if (next > this.savedRev) this.savedRev = next;
+      try { this.onChange(next); } catch {}
+      return { rev: next };
+    });
   }
 
   // the first save of each day keeps the previous state as that day's backup

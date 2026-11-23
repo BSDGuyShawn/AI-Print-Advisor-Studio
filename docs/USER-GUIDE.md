@@ -206,6 +206,23 @@ Give any spool a tag that also tells other tools what's on it:
 - **NTAG203 and NTAG213 stickers** hold only 144 bytes, too little for either format. The app offers **Link it without writing**: scanning it then opens the spool in this app, but other tools won't know what it is.
 - A sticker that already has data on it asks before it's written over (you can turn that off in Settings). Bambu Lab, Snapmaker, Creality and QIDI tags (MIFARE Classic) are never written, and neither are a sticker's ID, lock, configuration or password pages, so a sticker can't be locked by accident.
 
+**Your filament on your phone**
+
+Open your filament library on your phone (iPhone or Android) while you're at home, in the phone's web browser:
+
+1. On the PC: **Settings → Phone access**, tick **Open my filament library on phones on my home Wi-Fi**, and **Save settings**. If Windows asks whether to allow the app on networks, allow **Private** networks.
+2. Open Settings again and click **Pair a phone**. Scan the QR code with the phone's camera and open the link (the phone must be on the same Wi-Fi). The code works once, for five minutes.
+3. On the phone, **add the page to the Home Screen** (iPhone: Share → Add to Home Screen; Android: ⋮ → Add to Home screen) to open it like an app.
+
+On the phone you can search and browse, update spools (open, empty, move to a dry box or toolhead, weigh, log grams used) and add filament, including from a photo of an order (Claude reads it with the API key on your PC). Changes appear on the PC and other phones at once. It works while the PC is on and the app is open; **Remove** a phone in Settings to lock it out.
+
+- **Labels**: with phone access on, printed spool labels get a QR code. Point the phone's camera at it and the spool opens.
+- **Stickers**: stickers the app writes link to their spool, so tapping one with the phone opens it (iPhone XS or newer, or Android with NFC on). Small NTAG203/213 stickers get just the link.
+- **The PC's reader**: a scan on the PC's NFC reader also opens the spool on the phone (switch it off in Settings).
+- **Secure address** (optional): for scanning inside the phone page (camera, and NFC stickers on Android Chrome). Turn it on in Settings; then on the phone tap **📷 Scan** and follow the steps to trust the app's certificate once. The camera app works for labels without this.
+- Links use the PC's name (like `mypc.local`), which keeps working if the PC's address changes. Some Android phones can't find PCs by name: then they use the PC's address, labels and stickers link to the address too (Settings says so), and you should reserve that address for the PC in your router ("DHCP reservation") so it doesn't change.
+- **Phone can't connect?** Windows may be blocking the app: Windows Security → Firewall & network protection → Allow an app through firewall → Change settings, and tick **Private** for AI 3D Print Advisor Studio.
+
 ![Filament library](images/09-filament-library.jpg)
 
 Color remix and the "What to buy" box use what's in your library, so keeping it up to date pays off.

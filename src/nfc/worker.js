@@ -90,7 +90,7 @@ async function doWrite(t, info) {
     send({ type: 'write-progress', id: job.id, status: 'writing', uid });
     const back = await writeMessage(t, info, message, insp);
     log(`wrote ${job.format} to ${uid} on ${t.name}`);
-    finishWrite({ status: 'written', uid, spoolId: `uid:${uid}`, format: job.format, readBack: back ? back.filament.name : null, reader: t.name });
+    finishWrite({ status: 'written', uid, spoolId: `uid:${uid}`, format: message.linkOnly ? 'link' : job.format, readBack: back ? back.filament.name : null, reader: t.name });
   } catch (e) {
     finishWrite({ status: 'error', uid, message: String(e && e.message || e) });
   }

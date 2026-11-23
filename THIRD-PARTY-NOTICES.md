@@ -9,6 +9,8 @@ AI 3D Print Advisor Studio is licensed under the GNU Affero General Public Licen
 | [JSZip](https://stuk.github.io/jszip/) 3.10.1 | Reading and writing .3mf files (zip archives) | MIT (dual-licensed MIT or GPLv3; used under MIT) |
 | [ws](https://github.com/websockets/ws) 8.18.0 | Talking to printers over Moonraker's websocket | MIT |
 | [electron-builder](https://www.electron.build/) | Packaging (build tool only, not shipped) | MIT |
+| [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 2.0.4 | QR codes for pairing phones and on spool labels | MIT |
+| [jsQR](https://github.com/cozmo/jsQR) 1.4.0 | Reading QR codes with the phone camera (secure address, iPhone) | Apache-2.0 |
 | [koffi](https://koffi.dev/) 3.3.8 (with `@koromix/koffi-win32-x64`) | Calling Windows' smart-card (PC/SC) and serial-port functions for NFC readers | MIT |
 | [OpenRFID](https://github.com/suchmememanyskill/OpenRFID) tag decoders, commit `a13bc9e`, ported to JavaScript in `src/nfc/decoders.js` and `src/nfc/ndef.js` (lookup tables in `src/nfc/data`) | Decoding Bambu Lab, Snapmaker, Creality, QIDI, Anycubic, ELEGOO, OpenSpool, OpenTag3D, SpoolEase and TigerTag tags | GPL-3.0 (compatible with this project's AGPL-3.0, section 13) |
 | [OpenTag3D specification](https://opentag3d.info/spec.html) `spec.json` 2.001 (`src/nfc/data/opentag3d-v2.json`, unchanged) | Reading and writing OpenTag3D tags | GPL-3.0 |

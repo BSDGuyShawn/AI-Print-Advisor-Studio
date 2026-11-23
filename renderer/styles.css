@@ -707,6 +707,11 @@ fieldset.nfc .check input { accent-color: var(--accent); }
 .nfc-status { margin: 2px 0; font-size: 13px; color: var(--muted); }
 .nfc-status.ok { color: var(--ok, #2e8b57); }
 .nfc-status.bad { color: var(--danger, #c0392b); }
+.phone-pair { display: flex; gap: 14px; align-items: center; background: var(--panel-2, rgba(127,127,127,.08)); border-radius: var(--radius-s); padding: 10px; font-size: 13.5px; }
+.phone-pair img { width: 150px; height: 150px; background: #fff; padding: 6px; border-radius: 6px; image-rendering: pixelated; flex: none; }
+.phone-pair code { user-select: all; word-break: break-all; }
+.phone-dev { display: flex; align-items: center; gap: 10px; font-size: 13.5px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.phone-dev .grow { flex: 1; }
 fieldset.updates .check { display: block; margin: 8px 0 4px; }
 
 /* links to open from a guide step (Claude Console, Snapmaker Orca download) */

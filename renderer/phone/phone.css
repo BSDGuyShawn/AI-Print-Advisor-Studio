@@ -1,0 +1,67 @@
+/* The Filament screen on a phone (Phone access). Layered over renderer/filament/index.html's own styles. */
+
+/* things that only make sense on the PC: writing NFC stickers, printing labels, the backups folder, reader settings */
+html.phone [data-tagwrite-fil], html.phone [data-panel="tag"], html.phone [data-labels-fil], html.phone [data-bulk-labels],
+html.phone [data-labels-all], html.phone .nfcpanel, html.phone #themeBtn { display: none !important; }
+
+html.phone body { -webkit-text-size-adjust: 100%; overscroll-behavior-y: contain; }
+html.phone .btn { min-height: 40px; }
+html.phone .btn.small { min-height: 34px; padding-left: 10px; padding-right: 10px; }
+html.phone input, html.phone select, html.phone textarea { font-size: 16px; }   /* no zoom-in on focus (iPhone) */
+
+@media (max-width: 760px) {
+  html.phone header { position: sticky; top: 0; z-index: 20; padding-top: env(safe-area-inset-top); }
+  html.phone .top { flex-wrap: wrap; gap: 8px; }
+  html.phone .top h1 { font-size: 20px; }
+  html.phone .top .stats, html.phone .top .spacer { display: none; }
+  html.phone .tabs { order: 5; width: 100%; overflow-x: auto; }
+  html.phone #shotBtn { font-size: 0; padding: 0 12px; }
+  html.phone #shotBtn::before { content: '🧾 Photo'; font-size: 15px; }
+  html.phone #phoneScanBtn { margin-left: auto; }
+  html.phone .controls { flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
+  html.phone .controls .search { flex: 1 0 70%; }
+  html.phone .controls .sel, html.phone .controls .seg { flex: none; }
+  html.phone .chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+  html.phone .controls, html.phone .chips, html.phone .tabs { scrollbar-width: none; }
+  html.phone .controls::-webkit-scrollbar, html.phone .chips::-webkit-scrollbar, html.phone .tabs::-webkit-scrollbar { display: none; }
+  html.phone .detail .orders div { gap: 10px; }
+  html.phone .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* a filament's card: a full-screen sheet */
+  html.phone .overlay { align-items: flex-start; padding: 0; }
+  html.phone .modal { width: 100%; max-width: none; min-height: 100vh; min-height: 100dvh; border-radius: 0; margin: 0; box-shadow: none;
+    padding-bottom: env(safe-area-inset-bottom); }
+  html.phone .modal .x { position: fixed; top: calc(10px + env(safe-area-inset-top)); right: 12px; z-index: 60; width: 42px; height: 42px; font-size: 24px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .3); }
+  html.phone .detail .photo img { max-height: 42vh; object-fit: contain; }
+
+  /* spool rows: everything stacked, big buttons */
+  html.phone .spoolbox h3 { flex-wrap: wrap; }
+  html.phone .srow { grid-template-columns: 52px 1fr 1fr; row-gap: 8px; padding: 12px 0; }
+  html.phone .srow .acts { display: flex; gap: 8px; }
+  html.phone .srow .acts .btn { flex: 1; }
+  html.phone .sub-panel { flex-direction: column; align-items: stretch; }
+  html.phone .sub-panel input { width: 100%; }
+}
+
+/* the bottom sheet (Scan, set-up notes) */
+.psheet { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); display: none; align-items: flex-end; z-index: 200; }
+.psheet.open { display: flex; }
+.psheet-card { background: var(--surface); color: var(--text); width: 100%; max-height: 88vh; overflow: auto; border-radius: 18px 18px 0 0;
+  padding: 20px 18px calc(18px + env(safe-area-inset-bottom)); box-shadow: 0 -6px 30px rgba(0, 0, 0, .25); }
+.psheet-card h2 { margin: 0 0 10px; font-size: 19px; }
+.psheet-card p, .psheet-card li { font-size: 15px; line-height: 1.5; }
+.psheet-card ol { padding-left: 22px; }
+.psheet-card li { margin-bottom: 10px; }
+.psheet-close { width: 100%; margin-top: 12px; }
+.pchoices { display: flex; flex-direction: column; gap: 10px; }
+.pchoices .btn { min-height: 52px; font-size: 16px; }
+.pwarn { color: var(--warn); }
+.pcam { position: relative; background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 3 / 4; }
+.pcam video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pcam-frame { position: absolute; inset: 22%; border: 3px solid rgba(255, 255, 255, .85); border-radius: 14px; }
+
+/* not connected to the PC */
+.pconn { position: fixed; left: 0; right: 0; bottom: 0; background: var(--danger); color: #fff; padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+  font-size: 14px; text-align: center; transform: translateY(100%); transition: transform .2s; z-index: 300; }
+.pconn.show { transform: none; }

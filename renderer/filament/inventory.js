@@ -4,11 +4,15 @@
 // Everything is saved by the app in its data folder (filament\state.json), not in browser storage. Each change
 // also saves what's on hand (filament\stock.json), which Color remix and the shopping check use.
 // Only view preferences (filters, sort, current tab) stay in this page's localStorage.
-const api = window.parent.advisor;
+// In the app this page is an iframe of the main window and uses its bridge; on a phone (Phone access, src/phone)
+// renderer/phone/phone-boot.js provides the same calls over the network as window.advisor.
+const api = (window.parent !== window && window.parent.advisor) || window.advisor;
+const PHONE = !!api.phone;
 const BOOT = window.__FIL;
 const ORDERS = BOOT.catalog.orders || [];   // purchase history imported from the old page's data.js
 const PRICES = BOOT.catalog.prices || {};
 let saveTimer = null, saveErr = false;   // see persist()
+let rev = BOOT.rev ?? null;   // the inventory revision this page has (another screen saving bumps it)
 // An error from the app arrives as "Error invoking remote method 'x': Error: <message>"; keep the message.
 const T = window.SpoolTags;   // spool tag (NFC/RFID) helpers, renderer/filament/tags.js
 const ipcMessage = e => String(e && e.message || e).replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, '');
@@ -213,10 +217,31 @@ function migrateV1(v1) {
 function persist() { clearTimeout(saveTimer); saveTimer = setTimeout(flushSave, 300); }
 function flushSave() {
   clearTimeout(saveTimer); saveTimer = null;
-  return api.filamentSave({ state, stock: advisorStock() }).then(() => {
+  return api.filamentSave({ state, stock: advisorStock(), rev }).then(r => {
+    if (r && r.rev) rev = r.rev;
     if (saveErr) { saveErr = false; toast('Saved'); }
-  }, e => { saveErr = true; toast('Couldn’t save your filament: ' + ipcMessage(e), 8000); });
+  }, e => {
+    // another screen (a phone, or the app) saved first: take its version, so nothing it changed is lost
+    if (/STALE/.test(ipcMessage(e))) return reloadInventory('Updated from another device. If your last change is missing, make it again.');
+    saveErr = true; toast('Couldn’t save your filament: ' + ipcMessage(e), 8000);
+  });
 }
+// Fetch the saved inventory again (after another screen changed it) and redraw, keeping what's open
+let reloadPending = false;
+async function reloadInventory(note) {
+  if ($('#addForm') || $('#tagForm') || tagScan || shot) { reloadPending = true; return; }   // not while you're filling in a form
+  reloadPending = false;
+  let d;
+  try { d = await api.filamentLoad(); } catch { return; }
+  if (!d || !d.state) return;
+  state = d.state; rev = d.rev ?? rev;
+  upgradeLocations(); syncSources();
+  const open = $('#overlay').classList.contains('open') ? openFid : null;
+  render();
+  if (open && allFilaments().some(f => f.id === open)) { const panel = openPanel; openDetail(open); openPanel = panel; renderSpoolBox(); }
+  if (note) toast(note, 6000);
+}
+if (api.onFilamentChanged) api.onFilamentChanged(m => { if (m && m.rev > (rev || 0) && !saveTimer) reloadInventory(); });
 window.addEventListener('pagehide', () => { if (saveTimer) flushSave(); });
 
 function logEv(s, type, data = {}) { s.log.push({ t:nowISO(), type, ...data }); }
@@ -595,10 +620,11 @@ function renderSettings(fil) {
   $('#view-settings').innerHTML = `<div class="setgrid">
     <div class="panel"><h3>Claude <small>· for adding filament from screenshots</small></h3>
       <p class="muted" style="margin:0 0 8px;font-size:13px"><b>📷 From screenshot</b> and <b>Find missing photos online</b> use the Anthropic API key from the app's Settings (the gear at the top right), billed to your Anthropic account: usually a few cents per screenshot.</p>
-      <div class="setrow"><span class="grow">${hasKey ? '<b style="color:var(--petg)">✓ API key set</b>' : '<span class="muted">No API key set yet</span>'}</span>
-        <button class="btn small" data-app-settings>Open Settings</button></div>
+      ${PHONE ? `<div class="setrow"><span class="grow">${hasKey ? '<b style="color:var(--petg)">✓ Uses the API key saved in the app on your PC</b> <span class="muted">(it never comes to this phone)</span>' : '<span class="muted">No API key yet. Add it in the app on your PC: <b>Settings</b> (the gear at the top right).</span>'}</span></div>`
+      : `<div class="setrow"><span class="grow">${hasKey ? '<b style="color:var(--petg)">✓ API key set</b>' : '<span class="muted">No API key set yet</span>'}</span>
+        <button class="btn small" data-app-settings>Open Settings</button></div>`}
     </div>
-    <div class="panel"><h3>Spool tag reader <small>· NFC / RFID</small></h3>${nfcPanel()}</div>
+    <div class="panel nfcpanel"><h3>Spool tag reader <small>· NFC / RFID</small></h3>${nfcPanel()}</div>
     <div class="panel"><h3>Storage locations</h3>
       <p class="muted" style="margin:0 0 8px;font-size:13px">Tick <b>Printer</b> for toolheads or AMS slots. Moving a spool into one marks it <i>Loaded</i>.</p>
       ${state.locations.map(l => `<div class="setrow"><input type="text" class="grow" value="${esc(l.name)}" data-locname="${l.id}">
@@ -721,22 +747,71 @@ function tagSummary(scan, draft) {
     <div><b>${esc(bits[0])}</b><div class="muted" style="font-size:13px">${bits.slice(1).join(' · ')}</div>
     <div class="muted" style="font-size:12px">Color ${esc(sw.join(' / '))} · read from the tag</div></div></div>`;
 }
-function spoolOptionLabel(s, f) {
-  return `#${s.id} · ${f.color} · ${f.brand} ${f.line} · ${ST[s.status].l} · ${s.rem} g${s.tags?.length ? ' · has a tag' : ''}`;
+// Linking a tag to a spool you have: narrow it down step by step (type → brand → color → which filament → which
+// spool) instead of one long list. A step with only one choice is picked by itself; the spool is always shown to
+// confirm before linking. tagScan.pick holds the choices.
+function linkCandidates() {
+  const fil = Object.fromEntries(allFilaments().map(f => [f.id, f]));
+  return Object.values(state.spools).filter(s => s.status !== 'archived' && s.status !== 'empty' && fil[s.fid]).map(s => ({ s, f: fil[s.fid] }));
 }
+function linkPickerHtml() {
+  const p = tagScan.pick;
+  let c = linkCandidates();
+  if (!c.length) return '<p class="muted" style="margin:0">No spools to link yet.</p>';
+  const count = (n) => `${n} spool${n === 1 ? '' : 's'}`;
+  const step = (key, label, items) => {
+    // items: [{ v, l, n }]; one choice: picked by itself
+    if (items.length === 1) p[key] = items[0].v;
+    if (p[key] && !items.some(i => i.v === p[key])) p[key] = '';
+    return `<label class="pick"><span>${label}</span><select class="sel" data-pick="${key}">
+      ${items.length > 1 ? `<option value="">Choose…</option>` : ''}${items.map(i => `<option value="${esc(i.v)}" ${i.v === p[key] ? 'selected' : ''}>${esc(i.l)}${i.n ? ` (${count(i.n)})` : ''}</option>`).join('')}</select></label>`;
+  };
+  const group = (list, keyOf, labelOf, order) => {
+    const m = new Map();
+    for (const x of list) { const k = keyOf(x); const g = m.get(k) || { v: k, l: labelOf(x), n: 0 }; g.n++; m.set(k, g); }
+    return [...m.values()].sort(order || ((a, b) => a.l.localeCompare(b.l)));
+  };
+  const typeOrder = (a, b) => ((FIL_TYPES.indexOf(a.v) + 1 || 99) - (FIL_TYPES.indexOf(b.v) + 1 || 99)) || a.l.localeCompare(b.l);
+  let html = step('type', 'Type', group(c, x => x.f.type, x => x.f.type, typeOrder));
+  if (p.type) {
+    c = c.filter(x => x.f.type === p.type);
+    html += step('brand', 'Brand', group(c, x => x.f.brand, x => x.f.brand));
+  }
+  if (p.type && p.brand) {
+    c = c.filter(x => x.f.brand === p.brand);
+    html += step('color', 'Color', group(c, x => x.f.color, x => x.f.color));
+  }
+  if (p.type && p.brand && p.color) {
+    c = c.filter(x => x.f.color === p.color);
+    const fils = group(c, x => x.f.id, x => `${x.f.line} · ${x.f.finish} · ${fmtKg(x.f.grams)}`);
+    if (fils.length > 1) html += step('fid', 'Which one', fils);
+    else p.fid = fils[0].v;
+  }
+  if (p.fid) {
+    c = c.filter(x => x.f.id === p.fid);
+    // spools without a tag first
+    c.sort((a, b) => (!!a.s.tags?.length) - (!!b.s.tags?.length) || a.s.id.localeCompare(b.s.id));
+    const spools = c.map(x => ({ v: x.s.id, l: `#${x.s.id} · ${ST[x.s.status].l} · ${x.s.rem} g${x.s.loc ? ' · ' + locName(x.s.loc) : ''}${x.s.tags?.length ? ' · has a tag' : ''}` }));
+    if (spools.length > 1) html += step('sid', 'Spool', spools);
+    else p.sid = spools[0].v;
+  } else p.sid = '';
+  const chosen = p.sid && state.spools[p.sid];
+  const f = chosen && filDef(chosen.fid) && allFilaments().find(x => x.id === chosen.fid);
+  return `<div class="pickrow">${html}</div>
+    ${chosen && f ? `<div class="tagrow pickconfirm">${itemSwatch(f, '')}<span><b>Link to spool #${chosen.id}: ${esc(f.color)}</b>
+      <span class="muted">${esc(f.brand)} ${esc(f.line)} · ${esc(f.finish)} · ${ST[chosen.status].l} · ${chosen.rem} g${chosen.loc ? ' · ' + esc(locName(chosen.loc)) : ''}${chosen.tags?.length ? ' · already has a tag (this one is added)' : ''}</span></span>
+      <span class="spacer"></span><button class="btn primary" data-tag-link>Link tag</button></div>` : `<p class="muted" style="font-size:12.5px;margin:8px 0 0">Pick ${!p.type ? 'the type' : !p.brand ? 'the brand' : !p.color ? 'the color' : !p.fid ? 'which filament' : 'the spool'} to narrow it down.</p>`}`;
+}
+function renderLinkPicker() { const box = $('#tagLinkBox'); if (box) box.innerHTML = linkPickerHtml(); }
 function renderTagDialog() {
   const { scan, draft, match } = tagScan;
-  const fil = Object.fromEntries(allFilaments().map(f => [f.id, f]));
-  const linkable = Object.values(state.spools).filter(s => s.status !== 'archived' && s.status !== 'empty');
-  const mid = match?.filament.id;
-  // the matching filament's spools first, then untagged ones, then the rest
-  linkable.sort((a, b) => (b.fid === mid) - (a.fid === mid) || (!!a.tags?.length) - (!!b.tags?.length) || a.id.localeCompare(b.id));
+  // start from the filament the tag looks like, if any
+  if (!tagScan.pick) { const mf = match?.filament; tagScan.pick = mf ? { type: mf.type, brand: mf.brand, color: mf.color, fid: mf.id, sid: '' } : { type: '', brand: '', color: '', fid: '', sid: '' }; }
   const locSel = `<select class="sel" data-tagloc style="max-width:none"><option value="">— no location —</option>${state.locations.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select>`;
   const stSel = `<select class="sel" data-tagstatus><option value="new">Sealed</option><option value="opened">Opened</option></select>`;
   const m = match?.filament;
   const linkHtml = `<div class="tagopt"><h3>${m || draft ? 'Or link this tag to a spool you already have' : 'Link this tag to a spool'}</h3>
-      ${linkable.length ? `<div class="tagrow"><select class="sel" data-taglink style="flex:1 1 360px;width:auto;max-width:100%">${linkable.map(s => `<option value="${s.id}">${esc(spoolOptionLabel(s, fil[s.fid]))}${s.fid === mid ? ' ✓ matches' : ''}</option>`).join('')}</select>
-        <button class="btn ${m || draft ? '' : 'primary'}" data-tag-link>Link tag</button></div>` : '<p class="muted" style="margin:0">No spools to link yet.</p>'}
+      <div id="tagLinkBox">${linkPickerHtml()}</div>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Good for spools you added before (from an order or a screenshot) and for NFC stickers you put on spools yourself.</p></div>`;
   $('#modal').innerHTML = `<button class="x" data-close>×</button><div class="tagdlg">
     <h2>New spool tag</h2>
@@ -760,7 +835,7 @@ function renderTagDialog() {
     ${m ? '' : linkHtml}
   </div>`;
   $('#tagForm')?.addEventListener('submit', ev => { ev.preventDefault(); addTagFilament(new FormData(ev.target)); });
-  if (m) $('[data-tag-addto]')?.focus(); else if (!draft) $('[data-taglink]')?.focus(); else $('#tagForm [name=color]')?.focus();
+  if (m) $('[data-tag-addto]')?.focus(); else if (!draft) $('[data-pick]')?.focus(); else $('#tagForm [name=color]')?.focus();
 }
 // the nozzle/bed/drying temperatures from the tag, for a filament that has none of its own yet
 function fillTemps(fid, draft) {
@@ -806,7 +881,18 @@ $('#overlay').addEventListener('click', e => {
   if (!tagScan) return;
   const a = e.target.closest('[data-tag-addto]');
   if (a) return addTaggedSpool(a.dataset.tagAddto);
-  if (e.target.closest('[data-tag-link]')) return linkTag($('[data-taglink]').value);
+  if (e.target.closest('[data-tag-link]') && tagScan.pick?.sid) return linkTag(tagScan.pick.sid);
+});
+$('#overlay').addEventListener('change', e => {
+  const sel = e.target.closest('[data-pick]');
+  if (!tagScan || !sel) return;
+  // a choice clears the steps after it
+  const order = ['type', 'brand', 'color', 'fid', 'sid'];
+  const p = tagScan.pick, i = order.indexOf(sel.dataset.pick);
+  p[sel.dataset.pick] = sel.value;
+  for (const k of order.slice(i + 1)) p[k] = '';
+  renderLinkPicker();
+  $(`[data-pick="${order[i + 1]}"]`)?.focus();
 });
 // ======================================================================
 // Writing your filament to a blank NFC sticker (NTAG213/215/216), then linking the sticker to the spool, so
@@ -883,14 +969,16 @@ async function startTagWrite(s, overwriteUid) {
   tagWrite = { sid:s.id, phase:'waiting', msg:'' };
   renderSpoolBox();
   let r;
-  try { r = await api.nfcWrite({ filament: tagFilament(f), overwriteUid }); }
+  try { r = await api.nfcWrite({ filament: tagFilament(f), overwriteUid, spool: s.id }); }
   catch (e) { r = { status:'error', message: ipcMessage(e) }; }
   if (!tagWrite || tagWrite.sid !== s.id) return;   // cancelled or closed meanwhile
   r = r || { status:'error' };
   if (r.status === 'written') {
     linkWrittenTag(s, r.spoolId, nfc.writeFormat);
     persist();
-    tagWrite = { sid:s.id, phase:'done', msg:`Written to sticker ${r.uid} and linked to spool #${s.id}. Scanning it opens this spool.` };
+    tagWrite = { sid:s.id, phase:'done', msg: r.format === 'link'
+      ? `Sticker ${r.uid} is too small for the filament’s details, so it got a link to spool #${s.id}: scanning it here, or tapping it with a phone, opens this spool.`
+      : `Written to sticker ${r.uid} and linked to spool #${s.id}. Scanning it opens this spool.` };
     toast(`Sticker written and linked to spool #${s.id}`, 3500);
   } else if (r.status === 'confirm') tagWrite = { sid:s.id, phase:'confirm', uid:r.uid, existing:r.existing };
   else if (r.status === 'too-small') tagWrite = { sid:s.id, phase:'small', uid:r.uid, spoolId:r.spoolId, msg:r.message || 'This sticker is too small for the filament’s details.' };
@@ -1006,6 +1094,7 @@ function closeModal() {
   if (tagWrite && (tagWrite.phase === 'waiting' || tagWrite.phase === 'confirm')) api.nfcWriteCancel?.();
   tagWrite = null;
   $('#overlay').classList.remove('open'); openFid = null; openPanel = null; tagScan = null; scannedSid = null;
+  if (reloadPending) setTimeout(() => reloadInventory(), 0);
   if (shot) { shot.urls.forEach(u => URL.revokeObjectURL(u)); shot = null; }
   render();
 }
@@ -1082,6 +1171,16 @@ function shrinkImage(file) {
 // ======================================================================
 // Labels
 // ======================================================================
+// A QR code to the spool's page for phones (Phone access): the phone's camera opens it. None when that's off.
+function labelQr(id) {
+  if (!BOOT.linkBase || typeof window.qrcode !== 'function') return '';
+  try {
+    const q = window.qrcode(0, 'M');
+    q.addData(`${BOOT.linkBase}/s/${id}`);
+    q.make();
+    return `<img class="qr" alt="" src="${q.createDataURL(4, 0)}">`;
+  } catch { return ''; }
+}
 function printLabels(ids) {
   if (!ids.length) return toast('No spools to label');
   const fil = Object.fromEntries(allFilaments().map(f => [f.id, f]));
@@ -1093,7 +1192,7 @@ function printLabels(ids) {
       <b>${esc(f.color)}</b><span>${esc(f.brand)} ${esc(f.line)}</span>
       <span>${esc(f.type)}${f.finish !== 'Standard' ? ' · ' + esc(f.finish) : ''} · ${fmtKg(f.grams)}</span>
       <span>${noz ? '🌡 ' + esc(noz) + '°' : ''}${bed ? ' · bed ' + esc(bed) + '°' : ''}</span>
-      <span class="id">#${s.id}</span></div></div>`;
+      <span class="id">#${s.id}</span></div>${labelQr(s.id)}</div>`;
   }).join('');
   const area = $('#printArea');
   area.innerHTML = `<style>@page{${mode === 'roll' ? 'size:2.25in 1.25in;margin:0' : 'size:letter;margin:.5in .19in 0'}}</style><div class="${mode}">${labels}</div>`;
@@ -1577,7 +1676,8 @@ function renderShot() {
   $('#modal').innerHTML = `<button class="x" data-close>×</button><div class="shot">
     <h2>Add filament from a screenshot</h2>
     <p class="muted" style="margin:0">Drop, paste (Ctrl+V) or choose screenshots of an order page, receipt, cart or product page. Claude reads them, and you check the list before anything is added.</p>
-    ${hasKey ? '' : `<div class="mfr" style="margin-top:12px">To read screenshots, first add your Anthropic API key in the app's <a href="#" data-app-settings>Settings</a>.</div>`}
+    ${hasKey ? '' : PHONE ? `<div class="mfr" style="margin-top:12px">To read screenshots, first add your Anthropic API key in the app on your PC: <b>Settings</b> (the gear at the top right). This phone then uses it from there.</div>`
+      : `<div class="mfr" style="margin-top:12px">To read screenshots, first add your Anthropic API key in the app's <a href="#" data-app-settings>Settings</a>.</div>`}
     <div class="drop" data-drop>Drop screenshots here, paste with Ctrl+V, or <u>choose files</u><input type="file" accept="image/*" multiple hidden data-shotfile></div>
     ${shot.files.length ? `<div class="thumbs">${shot.urls.map((u, i) => `<figure><img src="${u}" alt="Screenshot ${i + 1}"><button class="btn small" data-shotdel="${i}" title="Remove this screenshot">✕</button></figure>`).join('')}</div>` : ''}
     <div class="actions" style="margin-top:4px;align-items:center">
@@ -1743,3 +1843,7 @@ document.addEventListener('keydown', e => {
 
 render();
 startTagScanning();
+// for the phone page: open a spool from a link (/s/054), handle a scan made with the phone
+window.__openSpool = (id) => { const s = state.spools[id] || state.spools[String(id).padStart(3, '0')]; if (s) showScannedSpool(s); return !!s; };
+window.__onTag = (scan) => onTag(scan);
+window.__toast = (m, ms) => toast(m, ms);
