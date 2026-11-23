@@ -20,6 +20,7 @@
 - Keeps watching from the **tray** when the window is closed (so alerts and the 99 % photo aren't missed), and can
   **start with Windows**. Paired phones get the Print Monitor too (**🖨 Printers** on the phone page).
 - **Settings is now in tabs**: General, AI, Printers, Print monitor, Filament, Phone.
+- The progress bar (starting up, slicing, reading…) now sits at the bottom of the window, so it never covers the menus.
 - U1 Studio users: **Settings → Print monitor → Bring over settings and photos from U1 Studio**, then stop U1 Studio
   from starting with Windows so alerts don't come twice.
 
