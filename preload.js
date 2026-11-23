@@ -80,6 +80,8 @@ contextBridge.exposeInMainWorld('advisor', {
   remixRun: (a) => ipcRenderer.invoke('remix-run', a),
   remixApply: (a) => ipcRenderer.invoke('remix-apply', a),
   remixUndo: () => ipcRenderer.invoke('remix-undo'),
+  remixSwapPrepare: (a) => ipcRenderer.invoke('remix-swap-prepare', a),
+  remixSwapRun: (a) => ipcRenderer.invoke('remix-swap-run', a),
   setBlockers: (a) => ipcRenderer.invoke('set-blockers', a),
   bambuInfo: () => ipcRenderer.invoke('bambu-info'),
   bambuLocate: () => ipcRenderer.invoke('bambu-locate'),

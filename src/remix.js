@@ -240,4 +240,91 @@ async function runRemix({ apiKey, model, ...args }) {
   return callStructured({ apiKey, model, system: systemPrompt(), content: buildContent(args), schema: schema() });
 }
 
-module.exports = { STYLES, runRemix, finalizeVariations, paintModel, estimateCost, family };
+// ---------- Swap colors: the simple remix ----------
+// The model's painting stays exactly as it is; each of its filaments (toolheads) gets a new filament from the
+// user's library. No parts, no repainting: only which filament each toolhead holds changes.
+function swapSystemPrompt() {
+  return `You are a colour designer for multi-material 3D prints. The model is already painted: each toolhead (filament) covers the areas you see in the pictures in that toolhead's current colour. Nothing about where the colours go will change. Your job is to choose a NEW filament for each toolhead from the user's own on-hand filaments, so the model gets fresh colour schemes in the requested styles.
+
+Rules:
+- Work out from the pictures and current colours what each toolhead paints (e.g. the white toolhead is the eyes, the dark one the pupils and outlines, the large green one the body), and choose colours that suit those areas in the style.
+- Keep the model readable: areas that contrast now (light on dark, details on a body) must still contrast. Small details such as eyes, pupils, outlines and text keep strong contrast with what surrounds them. Toolheads that are blended in a colour mix ("mixes") are seen together, so pick colours that blend well.
+- Give every toolhead a different filament unless the user asks otherwise.
+- Use only filament ids from the list. Prefer filaments with spools on hand and enough remaining.
+- Use one material family per scheme (all PLA-type, or all PETG/PCTG, or all ABS/ASA); prefer the family given in "material".
+- Make exactly the number of schemes asked for in each style ("schemesWanted"), set each scheme's "style" to that style's id, and make them clearly different from each other and from the current colours.
+- "subject" is what the model depicts. Name each scheme in a few words; the description is one short sentence.`;
+}
+
+function swapSchema() {
+  return {
+    type: 'object', additionalProperties: false, required: ['subject', 'variations'],
+    properties: {
+      subject: { type: 'string' },
+      variations: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['style', 'name', 'description', 'toolheads'],
+        properties: { style: { type: 'string' }, name: { type: 'string' }, description: { type: 'string' },
+          toolheads: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['toolhead', 'filament_id'],
+            properties: { toolhead: { type: 'integer' }, filament_id: { type: 'string' } } } } } } },
+    },
+  };
+}
+
+function buildSwapContent({ styles, custom, material, toolheads, mixes, filaments, images, modelName }) {
+  const wanted = (styles || []).filter(x => x.count > 0);
+  const content = [];
+  for (const im of images || []) {
+    content.push({ type: 'text', text: im.label });
+    content.push({ type: 'image', source: { type: 'base64', media_type: im.dataUrl.slice(5, im.dataUrl.indexOf(';')), data: im.dataUrl.split(',')[1] } });
+  }
+  content.push({ type: 'text', text: JSON.stringify({
+    model: modelName, userRequest: custom || undefined,
+    schemesWanted: wanted.map(x => ({ style: x.id, howMany: x.count, meaning: STYLES[x.id] || x.id })),
+    material, toolheads, mixes: mixes && mixes.length ? mixes : undefined, filaments,
+  }) });
+  return content;
+}
+
+function estimateSwapCost({ model, toolheads, filaments, count, images = 2 }) {
+  const [pi, po] = PRICES[model] || PRICES['claude-sonnet-5-5'];
+  const input = 800 + images * 1150 + toolheads * 40 + filaments * 55 + 200;
+  const output = 40 + count * (toolheads * 18 + 70);
+  const usd = (input * pi + output * po) / 1e6;
+  return { input, output, usd, low: usd * 0.75, high: usd * 1.35 };
+}
+
+// Tidy the AI's schemes: only listed filaments, every toolhead covered, one material family.
+// Returns [{ style, name, description, picks: { toolhead: filamentId }, notes }]
+function finalizeSwaps(answer, { toolheads, inventory }) {
+  const byId = new Map(inventory.map(f => [f.id, f]));
+  const share = new Map(toolheads.map(t => [t.toolhead, t.surfacePct || 0]));
+  const out = [];
+  for (const v of (answer && answer.variations) || []) {
+    const picks = new Map(), notes = [];
+    for (const t of v.toolheads || []) {
+      if (!share.has(t.toolhead) || picks.has(t.toolhead)) continue;
+      let f = byId.get(t.filament_id) || inventory.find(x => `${x.brand} ${x.line} ${x.color}`.replace(/\s+/g, ' ').toLowerCase() === String(t.filament_id).toLowerCase());
+      if (f) picks.set(t.toolhead, f.id);
+    }
+    if (!picks.size) continue;
+    // one material family: the one covering the most of the model wins; the others move to the nearest colour in it
+    const famShare = new Map();
+    for (const [th, fid] of picks) { const fam = family(byId.get(fid).type); famShare.set(fam, (famShare.get(fam) || 0) + (share.get(th) || 0) + 0.01); }
+    const fam = [...famShare].sort((a, b) => b[1] - a[1])[0][0];
+    const pool = inventory.filter(x => family(x.type) === fam);
+    for (const [th, fid] of picks) {
+      const f = byId.get(fid);
+      if (family(f.type) === fam) continue;
+      const taken = new Set(picks.values());
+      const alt = pool.filter(x => !taken.has(x.id)).reduce((b, x) => (!b || dist(mainHex(x), mainHex(f)) < dist(mainHex(b), mainHex(f)) ? x : b), null);
+      if (alt) { picks.set(th, alt.id); notes.push(`${f.color} (${f.type}) swapped for ${alt.color} so all materials print together.`); }
+    }
+    out.push({ style: v.style || '', name: v.name, description: v.description, picks: Object.fromEntries(picks), notes });
+  }
+  return out;
+}
+
+async function runSwap({ apiKey, model, ...args }) {
+  return callStructured({ apiKey, model, system: swapSystemPrompt(), content: buildSwapContent(args), schema: swapSchema() });
+}
+
+module.exports = { STYLES, runRemix, finalizeVariations, paintModel, estimateCost, family, runSwap, finalizeSwaps, estimateSwapCost };

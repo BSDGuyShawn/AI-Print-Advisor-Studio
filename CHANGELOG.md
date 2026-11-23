@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.28.0
+- **Color remix: Swap colors**, a simpler way to recolor that opens first. The model keeps its painting exactly as
+  it is; each of its colors gets another filament from your library. Pick them by hand, click **Closest match** (the
+  filament you own that looks most like each color) or **Shuffle** (a random scheme that keeps light colors light
+  and dark ones dark, so eyes and details still stand out), or let the AI suggest schemes in the styles you pick
+  (a few cents). The 3D view shows each change, color mixes follow the new colors, and **Apply to model** sets the
+  toolheads to those filaments with their Snapmaker Orca presets. **Undo remix** undoes it. Recoloring by parts is
+  still there (Parts and Colors at the top of the window).
+
 ## 2.27.0
 - **The guided tour is optional.** The app no longer starts in the tour. New users who say they're new to 3D printing
   are offered it once; everyone else never sees the offer. Anyone can take it from Settings, and **Exit the tour**

@@ -581,6 +581,23 @@ dialog.batch { width: min(760px, 94vw); padding: 0; }
 .rx-steps button[aria-selected=true] { border-color: var(--accent); color: var(--accent); }
 .rx-steps button[aria-selected=true] b { background: var(--accent); color: #fff; }
 .rx-steps button:disabled { opacity: .5; cursor: default; }
+.rx-steps .rx-or { align-self: center; font-size: 12px; color: var(--muted); margin: 0 2px 0 6px; }
+.rx-swap-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.rx-swap-list li { display: grid; grid-template-columns: 16px 24px 34px 12px 16px 1fr; gap: 6px; align-items: center; border: 1px solid var(--line); border-radius: var(--radius-s); padding: 4px 6px; background: var(--raised); font-size: 13px; }
+.rx-swap-list .sw { width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgb(0 0 0 / .25); }
+.rx-swap-list .muted { font-size: 12px; text-align: right; }
+.rx-swap-list select { min-width: 0; font-size: 12.5px; }
+.rx-swap-ai { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 4px; display: flex; flex-direction: column; gap: 8px; }
+.rx-sw-results { display: flex; flex-direction: column; gap: 6px; }
+.rx-sw-card { display: grid; grid-template-columns: 64px 1fr; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius-s); padding: 6px; background: var(--raised); cursor: pointer; text-align: left; font: inherit; color: inherit; }
+.rx-sw-card:hover { border-color: var(--accent); }
+.rx-sw-card.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.rx-sw-card img { width: 64px; height: 64px; object-fit: contain; background: var(--plate); border-radius: 4px; }
+.rx-sw-card b { display: block; font-size: 13px; }
+.rx-sw-card .muted { display: block; font-size: 12px; }
+.rx-sw-card .dots { display: flex; gap: 3px; margin-top: 4px; }
+.rx-sw-card .dots i { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgb(0 0 0 / .25); }
+.rx-sw-card .rx-notes { display: block; padding: 0; margin-top: 3px; }
 .rx-parts { display: grid; grid-template-columns: 1fr 340px; gap: 16px; padding: 14px 20px 18px; max-height: calc(92vh - 60px); }
 .rx-parts-view { position: relative; height: min(72vh, 660px); border-radius: var(--radius-m); overflow: hidden; background: var(--plate); }
 .rx-parts-view canvas { width: 100% !important; height: 100% !important; display: block; }

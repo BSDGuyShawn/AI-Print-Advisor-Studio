@@ -32,7 +32,7 @@ const fss = require('fs');
 const { fetchJobs, PrintLog, historyForPrompt } = require('./src/history');
 const Spend = require('./src/spend');
 // Which feature an AI call belongs to, for the spending record: the window action that started it.
-const AI_FEATURES = { 'run-claude': 'Recommendations', 'parts-identify': 'Color remix: parts', 'remix-run': 'Color remix: schemes',
+const AI_FEATURES = { 'run-claude': 'Recommendations', 'parts-identify': 'Color remix: parts', 'remix-run': 'Color remix: schemes', 'remix-swap-run': 'Color remix: swap colors',
   'shopping-find': 'Finding filament to buy', 'ts-run': 'Troubleshooting', 'filament-claude': 'Filament: screenshots and photos', 'open-path': 'Print names' };
 {
   const handle = ipcMain.handle.bind(ipcMain);
@@ -1355,6 +1355,39 @@ ipcMain.handle('remix-apply', async (_e, { index }) => { await S.ready;
   });
   const swaps = v.pauses.map(p => `At ${p.z} mm the printer pauses: swap T${p.tool} (${p.from.brand} ${p.from.color}) for ${p.to.brand} ${p.to.color}, then resume.`);
   return { slots, swaps, name: v.name };
+});
+// Color remix, the simple way (Swap colors): the model keeps its painting; each toolhead gets another filament from
+// the library. The window does the swapping and the 3D view; this lists the filaments and asks the AI for schemes.
+ipcMain.handle('remix-swap-prepare', async (_e, { toolheads } = {}) => {
+  const inv = await inventory();
+  if (!inv.ok) throw new Error(inv.error);
+  const cfg = await readConfig();
+  const model = cfg.model || DEFAULT_MODEL;
+  const n = Math.max(1, +toolheads || 4);
+  return { model, hasKey: !!(await getApiKey()),
+    filaments: inv.filaments.map(f => ({ id: f.id, name: `${f.brand} ${f.line} ${f.color}`.replace(/\s+/g, ' ').trim(), brand: f.brand, line: f.line, color: f.color,
+      type: f.type, finish: f.finish, hex: Inv.mainHex(f), spools: f.spools, remainingG: f.remainingG,
+      preset: f.preset && S.lib && S.lib.byType && S.lib.byType.filament.has(f.preset) ? f.preset : null })),
+    estimates: Object.fromEntries(Array.from({ length: 12 }, (_, i) => i + 1).map(c => [c, Remix.estimateSwapCost({ model, toolheads: n, filaments: inv.filaments.length, count: c })])) };
+});
+ipcMain.handle('remix-swap-run', async (_e, { styles, custom, material, images, toolheads, mixes }) => {
+  styles = (styles || []).filter(x => x.count > 0);
+  const count = styles.reduce((t, x) => t + x.count, 0);
+  if (!count) throw new Error('Choose at least one style.');
+  if (!Array.isArray(toolheads) || !toolheads.length) throw new Error('The model has no filaments to swap.');
+  const key = await getApiKey();
+  if (!key) throw new Error('Suggesting schemes needs a Claude API key (Settings).');
+  const inv = await inventory();
+  if (!inv.ok) throw new Error(inv.error);
+  const pool = material && material !== 'any' ? inv.filaments.filter(f => Remix.family(f.type) === material) : inv.filaments;
+  if (!pool.length) throw new Error('No filaments of that material are on hand.');
+  const cfg = await readConfig();
+  progress(`Designing ${count} colour scheme${count === 1 ? '' : 's'}…`);
+  const answer = await Remix.runSwap({ apiKey: key, model: cfg.model || DEFAULT_MODEL, styles, custom, material: material || 'any',
+    toolheads, mixes, filaments: Inv.forPrompt(pool), images, modelName: printName() });
+  const variations = Remix.finalizeSwaps(answer, { toolheads, inventory: pool });
+  logLine(`remix: swap ${styles.map(x => `${x.id}×${x.count}`).join(', ')}, ${variations.length} schemes`);
+  return { subject: answer.subject || '', variations };
 });
 ipcMain.handle('remix-undo', async () => { await S.ready;
   if (!S.remixUndo) return false;

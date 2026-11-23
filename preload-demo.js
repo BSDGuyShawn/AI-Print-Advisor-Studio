@@ -263,6 +263,11 @@ contextBridge.exposeInMainWorld('advisor', {
     return clone(r.r);
   },
   remixUndo: async () => { if (!ctx.remix) return false; ctx.remix = null; return true; },
+  // Swap colors works in the tour with the sample library (no AI)
+  remixSwapPrepare: async () => { if (!filamentStock || !filamentStock.filaments.length) throw new Error('In the tour, Swap colors uses the sample library: open Filament once (top right), then come back.'); return { model: 'claude-sonnet-5-5', hasKey: false, estimates: {},
+    filaments: ((filamentStock && filamentStock.filaments) || []).map(f => ({ id: f.id, name: `${f.brand} ${f.line} ${f.color}`.replace(/\s+/g, ' ').trim(), brand: f.brand, line: f.line, color: f.color,
+      type: f.type, finish: f.finish, hex: String(Array.isArray(f.hex) ? f.hex[0] : f.hex || '#888888').slice(0, 7), spools: f.spools, remainingG: f.remainingG, preset: null })) }; },
+  remixSwapRun: failing('ai', 'Tour: AI scheme suggestions need the app after the tour and your API key. Closest match and Shuffle work here.'),
   bambuInfo: () => replay('bambu-info', []).catch(() => ({ available: false })),
   bambuLocate: blocked('files'), exportBambu: blocked('export'),
   onDiscoverProgress: () => {},

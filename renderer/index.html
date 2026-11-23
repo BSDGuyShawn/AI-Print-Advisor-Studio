@@ -497,8 +497,25 @@
 
   <dialog id="remixDialog" class="remix">
     <div class="sd-head"><h2>Color remix</h2>
-      <div class="rx-steps" role="tablist"><button type="button" role="tab" id="rxStep1" aria-selected="true"><b>1</b> Parts</button><button type="button" role="tab" id="rxStep2" aria-selected="false" disabled><b>2</b> Colors</button></div>
+      <div class="rx-steps" role="tablist"><button type="button" role="tab" id="rxStepSwap" aria-selected="false" title="Keep the model's painting and give each of its colors a filament from your library">Swap colors</button><span class="rx-or">or recolor by parts:</span><button type="button" role="tab" id="rxStep1" aria-selected="true"><b>1</b> Parts</button><button type="button" role="tab" id="rxStep2" aria-selected="false" disabled><b>2</b> Colors</button></div>
       <div><button class="btn ghost hidden" id="rxUndo">Undo remix</button> <button class="btn ghost" id="rxClose">Close</button></div></div>
+    <div class="rx-parts hidden" id="rxSwapPane">
+      <div class="rx-parts-view" id="rxSwView"></div>
+      <div class="rx-parts-side">
+        <p class="hint">The model keeps its painting exactly as it is: each of its colors just gets a different filament from your library. The 3D view shows the result as you change them.</p>
+        <label class="field"><span>Material</span><select id="rxSwMaterial"><option value="pla" selected>PLA</option><option value="petg">PETG / PCTG</option><option value="abs">ABS / ASA</option><option value="any">Any</option></select></label>
+        <ul class="rx-swap-list" id="rxSwList"></ul>
+        <div class="row-btns"><button class="btn" id="rxSwClosest" title="Each color gets the filament you have that looks most like it">Closest match</button> <button class="btn" id="rxSwShuffle" title="A random scheme from your filament: light colors stay light and dark ones dark, so details still stand out">Shuffle</button> <button class="link" id="rxSwReset">Reset</button></div>
+        <div class="row-btns"><button class="btn primary" id="rxSwApply" disabled>Apply to model</button></div>
+        <div class="rx-swap-ai">
+          <div class="field"><span>Or let the AI suggest schemes <small>pick styles, and how many of each</small></span><div class="rx-styles" id="rxSwStyles" role="group"></div></div>
+          <label class="field"><span>Anything you’d like? <small>optional</small></span><input type="text" id="rxSwCustom" placeholder="e.g. ocean colors; or: school colors, blue and gold"></label>
+          <div class="row-btns"><button class="btn" id="rxSwGo">Suggest schemes</button> <span class="cost-line" id="rxSwCost"></span></div>
+          <p class="hint" id="rxSwStatus"></p>
+          <div class="rx-sw-results" id="rxSwResults"></div>
+        </div>
+      </div>
+    </div>
     <div class="rx-parts" id="rxPartsPane">
       <div class="rx-parts-view" id="rxPartsView"><div class="rx-hover hidden" id="rxHover"></div></div>
       <div class="rx-parts-side">

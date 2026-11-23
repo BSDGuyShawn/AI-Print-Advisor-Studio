@@ -120,8 +120,8 @@ async function openFile(promise, restore = null, opts = {}) {
     setBusy('file', restore ? 'Restoring your session…' : 'Reading the 3MF…');
     const info = await promise;
     if (!info) { clearBusy('file'); return; }
-    Object.assign(state, { file: info, result: null, compare: null, rotations: {}, checks: [], orientObj: null, assemblyChoice: null, blockersOn: false, remixApplied: false });
-    resetRemix();
+    Object.assign(state, { file: info, result: null, compare: null, rotations: {}, checks: [], orientObj: null, assemblyChoice: null, blockersOn: false, remixApplied: false, swapUndo: null });
+    resetRemix(); swReset();
     state.slots = initialSlots(info.filaments);
     state.mixes = info.mixes || [];
     renderFileInfo();
@@ -281,28 +281,30 @@ const money = (usd) => (usd < 0.01 ? 'under 1¢' : usd < 1 ? `${Math.round(usd *
 function resetRemix() { RX.prep = null; RX.variations = []; RX.regions = null; RX.labels = null; Object.assign(PT, { subject: '', parts: [], labels: null, sel: 0, history: [] }); $('rxResults').innerHTML = ''; }
 
 // style chips: click to pick or drop a style; a picked style shows − count + for how many schemes of it
-function renderStyles() {
-  $('rxStyles').innerHTML = RX_STYLES.map(([id, name]) => {
-    const n = RX.counts[id] || 0;
+// (two sets: Color remix by parts, and Swap colors)
+function styleChips(el, counts, after) {
+  const total = () => Object.values(counts).reduce((t, n) => t + n, 0);
+  const draw = () => { el.innerHTML = RX_STYLES.map(([id, name]) => {
+    const n = counts[id] || 0;
     return n
       ? `<span class="rx-chip on" data-style="${id}"><button type="button" class="step" data-step="-1" aria-label="One fewer ${name}">−</button><button type="button" data-toggle aria-pressed="true" title="Click to remove this style">${name}</button><span class="n" aria-label="${n} ${name} schemes">${n}</span><button type="button" class="step" data-step="1" aria-label="One more ${name}">+</button></span>`
       : `<span class="rx-chip" data-style="${id}"><button type="button" data-toggle aria-pressed="false">${name}</button></span>`;
-  }).join('');
-  rxCost();
+  }).join(''); after(); };
+  el.onclick = (e) => {
+    const chip = e.target.closest('[data-style]'); if (!chip) return;
+    const id = chip.dataset.style, step = e.target.closest('[data-step]');
+    if (step) {
+      const n = (counts[id] || 0) + Number(step.dataset.step);
+      if (n <= 0) delete counts[id]; else if (total() < RX_MAX || n < counts[id]) counts[id] = n;
+      else toast(`Up to ${RX_MAX} schemes at a time.`, 3000);
+    } else if (e.target.closest('[data-toggle]')) {
+      if (counts[id]) delete counts[id]; else if (total() < RX_MAX) counts[id] = 1;
+    }
+    draw();
+  };
+  draw();
 }
-$('rxStyles').onclick = (e) => {
-  const chip = e.target.closest('[data-style]'); if (!chip) return;
-  const id = chip.dataset.style, step = e.target.closest('[data-step]');
-  if (step) {
-    const n = (RX.counts[id] || 0) + Number(step.dataset.step);
-    if (n <= 0) delete RX.counts[id]; else if (rxTotal() < RX_MAX || n < RX.counts[id]) RX.counts[id] = n;
-    else toast(`Up to ${RX_MAX} schemes at a time.`, 3000);
-  } else if (e.target.closest('[data-toggle]')) {
-    if (RX.counts[id]) delete RX.counts[id]; else if (rxTotal() < RX_MAX) RX.counts[id] = 1;
-  }
-  renderStyles();
-};
-renderStyles();
+styleChips($('rxStyles'), RX.counts, () => rxCost());
 function rxCost() {
   const total = rxTotal();
   if (!RX.prep || !RX.estimates) { $('rxGo').disabled = true; return; } // parts not confirmed yet (also: called at startup)
@@ -313,15 +315,20 @@ function rxCost() {
 }
 
 // ----- step switching -----
+// 0 = Swap colors (the simple way), 1 = Parts, 2 = Colors (recolor by parts)
 function rxStep(n) {
+  RX.mode = n === 0 ? 'swap' : 'parts';
+  $('rxSwapPane').classList.toggle('hidden', n !== 0);
   $('rxPartsPane').classList.toggle('hidden', n !== 1);
   $('rxColorsPane').classList.toggle('hidden', n !== 2);
+  $('rxStepSwap').setAttribute('aria-selected', n === 0);
   $('rxStep1').setAttribute('aria-selected', n === 1); $('rxStep2').setAttribute('aria-selected', n === 2);
   $('rxStep2').disabled = !RX.labels;
-  if (n === 1) requestAnimationFrame(() => { window.dispatchEvent(new Event('resize')); });
+  if (n === 0 || n === 1) requestAnimationFrame(() => { window.dispatchEvent(new Event('resize')); });
   if (n === 2) { rxShowGrid(); rxCost(); }
 }
-$('rxStep1').onclick = () => rxStep(1);
+$('rxStepSwap').onclick = () => swOpen();
+$('rxStep1').onclick = () => (RX.prep && RX.pvFor === RX.prep ? rxStep(1) : rxOpenParts());
 $('rxStep2').onclick = () => { if (RX.labels) rxStep(2); };
 $('rxBackParts').onclick = () => rxStep(1);
 
@@ -533,8 +540,12 @@ async function openRemix() {
     showFilament(true);
     return;
   }
-  $('rxUndo').classList.toggle('hidden', !state.remixApplied);
+  $('rxUndo').classList.toggle('hidden', !(state.remixApplied || state.swapUndo));
   $('remixDialog').showModal();
+  // Swap colors first (the simple way), unless recoloring by parts was used last; the tour shows the parts way
+  if (RX.mode === 'parts' || (api.demo && !RX.mode)) await rxOpenParts(); else await swOpen();
+}
+async function rxOpenParts() {
   rxStep(RX.labels ? 2 : 1);
   if (!(await ensurePrep())) return;
   if (RX.pvFor !== RX.prep) showParts();
@@ -618,7 +629,171 @@ $('rxResults').onclick = async (e) => {
   } catch (err) { $('rxStatus').textContent = cleanErr(err); }
 };
 $('rxUndo').onclick = async () => {
+  if (state.swapUndo) {
+    state.slots = state.swapUndo; state.swapUndo = null; state.compare = null; state.result = null;
+    $('remixDialog').close(); renderMaterials(); await prepare();
+    toast('Swap undone: the toolheads are back to the filaments they had before.', 5000);
+    return;
+  }
   if (await api.remixUndo()) { state.remixApplied = false; $('remixDialog').close(); resetRemix(); await prepare(); toast('Remix undone: back to the model’s own colors.', 5000); }
+};
+
+// ----- Swap colors: the simple remix -----
+// The model keeps its painting exactly as it is; each of its filaments (toolheads) gets a new one from the library:
+// picked by hand, the closest match, a shuffle, or schemes the AI suggests. Only the toolheads change, nothing is
+// repainted, so it works on any multi-color model without finding its parts first.
+const SW = { prep: null, picks: {}, schemes: [], previews: [], sel: -1, counts: { fun: 1, pastel: 1, galaxy: 1 }, viewer: null, viewerFor: null, areas: {} };
+function swReset() { Object.assign(SW, { picks: {}, schemes: [], previews: [], sel: -1, viewerFor: null, matSet: false }); $('rxSwResults').innerHTML = ''; $('rxSwStatus').textContent = ''; }
+const swFamily = (t) => (/^(PETG|PCTG)/i.test(t) ? 'petg' : /^(ABS|ASA)/i.test(t) ? 'abs' : /^TPU/i.test(t) ? 'tpu' : 'pla');
+// colours compared as people see them (CIE Lab)
+function hexLab(h) {
+  const v = parseInt(String(h).replace('#', '').slice(0, 6), 16) || 0;
+  const [r, g, b] = [v >> 16 & 255, v >> 8 & 255, v & 255].map(c => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+  const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  const x = f((r * 0.4124 + g * 0.3576 + b * 0.1805) / 0.95047), y = f(r * 0.2126 + g * 0.7152 + b * 0.0722), z = f((r * 0.0193 + g * 0.1192 + b * 0.9505) / 1.08883);
+  return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
+}
+const deltaE = (a, b) => { const p = hexLab(a), q = hexLab(b); return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
+const swFil = (id) => (SW.prep && id ? SW.prep.filaments.find(f => f.id === id) : null);
+// the model's own colors: the toolheads it uses (mixes count as the toolheads they blend)
+function swSlots() { const used = new Set(state.analysis?.totals.extrudersUsed || []); const s = state.slots.filter(x => used.has(x.slot)); return s.length ? s : state.slots; }
+function swPool() { const m = $('rxSwMaterial').value; return SW.prep ? SW.prep.filaments.filter(f => m === 'any' || swFamily(f.type) === m) : []; }
+// every toolhead as it would be with these picks
+function swSlotsWith(picks = SW.picks) {
+  return state.slots.map(s => {
+    const f = swFil(picks[s.slot]);
+    return f ? { ...s, type: f.type, preset: matchPreset(f.type, f.preset), color: f.hex.toUpperCase(), name: `${f.name} ${f.finish || ''}`.trim(), sparkle: undefined } : s;
+  });
+}
+// how much of the model's surface each toolhead colors (0..1)
+function swShares() {
+  const out = {};
+  for (const [id, a] of Object.entries(viewer.filamentAreas())) {
+    const m = (state.mixes || []).find(x => String(x.id) === id);
+    if (m) for (const p of m.parts) out[p.slot] = (out[p.slot] || 0) + a * p.pct / 100;
+    else out[id] = (out[id] || 0) + a;
+  }
+  const total = Object.values(out).reduce((t, a) => t + a, 0) || 1;
+  return Object.fromEntries(Object.entries(out).map(([k, a]) => [k, a / total]));
+}
+async function swOpen() {
+  rxStep(0);
+  try { SW.prep = await api.remixSwapPrepare({ toolheads: swSlots().length }); }
+  catch (e) { SW.prep = null; swCost(); $('rxSwList').innerHTML = `<li class="hint" style="display:block">${esc(cleanErr(e))}</li>`; return; }
+  // forget picks of filament that's no longer on hand
+  for (const k of Object.keys(SW.picks)) if (!swFil(SW.picks[k])) delete SW.picks[k];
+  if (!SW.matSet) {
+    const fams = swSlots().map(s => swFamily(s.type)), top = [...fams].sort((a, b) => fams.filter(x => x === b).length - fams.filter(x => x === a).length)[0];
+    if (['pla', 'petg', 'abs'].includes(top) && SW.prep.filaments.some(f => swFamily(f.type) === top)) $('rxSwMaterial').value = top;
+    SW.matSet = true;
+  }
+  SW.areas = swShares();
+  if (!SW.viewer) SW.viewer = new ModelViewer($('rxSwView'));
+  if (SW.viewerFor !== state.analysis) { SW.viewer.load(state.analysis.preview); SW.viewerFor = state.analysis; }
+  requestAnimationFrame(() => { window.dispatchEvent(new Event('resize')); SW.viewer.fit('iso'); });
+  swRender();
+}
+function swRender() {
+  const pool = swPool(), byType = {};
+  for (const f of [...pool].sort((a, b) => `${a.type} ${a.color}`.localeCompare(`${b.type} ${b.color}`))) (byType[f.type] = byType[f.type] || []).push(f);
+  const groups = Object.entries(byType).map(([t, list]) => `<optgroup label="${esc(t)}">${list.map(f => `<option value="${esc(f.id)}">${esc(f.color || f.name)} · ${esc(`${f.brand} ${f.line || ''}`.trim())}</option>`).join('')}</optgroup>`).join('');
+  $('rxSwList').innerHTML = !pool.length ? `<li class="hint" style="display:block">No ${esc($('rxSwMaterial').selectedOptions[0].text)} filament on hand. Pick another material.</li>` : swSlots().map(s => {
+    const f = swFil(SW.picks[s.slot]), pct = Math.round((SW.areas[s.slot] || 0) * 100);
+    return `<li data-slot="${s.slot}"><span class="sw" style="background:${esc(s.color)}" title="Now: ${esc((s.preset || s.type).replace(/ @U1.*$/, ''))}, ${esc(s.color)}"></span><b>T${s.slot}</b><span class="muted" title="How much of the model’s surface this color covers">${pct < 1 ? '<1' : pct}%</span><span aria-hidden="true">→</span><span class="sw" style="background:${esc(f ? f.hex : s.color)}"></span>
+      <select aria-label="New filament for T${s.slot}"><option value="">Keep this color</option>${f && !pool.includes(f) ? `<option value="${esc(f.id)}">${esc(f.name)}</option>` : ''}${groups}</select></li>`;
+  }).join('');
+  $('rxSwList').querySelectorAll('li[data-slot]').forEach(li => {
+    const sel = li.querySelector('select'), slot = +li.dataset.slot;
+    sel.value = SW.picks[slot] || '';
+    sel.onchange = () => { if (sel.value) SW.picks[slot] = sel.value; else delete SW.picks[slot]; SW.sel = -1; swRender(); };
+  });
+  if (SW.viewer) { const L = filamentLooks(swSlotsWith()); SW.viewer.setFilamentColors(L.colors, L.sparkle); }
+  $('rxSwApply').disabled = !swSlots().some(s => SW.picks[s.slot]);
+  swCost(); swRenderSchemes();
+}
+$('rxSwMaterial').onchange = () => swRender();
+$('rxSwReset').onclick = () => { SW.picks = {}; SW.sel = -1; $('rxSwStatus').textContent = ''; swRender(); };
+// each color gets the filament that looks most like it (the biggest areas choose first; a filament is only used twice
+// when nothing else comes close)
+$('rxSwClosest').onclick = () => {
+  const pool = swPool(); if (!pool.length) return;
+  const taken = new Set(); SW.picks = {};
+  for (const s of [...swSlots()].sort((a, b) => (SW.areas[b.slot] || 0) - (SW.areas[a.slot] || 0))) {
+    const best = pool.reduce((b, f) => { const d = deltaE(f.hex, s.color) + (taken.has(f.id) ? 12 : 0); return !b || d < b.d ? { f, d } : b; }, null);
+    SW.picks[s.slot] = best.f.id; taken.add(best.f.id);
+  }
+  SW.sel = -1; $('rxSwStatus').textContent = 'Each color now uses the filament you have that looks most like it.'; swRender();
+};
+// a random scheme, but light colors stay light and dark ones dark, so eyes, outlines and details still stand out
+$('rxSwShuffle').onclick = () => {
+  const pool = swPool(), slots = swSlots(); if (!pool.length) return;
+  const bag = [...pool];
+  for (let i = bag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [bag[i], bag[j]] = [bag[j], bag[i]]; }
+  const chosen = bag.slice(0, slots.length);
+  while (chosen.length < slots.length) chosen.push(pool[Math.floor(Math.random() * pool.length)]);
+  const L = (h) => hexLab(h)[0];
+  const order = [...slots].sort((a, b) => L(a.color) - L(b.color));
+  chosen.sort((a, b) => L(a.hex) - L(b.hex));
+  SW.picks = Object.fromEntries(order.map((s, i) => [s.slot, chosen[i].id]));
+  SW.sel = -1; $('rxSwStatus').textContent = 'Shuffled. Click Shuffle again for another, or change any color by hand.'; swRender();
+};
+styleChips($('rxSwStyles'), SW.counts, () => swCost());
+function swCost() {
+  const p = SW.prep, total = Object.values(SW.counts).reduce((t, n) => t + n, 0);
+  if (!p) { $('rxSwGo').disabled = true; $('rxSwCost').textContent = ''; return; }
+  const est = total && p.estimates && p.estimates[Math.min(total, RX_MAX)];
+  const name = (MODELS[p.model] || {}).name || 'the selected model';
+  $('rxSwCost').textContent = !p.hasKey ? 'Needs a Claude API key (Settings). Closest match and Shuffle are free.' : !total ? 'Pick at least one style.'
+    : est ? `${total} scheme${total === 1 ? '' : 's'}. Estimated cost: about ${money(est.low)}–${money(est.high)} with ${name}` : '';
+  $('rxSwGo').disabled = !total || !p.hasKey;
+}
+$('rxSwGo').onclick = async () => {
+  const styles = Object.entries(SW.counts).map(([id, count]) => ({ id, count })), count = styles.reduce((t, x) => t + x.count, 0);
+  if (!count || !SW.prep || !SW.viewer) return;
+  $('rxSwGo').disabled = true; $('rxSwStatus').textContent = `Designing ${count} color scheme${count === 1 ? '' : 's'}… (usually under a minute)`;
+  try {
+    const now = filamentLooks();
+    const images = [{ label: 'The model in its current colours', dataUrl: SW.viewer.filamentPreview(now, 700, 'iso') },
+      { label: 'The same model from behind', dataUrl: SW.viewer.filamentPreview(now, 600, 'back') }];
+    const toolheads = swSlots().map(s => ({ toolhead: s.slot, currentColor: String(s.color).toUpperCase(), currentFilament: (s.preset || s.type).replace(/ @U1.*$/, ''), surfacePct: Math.round((SW.areas[s.slot] || 0) * 100) }));
+    const mixes = (state.mixes || []).map((m, i) => ({ name: `M${i + 1}`, blend: m.parts.map(p => ({ toolhead: p.slot, pct: Math.round(p.pct) })) }));
+    const r = await withBusy('remix', 'Designing color schemes…', () => api.remixSwapRun({ styles, custom: $('rxSwCustom').value.trim(), material: $('rxSwMaterial').value, images, toolheads, mixes }));
+    SW.schemes = r.variations; SW.sel = -1;
+    SW.previews = SW.schemes.map(v => SW.viewer.filamentPreview(filamentLooks(swSlotsWith(v.picks)), 160));
+    $('rxSwStatus').textContent = SW.schemes.length ? 'Click a scheme to try it on the model, then Apply to model.' : 'No usable schemes came back. Try again.';
+    swRenderSchemes();
+  } catch (e) { $('rxSwStatus').textContent = cleanErr(e); }
+  finally { swCost(); }
+};
+function swRenderSchemes() {
+  $('rxSwResults').innerHTML = SW.schemes.map((v, i) => `<button type="button" class="rx-sw-card ${i === SW.sel ? 'sel' : ''}" data-i="${i}">
+    <img src="${SW.previews[i] || ''}" alt="">
+    <span>${v.style ? `<span class="rx-tag">${esc((RX_STYLES.find(x => x[0] === v.style) || [0, v.style])[1])}</span>` : ''}<b>${esc(v.name)}</b><span class="muted">${esc(v.description)}</span>
+    <span class="dots">${Object.entries(v.picks).map(([slot, fid]) => { const f = swFil(fid); return f ? `<i style="background:${esc(f.hex)}" title="T${slot}: ${esc(f.name)}"></i>` : ''; }).join('')}</span>
+    ${v.notes && v.notes.length ? `<span class="rx-notes">${esc(v.notes.join(' '))}</span>` : ''}</span></button>`).join('');
+}
+$('rxSwResults').onclick = (e) => {
+  const c = e.target.closest('[data-i]'); if (!c) return;
+  const v = SW.schemes[+c.dataset.i]; if (!v) return;
+  SW.picks = { ...v.picks }; SW.sel = +c.dataset.i;
+  const pool = swPool();
+  if (Object.values(v.picks).some(id => !pool.some(f => f.id === id))) $('rxSwMaterial').value = 'any';
+  swRender();
+};
+$('rxSwApply').onclick = async () => {
+  const changed = swSlots().filter(s => swFil(SW.picks[s.slot]));
+  if (!changed.length) return;
+  const next = swSlotsWith();
+  const fams = new Set(swSlots().map(s => swFamily(next.find(x => x.slot === s.slot).type)));
+  const what = changed.map(s => { const f = swFil(SW.picks[s.slot]); return `T${s.slot} ${f.color || f.name}`; }).join(', ');
+  const name = SW.sel >= 0 && SW.schemes[SW.sel] ? SW.schemes[SW.sel].name : '';
+  state.swapUndo = state.swapUndo || state.slots.map(s => ({ ...s }));
+  state.slots = next; state.compare = null; state.result = null;
+  SW.picks = {}; SW.sel = -1;
+  $('remixDialog').close();
+  renderMaterials(); await prepare();
+  toast(`${name ? `Applied “${name}”` : 'Colors swapped'}: ${what}. The painting is unchanged; the toolheads now hold these filaments.${fams.size > 1 ? ' They are different materials, so check they print well together.' : ''} Save it with Save as 3MF.`, 9000);
+  guideEvent('remixed');
 };
 
 // ---------- Filament: the built-in filament inventory, shown over the whole window ----------
@@ -1111,19 +1286,20 @@ function slotColor(n) {
   return s ? s.color : String((state.file && state.file.fileColors || [])[n - 1] || '#888888').slice(0, 7);
 }
 // a mix looks like its filaments blended (what Snapmaker Orca shows), from the toolhead colors as they are now
-function mixColor(m) {
+function mixColor(m, slots = state.slots) {
   const rgb = [0, 0, 0];
   for (const p of m.parts) {
-    const v = parseInt(String(slotColor(p.slot)).replace('#', '').slice(0, 6), 16) || 0x888888;
+    const s = slots.find(x => x.slot === p.slot);
+    const v = parseInt(String(s ? s.color : slotColor(p.slot)).replace('#', '').slice(0, 6), 16) || 0x888888;
     rgb[0] += ((v >> 16) & 255) * p.pct / 100; rgb[1] += ((v >> 8) & 255) * p.pct / 100; rgb[2] += (v & 255) * p.pct / 100;
   }
   return '#' + rgb.map(c => Math.round(Math.min(255, c)).toString(16).padStart(2, '0')).join('').toUpperCase();
 }
-function filamentLooks() {
-  const colors = Object.fromEntries(state.slots.map(s => [s.slot, s.color]));
-  const sparkle = Object.fromEntries(state.slots.filter(sparkles).map(s => [s.slot, 1]));
+function filamentLooks(slots = state.slots) {
+  const colors = Object.fromEntries(slots.map(s => [s.slot, s.color]));
+  const sparkle = Object.fromEntries(slots.filter(sparkles).map(s => [s.slot, 1]));
   for (const m of state.mixes || []) {
-    colors[m.id] = mixColor(m);
+    colors[m.id] = mixColor(m, slots);
     const share = m.parts.reduce((t, p) => t + (sparkle[p.slot] ? p.pct / 100 : 0), 0);
     if (share > 0) sparkle[m.id] = share;
   }
@@ -2076,6 +2252,7 @@ const NEXT_CLICK = {
     : ($('save3mfVariant') ? [$('save3mfVariant'), '“Save as 3MF”'] : [$('saveBtn'), '“Save as 3MF”']),
   remix: () => {
     if (!openDlg('remixDialog')) return [$('remixBtn'), '“Color remix…”'];
+    if (!$('rxSwapPane').classList.contains('hidden')) return [$('rxStep1'), '“Parts”'];
     if (!$('rxPartsPane').classList.contains('hidden')) return !$('rxConfirm').disabled ? [$('rxConfirm'), '“Confirm parts”'] : [$('rxIdentify'), '“Identify parts with AI”'];
     const side = !$('rxBig').classList.contains('hidden') && $('rxBigSide').querySelector('[data-apply]');
     if (side) return [side, '“Apply to model”'];

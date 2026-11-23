@@ -138,9 +138,18 @@ With a version picked:
 
 ## 10. Color remix
 
-Turn a model into new color schemes using **only the filament you own**:
+Turn a model into new color schemes using **only the filament you own**. There are two ways.
 
-1. Click **Color remix…**.
+**Swap colors (the quick way, opens first).** The model keeps its painting exactly as it is; each of its colors just gets a different filament from your library. Works on any multi-color model, no parts to find.
+
+1. Click **Color remix…**. Each of the model's colors is listed with how much of the model it covers.
+2. Pick a new filament for any color, or click **Closest match** (the filament you own that looks most like each color) or **Shuffle** (a random scheme where light colors stay light and dark ones dark, so eyes and details still stand out). The 3D view shows it as you go. Both are free.
+3. Optional: pick styles and click **Suggest schemes** to have the AI design a few (a few cents), then click one to try it.
+4. Click **Apply to model**: the toolheads are set to those filaments. Color mixes change with them.
+
+**Recolor by parts (the AI finds the parts).** Use this to color parts differently from how the model was painted, or a model with only one color.
+
+1. Click **Color remix…**, then **Parts** at the top.
 2. **Identify parts with AI**: the AI groups the model into parts (body, fins, windows…). Check them by turning the model. Fix a wrong spot by picking the part in the list and clicking or brushing over it.
 3. Click **Confirm parts →**.
 4. Pick **styles** (Realistic, Fun, Galaxy, Pastel…) and how many of each, then **Generate**.
@@ -148,7 +157,7 @@ Turn a model into new color schemes using **only the filament you own**:
 
 ![Color schemes](images/07-remix-schemes.jpg)
 
-Changed your mind? Open Color remix again and click **Undo remix**.
+Changed your mind? Open Color remix again and click **Undo remix** (it undoes a swap too).
 
 ---
 

@@ -51,7 +51,8 @@ Optional: **Compare slices** (right) to see Fine / Fast / Recommended side by si
 
 ## Color remix in 5 clicks
 
-**Color remix…** → **Identify parts with AI** → **Confirm parts** → pick styles → **Generate** → **Apply to model**.
+**Swap colors:** **Color remix…** → **Shuffle** or **Closest match** (or pick each color) → **Apply to model**.
+**By parts:** **Parts** → **Identify parts with AI** → **Confirm parts** → pick styles → **Generate** → **Apply to model**.
 
 ## Filament in 3 ways
 

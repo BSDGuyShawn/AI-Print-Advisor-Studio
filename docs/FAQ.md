@@ -62,7 +62,7 @@ You don't need a Claude.ai subscription. Sign up at [platform.claude.com](https:
 
 ## How much will the AI cost me?
 
-Typical costs per request: recommendations 5–20¢, Color remix parts 6–11¢, a set of color schemes about 10¢, a troubleshooting run about 10¢, reading an order screenshot a few cents. The app shows an estimate before each request and the real cost after (the **AI** button at the top). Pick **Claude Haiku** in Settings for the cheapest option.
+Typical costs per request: recommendations 5–20¢, Color remix parts 6–11¢, a set of color schemes about 10¢ (Swap colors schemes 2–5¢; Closest match and Shuffle are free), a troubleshooting run about 10¢, reading an order screenshot a few cents. The app shows an estimate before each request and the real cost after (the **AI** button at the top). Pick **Claude Haiku** in Settings for the cheapest option.
 
 ## Can I see my total Anthropic spend in the app?
 

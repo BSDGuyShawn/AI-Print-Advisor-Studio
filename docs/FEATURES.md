@@ -38,7 +38,8 @@ Everything AI 3D Print Advisor Studio can do, in one list. New to 3D printing? S
 
 ## Color remix
 
-- The AI finds a model's parts (body, eyes, fins…); you check and correct them by clicking or brushing.
+- **Swap colors**: keep the model's painting and give each color another filament you own: by hand, **Closest match**, **Shuffle** (free), or schemes the AI suggests. Live 3D preview; color mixes follow.
+- **Recolor by parts**: the AI finds a model's parts (body, eyes, fins…); you check and correct them by clicking or brushing.
 - New **color schemes** in styles like Realistic, Fun, Galaxy, Color Shift, Pastel, Monochrome and Holiday, using **only filament you own**.
 - Optional **extra colors** with a pause to swap spools mid-print.
 - **Apply** paints the colors in and sets the toolheads; **Undo** puts it back.

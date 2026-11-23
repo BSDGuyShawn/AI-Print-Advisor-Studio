@@ -401,6 +401,36 @@ export class ModelViewer {
     this.camera.position.copy(prev.pos); this.controls.target.copy(prev.target); this.controls.update();
     return shots;
   }
+  // the model's surface per filament (each part's own, or each painted triangle's), in mm²: { filament: area }
+  filamentAreas() {
+    const out = {};
+    for (const c of this.chunks) {
+      if (c.kind === 'modifier') continue;
+      const a = c.mesh.geometry.attributes.position.array, tf = c.triFilament;
+      for (let i = 0, t = 0; i < a.length; i += 9, t++) {
+        const ux = a[i + 3] - a[i], uy = a[i + 4] - a[i + 1], uz = a[i + 5] - a[i + 2];
+        const vx = a[i + 6] - a[i], vy = a[i + 7] - a[i + 1], vz = a[i + 8] - a[i + 2];
+        const f = tf && tf[t] ? tf[t] : c.extruder;
+        out[f] = (out[f] || 0) + Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
+      }
+    }
+    return out;
+  }
+  // a square picture of the model in the given filament colours ({ colors, sparkle }), for a scheme card
+  filamentPreview(looks, size = 200, view = 'iso') {
+    const prev = { mode: this.mode, colors: this.colors, sparkle: this.sparkle, pos: this.camera.position.clone(), target: this.controls.target.clone(), bg: this.scene.background };
+    this.mode = 'colors'; this.colors = looks.colors; this.sparkle = looks.sparkle || {}; this.recolor(); this.fit(view);
+    if (this.bed) this.bed.visible = false;
+    this.scene.background = null; this.renderer.setClearColor(0x000000, 0);
+    this.renderer.render(this.scene, this.camera);
+    const src = this.renderer.domElement, side = Math.min(src.width, src.height);
+    const c = document.createElement('canvas'); c.width = size; c.height = size;
+    c.getContext('2d').drawImage(src, (src.width - side) / 2, (src.height - side) / 2, side, side, 0, 0, size, size);
+    this.scene.background = prev.bg; if (this.bed) this.bed.visible = true;
+    this.mode = prev.mode; this.colors = prev.colors; this.sparkle = prev.sparkle; this.recolor();
+    this.camera.position.copy(prev.pos); this.controls.target.copy(prev.target); this.controls.update();
+    return c.toDataURL('image/png');
+  }
   // a square picture of the model in the given region colours, for a scheme card
   regionPreview(hexById, size = 360, view = 'iso') {
     const prev = { mode: this.mode, colors: this.regionColors, pos: this.camera.position.clone(), target: this.controls.target.clone(), bg: this.scene.background };
