@@ -3122,6 +3122,7 @@ $('kpiBar').addEventListener('click', (e) => { const b = e.target.closest('[data
 $('monitorBtn').onclick = () => api.openMonitor();
 if (api.onMonitor) {
   api.onMonitor((msg) => {
+    if (msg.type === 'printer' && !KPI.state) return refreshKpiBar();
     if (msg.type === 'printer' && KPI.state) {
       const i = KPI.state.printers.findIndex(p => p.id === msg.printer.id);
       if (i >= 0) KPI.state.printers[i] = msg.printer; else return refreshKpiBar();

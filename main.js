@@ -89,7 +89,7 @@ function decideTour() {
   try { cfg = JSON.parse(require('fs').readFileSync(CONFIG_PATH(), 'utf8')); } catch {}
   return cfg.tourRequested === true;
 }
-async function readConfig() { try { return JSON.parse(await fs.readFile(CONFIG_PATH(), 'utf8')); } catch { return {}; } }
+async function readConfig() { try { return JSON.parse((await fs.readFile(CONFIG_PATH(), 'utf8')).replace(/^\uFEFF/, '')); } catch { return {}; } }   // (a byte-order mark from a hand edit is fine)
 async function writeConfig(cfg) { await fs.mkdir(path.dirname(CONFIG_PATH()), { recursive: true }); await fs.writeFile(CONFIG_PATH(), JSON.stringify(cfg, null, 2)); }
 const enc = (s) => (safeStorage.isEncryptionAvailable() ? { v: safeStorage.encryptString(s).toString('base64'), e: true } : { v: s, e: false });
 // a key encrypted under the old app name may not decrypt any more: treat it as missing (the user re-enters it)
