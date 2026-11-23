@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.32.1
+- Print Monitor hardening (found by the code scanner): pictures from a printer are only saved when they really are a
+  PNG or JPEG of a sane size, never written over an existing file, and a printer's status messages can only fill in
+  printer values.
+
 ## 2.32.0
 - **Print Monitor**: watch every printer from the app. A bar on the main screen shows what each printer is doing
   (thumbnail, progress, time left, when it ends); **Print Monitor** opens a window with every printer side by side and

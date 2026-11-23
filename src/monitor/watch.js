@@ -21,6 +21,17 @@ const RATE_WINDOW = { heater_bed: 120000 };
 const cToF = (c) => c * 9 / 5 + 32;
 const safeName = (s) => (String(s || 'print').replace(/\.gcode$/i, '').split('/').pop().replace(/[^A-Za-z0-9 _.-]+/g, '_').trim().slice(0, 80) || 'print');
 const jobTitle = (s) => String(s || '').replace(/\.gcode$/i, '').split('/').pop().replace(/_/g, ' ');
+// Only real pictures of a sane size are written to disk (a printer's answers are data, not trusted files)
+const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+function pictureOk(buf, kind, max = 8 * 1024 * 1024) {
+  if (!Buffer.isBuffer(buf) || buf.length < 8 || buf.length > max) return null;
+  if (kind === 'png' && buf.subarray(0, 8).equals(PNG_SIG)) return buf;
+  if (kind === 'jpg' && buf[0] === 0xff && buf[1] === 0xd8) return buf;
+  return null;
+}
+async function writeNew(file, buf) {   // creates the file, or leaves an existing one alone
+  try { await fsp.writeFile(file, buf, { flag: 'wx' }); } catch (e) { if (e.code !== 'EEXIST') throw e; }
+}
 const stamp = (d = new Date()) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${String(d.getSeconds()).padStart(2, '0')}`;
 
 class PrinterWatch extends EventEmitter {
@@ -298,10 +309,12 @@ class PrinterWatch extends EventEmitter {
         const folder = fname.includes('/') ? fname.slice(0, fname.lastIndexOf('/') + 1) : '';
         const key = crypto.createHash('sha1').update(`${fname}|${meta.size}|${meta.modified}`).digest('hex').slice(0, 16);
         const dest = path.join(this.dir, 'thumbs', this.id, `${key}.png`);
-        if (!fs.existsSync(dest)) {
+        if (!(await fsp.stat(dest).then(() => true, () => false))) {
           const r = await this.conn.fetch(`/server/files/gcodes/${(folder + rel).split('/').map(encodeURIComponent).join('/')}`);
           if (!r.ok) throw new Error(`thumbnail: HTTP ${r.status}`);
-          await fsp.writeFile(dest, Buffer.from(await r.arrayBuffer()));
+          const png = pictureOk(Buffer.from(await r.arrayBuffer()), 'png');
+          if (!png) throw new Error('the thumbnail isn’t a PNG picture');
+          await writeNew(dest, png);
           const old = (await fsp.readdir(path.dirname(dest))).filter(f => f.endsWith('.png'));
           if (old.length > 20) {
             const st = await Promise.all(old.map(async f => [f, (await fsp.stat(path.join(path.dirname(dest), f))).mtimeMs]));
@@ -335,7 +348,7 @@ class PrinterWatch extends EventEmitter {
 
   // ------------------------------------------------------------ photo + previews
   async takeFinalSnapshot(kind) {
-    const data = await this.camera.freshSnapshot();
+    const data = pictureOk(await this.camera.freshSnapshot(), 'jpg', 16 * 1024 * 1024);
     if (!data) { this.log(`print monitor ${this.cfg.name}: no camera picture for the final photo`); return ''; }
     const ps = this.s.print_stats || {};
     const file = `${stamp()}_${safeName(ps.filename || this.job.filename)}.jpg`;
@@ -368,8 +381,10 @@ class PrinterWatch extends EventEmitter {
       headers: this.conn.headers(), colors, model: this.previewModelKey !== want,
       st: { state: ps.state, filePosition: vs.file_position || 0, currentLayer: (ps.info || {}).current_layer } });
     const dir = path.join(this.dir, 'previews', this.id);
-    if (out.model) { await fsp.writeFile(path.join(dir, 'model.png'), Buffer.from(out.model)); this.previewModelKey = want; }
-    await fsp.writeFile(path.join(dir, 'progress.png'), Buffer.from(out.progress));
+    // drawn by the app itself (src/monitor/preview.js), checked anyway
+    const model = out.model && pictureOk(Buffer.from(out.model), 'png'), progress = pictureOk(Buffer.from(out.progress), 'png');
+    if (model) { await fsp.writeFile(path.join(dir, 'model.png'), model); this.previewModelKey = want; }
+    if (progress) await fsp.writeFile(path.join(dir, 'progress.png'), progress);
     this.previewTs = Date.now();
   }
 

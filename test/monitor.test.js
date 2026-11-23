@@ -28,7 +28,7 @@ class FakeConn extends EventEmitter {
   async fetch() { return new Response('x'); }
   set(st) { for (const [k, v] of Object.entries(st)) this.status[k] = { ...(this.status[k] || {}), ...v }; this.emit('update', new Set(Object.keys(st))); }
 }
-class FakeCam { constructor() { this.forced = false; } start() {} stop() {} info() { return { mode: 'u1' }; } async freshSnapshot() { return Buffer.from([0xff, 0xd8, 1, 2, 0xff, 0xd9]); } }
+class FakeCam { constructor() { this.forced = false; } start() {} stop() {} info() { return { mode: 'u1' }; } async freshSnapshot() { return Buffer.concat([Buffer.from([0xff, 0xd8]), Buffer.alloc(64, 7), Buffer.from([0xff, 0xd9])]); } }
 const tick = () => new Promise(r => setTimeout(r, 30));
 
 function makeWatch(dir, conn = new FakeConn(), settings = {}) {

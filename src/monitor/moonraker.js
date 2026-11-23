@@ -146,7 +146,8 @@ class Connection extends EventEmitter {
     const wanted = {};
     for (const o of objs) if (WANTED.has(o) || WANTED_PREFIXES.some(p => o.startsWith(p))) wanted[o] = null;
     const res = await this.call('printer.objects.subscribe', { objects: wanted });
-    this.status = (res && res.status) || {};
+    this.status = {};
+    for (const [k, v] of Object.entries((res && res.status) || {})) if (/^[A-Za-z0-9_][A-Za-z0-9_ .-]{0,80}$/.test(k) && k !== 'constructor' && v && typeof v === 'object') this.status[k] = v;
     this.lastUpdate = Date.now();
     this.emit('update', new Set(Object.keys(this.status)));
   }
@@ -170,6 +171,8 @@ class Connection extends EventEmitter {
     if (method === 'notify_status_update' && params[0]) {
       const changed = new Set();
       for (const [obj, diff] of Object.entries(params[0])) {
+        // printer object names only (never __proto__ and the like), and plain objects as values
+        if (!/^[A-Za-z0-9_][A-Za-z0-9_ .-]{0,80}$/.test(obj) || obj === 'constructor' || !diff || typeof diff !== 'object') continue;
         this.status[obj] = { ...(this.status[obj] || {}), ...diff };
         changed.add(obj);
       }
