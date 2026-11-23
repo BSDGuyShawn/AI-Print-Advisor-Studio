@@ -5,3 +5,4 @@ __pycache__/
 # the spool tag reader, built by tools/build_spoolscan.py (shipped in releases, not kept in git)
 /spoolscan/
 *.egg-info/
+package-lock.json
