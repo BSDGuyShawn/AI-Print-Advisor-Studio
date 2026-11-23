@@ -358,8 +358,7 @@ class PhoneServer extends EventEmitter {
     } catch (e) {
       this.log(`phone access: ${req.method} ${String(req.url).replace(/^\/i\/[^/]+/, '/i/…').replace(/([?&]k=)[^&]+/, '$1…')}: ${e.message}`);
       // only the message, one line (never a stack trace)
-      const msg = e instanceof Error && typeof e.message === 'string' ? e.message.split('
-')[0].slice(0, 300) : 'Something went wrong.';
+      const msg = e instanceof Error && typeof e.message === 'string' ? e.message.split(/\r?\n/)[0].slice(0, 300) : 'Something went wrong.';
       this.send(res, e.status || 500, { error: msg });
     }
   }
