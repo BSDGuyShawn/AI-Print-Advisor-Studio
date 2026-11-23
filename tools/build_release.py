@@ -5,9 +5,6 @@ Full app (to share):
         --package <npm .tgz> ... --rcedit <rcedit.exe> --out <folder>
   (older way: --runtime <an earlier release folder> reuses that release's Electron files and libraries)
 
-With spool tag scanning (NFC/RFID; see tools/build_spoolscan.py):
-    add --spoolscan <the spoolscan folder that tools/build_spoolscan.py made>
-
 With the guided tour (the first launch replays recorded results on a sample model, see preload-demo.js):
     add --recording <rec.jsonl>
         --inventory <Filament Inventory folder> [--backup <its downloaded backup .json>] --config <the app's config.json>
@@ -142,7 +139,6 @@ def main():
     ap.add_argument('--no-zip', action='store_true')
     ap.add_argument('--csc', default=CSC, help="the C# compiler that comes with Windows (.NET Framework 4), for the launcher")
     ap.add_argument('--package', action='append', help='an npm .tgz to bundle instead of the runtime copy (repeatable)')
-    ap.add_argument('--spoolscan', help='the spool tag reader built by tools/build_spoolscan.py (its spoolscan folder); without it the app has no tag scanning')
     args = ap.parse_args()
     version = json.load(open(os.path.join(ROOT, 'package.json')))['version']
     # no version in the name: the folder people extract stays the same, and the app updates itself in place
@@ -162,10 +158,6 @@ def main():
     if not args.recording: os.remove(os.path.join(app, 'preload-demo.js'))
     asar_node_modules(args.modules or os.path.join(args.runtime, 'resources', 'app.asar'), app)
     overlay_packages(args.package, app)
-    if args.spoolscan:
-        if not os.path.exists(os.path.join(args.spoolscan, 'spoolscan.exe')): sys.exit(f'--spoolscan: no spoolscan.exe in {args.spoolscan}')
-        shutil.copytree(args.spoolscan, os.path.join(app, 'spoolscan'))
-        print('Bundled the spool tag reader (spoolscan)')
     if args.rcedit:
         title = 'AI 3D Print Advisor Studio'
         subprocess.run([args.rcedit, os.path.join(out, EXE), '--set-icon', os.path.join(ROOT, 'build', 'icon.ico'),

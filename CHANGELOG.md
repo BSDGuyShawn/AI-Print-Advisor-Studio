@@ -1,14 +1,22 @@
 # Changelog
 
-## Unreleased
-- **Scan spool tags (NFC/RFID).** Plug in a USB NFC reader, tick **Scan spool tags** in Filament → Settings and tap
-  a spool on it: a spool you've scanned before opens, highlighted; a new one can be added with its brand, material,
-  color, weight and temperatures filled in from the tag, or linked to a spool already in your library. Reads Bambu
-  Lab, Snapmaker, Creality, QIDI, Anycubic and ELEGOO tags and the OpenSpool, OpenTag3D and TigerTag formats; cheap
-  NFC stickers make any other spool scannable. Tags are only read, never changed. A scan on another screen opens
-  the Filament screen; untick **Scanning on another screen opens this one** to only use scans on that screen. The reader program
-  (`tools/spoolscan`, built into `spoolscan/spoolscan.exe` by `tools/build_spoolscan.py`) ships with the app.
-- `npm test` runs the new tests (`test/`).
+## 2.29.0
+- **Spool tags (NFC/RFID).** Turn it on in **Settings → Spool tags** and tap a spool on an NFC reader: a spool
+  you've scanned before opens, highlighted; a new one can be added with its brand, material, color, weight and
+  temperatures filled in from the tag, or linked to a spool already in your library. Reads Bambu Lab, Snapmaker
+  (signature checked), Creality, QIDI, Anycubic and ELEGOO tags and the OpenSpool, OpenTag3D, SpoolEase and TigerTag
+  formats. Contributed by BSDGuyShawn (PR #10), with the tag decoders from OpenRFID.
+- **Write your own filament to NFC stickers.** On a filament's card, **🏷 Write NFC tag** (or 🏷 on a spool) writes
+  it to a blank NTAG215/216 sticker as OpenSpool (or OpenTag3D, with the color name), reads it back to check, and
+  links the sticker to that spool. Stickers that are too small (NTAG203/213) can be linked by their ID instead. Only
+  blank-style stickers are written: brand tags, locked stickers and the sticker's system pages are never touched,
+  and a sticker that already has data asks first.
+- **Readers**: USB NFC readers (ACR122U, ACR1252U, Cryptnox, HID Omnikey, Identiv… any PC/SC reader), an
+  **Arduino with a PN532 shield** (sketch in `tools/arduino/SpoolTagBridge`), or a **PN532 board** on a USB-serial
+  adapter. Pick and test them in Settings; only Arduino boards are ever tried automatically.
+- All built in: the tag reading, decoding and writing run inside the app (no Python, no extra program), in a
+  background process so the window never waits on the reader. `npm test` runs the tests (`test/`), including every
+  tag format against real tag dumps.
 
 ## 2.28.1
 - **Color remix schemes show the full filament for each color**: color, brand and line, material, finish, spools on

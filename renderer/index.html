@@ -239,6 +239,28 @@
         </div>
         <div id="discoverResults"></div>
       </fieldset>
+      <fieldset class="nfc" id="nfcField">
+        <legend>Spool tags (NFC)</legend>
+        <label class="check"><input type="checkbox" id="nfcOn"> <b>Scan spool tags with an NFC reader</b></label>
+        <small>Tap a spool’s NFC/RFID tag on the reader: the Filament screen opens that spool, or offers to add it with the details from the tag. Reads Bambu Lab, Snapmaker, Creality, QIDI, Anycubic, ELEGOO, OpenSpool, OpenTag3D, SpoolEase and TigerTag tags. You can also write your own filament to blank NFC stickers (NTAG215 or NTAG216), on a filament’s card.</small>
+        <p class="nfc-status" id="nfcStatus" aria-live="polite"></p>
+        <div class="nfc-opts" id="nfcOpts">
+          <label class="check"><input type="checkbox" id="nfcPcsc"> Use USB NFC readers <small>(ACR122U, ACR1252U, Cryptnox, HID Omnikey, Identiv: any PC/SC reader that reads MIFARE Classic and NTAG)</small></label>
+          <label class="field"><span>Only use the USB reader named <small>(optional, if you have several)</small></span><input type="text" id="nfcReader" placeholder="part of its name"></label>
+          <label class="field"><span>Arduino or PN532 board</span>
+            <div class="inline"><select id="nfcPort"></select><button class="btn" type="button" id="nfcTest">Test</button></div>
+            <small id="nfcPortStatus">An Arduino with a PN532 shield running the SpoolTagBridge sketch, or a PN532 board on a USB-serial adapter (switched to HSU mode). Only Arduino boards are tried automatically; anything else (a printer, say) is never touched unless you pick its port.</small>
+          </label>
+          <label class="check"><input type="checkbox" id="nfcAnywhere"> Scanning a tag on another screen opens the Filament screen</label>
+          <label class="field"><span>Format for stickers you write</span>
+            <select id="nfcFormat">
+              <option value="openspool">OpenSpool: read by the most tools and printer add-ons</option>
+              <option value="opentag3d">OpenTag3D: more detail, including the color name</option>
+            </select></label>
+          <label class="check"><input type="checkbox" id="nfcConfirm"> Ask before writing over a sticker that already has data on it</label>
+        </div>
+        <p class="hint hidden" id="nfcTour">Spool tags are off in the guided tour.</p>
+      </fieldset>
       <fieldset class="samples hidden" id="sampleField">
         <legend>Filament library</legend>
         <p class="hint" id="sampleText"></p>

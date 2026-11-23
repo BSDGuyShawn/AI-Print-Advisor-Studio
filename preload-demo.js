@@ -32,7 +32,7 @@ const NOTICES = {
   key: ['Your API key is saved', 'The tour itself only replays recorded results, so the key isn’t used yet. Once you finish the tour, the app uses it for real AI advice on your own models.'],
   printers: ['Printer setup is switched off in the tour', 'After the tour you add your printers here (address and API key) to send prints and see their history.'],
   ts: ['The tour troubleshoots one sample print', 'Open the troubleshooter on the cancelled “Demo Rocket” print. After the tour any print from your printers can be troubleshot.'],
-  nfc: ['The spool tag reader is off in the tour', 'After the tour you can turn it on in Filament → Settings: tap a spool’s NFC/RFID tag on a USB reader and the Filament screen opens that spool, or offers to add it.'],
+  nfc: ['The spool tag reader is off in the tour', 'After the tour you can turn it on in Settings: tap a spool’s NFC/RFID tag on a reader and the Filament screen opens that spool (or offers to add it), and write your own filament to blank NFC stickers.'],
   files: ['Files are switched off in the tour', 'After the tour this opens or saves files on your computer.'],
   generic: ['Not available in the tour', 'The tour uses recorded results. Finish the tour to do this for real.'],
 };
@@ -252,7 +252,8 @@ contextBridge.exposeInMainWorld('advisor', {
   // spool tag scanning needs the reader hardware: off in the tour
   nfcStatus: async () => ({ state: 'off', readers: [], enabled: false, reader: '', tour: true }),
   nfcSet: failing('nfc'),
-  onNfcTag: () => () => {}, onNfcStatus: () => () => {}, onNfcReadError: () => () => {},
+  onNfcTag: () => () => {}, onNfcStatus: () => () => {}, onNfcWriteProgress: () => () => {},
+  nfcPorts: async () => ({ ports: [] }), nfcTestPort: failing('nfc'), nfcWrite: failing('nfc'), nfcWriteCancel: async () => true,
   remixPrepare: (a) => replay('remix-prepare', [a], { delay: 900, steps: ['Cutting the model into patches…'] }),
   partsIdentify: (a) => withCost('Color remix: parts', 0.08, replay('parts-identify', [a], { delay: 5000, steps: ['Identifying the parts of the model…'] })),
   partsConfirm: (a) => replay('parts-confirm', [a], { delay: 600 }),

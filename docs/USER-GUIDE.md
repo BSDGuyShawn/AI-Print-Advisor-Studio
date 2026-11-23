@@ -168,7 +168,7 @@ Click **Filament** (top right). Click **Back to model** to return.
 - **Inventory**: every filament you own, grouped by type and color, with photos. Click one for its spools, print settings and history.
 - **Spools**: a table of every spool: sealed, opened, loaded in a printer, empty.
 - **Dashboard**: totals, what's running low, what's loaded in each printer.
-- **Settings**: your storage places (shelves, dry boxes, printer slots), empty-spool weights for weighing, labels and backups, and the spool tag reader.
+- **Settings**: your storage places (shelves, dry boxes, printer slots), empty-spool weights for weighing, labels and backups, and whether spool tags are on.
 
 **Adding filament**
 
@@ -179,18 +179,32 @@ Click **Filament** (top right). Click **Back to model** to return.
 
 **Scanning spool tags (NFC/RFID)**
 
-Many spools have a small tag inside: Bambu Lab, Snapmaker, Creality, QIDI, Anycubic and ELEGOO, plus the open OpenSpool, OpenTag3D and TigerTag formats. With a USB NFC reader you can tap a spool on it instead of searching the list.
+Many spools have a small tag inside: Bambu Lab, Snapmaker, Creality, QIDI, Anycubic and ELEGOO, plus the open OpenSpool, OpenTag3D, SpoolEase and TigerTag formats. With an NFC reader you can tap a spool on it instead of searching the list.
 
-1. Plug in a USB NFC reader. Any "PC/SC" smart-card reader that reads MIFARE Classic works (for example an ACR122U, ACR1252U or a Cryptnox reader); Windows needs no driver for most of them.
-2. In **Filament → Settings**, tick **Scan spool tags**. The line below it says **Ready** when the reader is found.
-3. Tap a spool on the reader (hold it still for a second). Bambu Lab spools have a tag on each side; either works.
+1. Plug in a reader:
+   - a **USB NFC reader**: any "PC/SC" smart-card reader that reads MIFARE Classic and NTAG (for example an ACR122U, ACR1252U, Cryptnox, HID Omnikey or Identiv reader). Windows needs no driver for most of them.
+   - or an **Arduino with a PN532 NFC shield** (I2C): upload `tools/arduino/SpoolTagBridge` to it once with the Arduino IDE (see the [README there](../tools/arduino/SpoolTagBridge/README.md)).
+   - or a **PN532 board** on a USB-serial adapter, with its switches set to HSU (UART).
+2. Open **Settings** (the gear) → **Spool tags (NFC)** and tick **Scan spool tags with an NFC reader**. USB readers are found by themselves; an Arduino too (**Find an Arduino automatically**). For a PN532 board, pick its COM port. **Test** checks a board is answering. Click **Save settings**: the status line says **Ready** with your reader's name.
+3. Tap a spool on the reader (hold it still for a second or two). Bambu Lab spools have a tag on each side; either works.
 
 - **A spool you've scanned before** opens straight away, highlighted, so you can mark it opened, load it into a toolhead, weigh it or mark it empty.
 - **A new tag** opens **New spool tag**, filled in from the tag (brand, material, color, weight, temperatures). If you already have that filament, **Add spool** adds one more. You can also **link the tag to a spool you already have** (one you added from an order or a screenshot), or add it as a new filament: tags don't carry a color name, so type one.
-- **A spool without a tag**: stick a cheap NFC sticker (NTAG213/215) on it, scan it and link it to the spool. From then on it opens like any other.
+- **A spool without a tag**: write it to a blank NFC sticker (below), or just stick one on, scan it and link it to the spool. From then on it opens like any other.
 - A spool's tags are listed in its history (**⋯**), with **Unlink** if you move a sticker.
 
-The app only reads tags; it never changes them. Scanning works anywhere in the app: a scan opens the Filament screen. To only use scans while the Filament screen is open, untick **Scanning on another screen opens this one** in Filament → Settings. Prusa's OpenPrintTag uses a different kind of tag (ISO 15693) that most of these readers can't read.
+Scanning works anywhere in the app: a scan opens the Filament screen. To only use scans while the Filament screen is open, untick **Scanning a tag on another screen opens the Filament screen** in Settings. Prusa's OpenPrintTag uses a different kind of tag (ISO 15693) that most of these readers can't read.
+
+**Writing your filament to an NFC sticker**
+
+Give any spool a tag that also tells other tools what's on it:
+
+1. Open the filament and click **🏷 Write NFC tag** (or **🏷** on one spool's row). The panel shows what will be written: brand, material, finish, color, nozzle and bed temperatures, weight. It needs the nozzle temperature: if the card has none, type it in **Nozzle °C**.
+2. Click **Write tag** and hold a **blank NTAG215 or NTAG216 sticker** on the reader. The app writes it, reads it back to check, and links it to that spool.
+
+- The format is **OpenSpool** (read by the most tools and printer add-ons), or **OpenTag3D** (more detail, including the color name), chosen in **Settings → Spool tags**.
+- **NTAG203 and NTAG213 stickers** hold only 144 bytes, too little for either format. The app offers **Link it without writing**: scanning it then opens the spool in this app, but other tools won't know what it is.
+- A sticker that already has data on it asks before it's written over (you can turn that off in Settings). Bambu Lab, Snapmaker, Creality and QIDI tags (MIFARE Classic) are never written, and neither are a sticker's ID, lock, configuration or password pages, so a sticker can't be locked by accident.
 
 ![Filament library](images/09-filament-library.jpg)
 

@@ -80,7 +80,7 @@
       type,
       line: mods.filter(m => !/^cf$/i.test(m)).join(' ') || type,
       finish: finishFrom(words),
-      color: '',                       // tags don't carry a color name: the user names it
+      color: (scan.extras && scan.extras.colorName) || '',   // only OpenTag3D tags carry a color name; otherwise the user names it
       colorGuess: Array.isArray(hex) ? 'Multicolor' : fam,
       fams: Array.isArray(hex) ? ['Multicolor'] : [fam],
       hex,

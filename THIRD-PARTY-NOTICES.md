@@ -9,11 +9,11 @@ AI 3D Print Advisor Studio is licensed under the GNU Affero General Public Licen
 | [JSZip](https://stuk.github.io/jszip/) 3.10.1 | Reading and writing .3mf files (zip archives) | MIT (dual-licensed MIT or GPLv3; used under MIT) |
 | [ws](https://github.com/websockets/ws) 8.18.0 | Talking to printers over Moonraker's websocket | MIT |
 | [electron-builder](https://www.electron.build/) | Packaging (build tool only, not shipped) | MIT |
-| spoolscan (`tools/spoolscan`, shipped built as `spoolscan/spoolscan.exe`) | Reading spool tags (NFC/RFID) with a USB reader | GPL-3.0-or-later (compatible with this project's AGPL-3.0, section 13) |
-| [OpenRFID](https://github.com/suchmememanyskill/OpenRFID) tag decoders (`tools/spoolscan/spoolscan/_vendor/openrfid`, unmodified) | Decoding Bambu Lab, Snapmaker, Creality, QIDI, Anycubic, ELEGOO, OpenSpool, OpenTag3D, SpoolEase and TigerTag tags | GPL-3.0 |
-| [pyscard](https://github.com/LudovicRousseau/pyscard) (bundled in spoolscan.exe) | Talking to PC/SC smart-card readers | LGPL-2.1-or-later |
-| [cryptography](https://cryptography.io/) (bundled in spoolscan.exe) | Tag key derivation and signature checks | Apache-2.0 or BSD-3-Clause |
-| [Python](https://www.python.org/) runtime (bundled in spoolscan.exe by [PyInstaller](https://pyinstaller.org/)) | Running spoolscan | PSF License; PyInstaller bootloader GPL-2.0 with a linking exception |
+| [koffi](https://koffi.dev/) 3.3.8 (with `@koromix/koffi-win32-x64`) | Calling Windows' smart-card (PC/SC) and serial-port functions for NFC readers | MIT |
+| [OpenRFID](https://github.com/suchmememanyskill/OpenRFID) tag decoders, commit `a13bc9e`, ported to JavaScript in `src/nfc/decoders.js` and `src/nfc/ndef.js` (lookup tables in `src/nfc/data`) | Decoding Bambu Lab, Snapmaker, Creality, QIDI, Anycubic, ELEGOO, OpenSpool, OpenTag3D, SpoolEase and TigerTag tags | GPL-3.0 (compatible with this project's AGPL-3.0, section 13) |
+| [OpenTag3D specification](https://opentag3d.info/spec.html) `spec.json` 2.001 (`src/nfc/data/opentag3d-v2.json`, unchanged) | Reading and writing OpenTag3D tags | GPL-3.0 |
+| TigerTag ID database (`src/nfc/data/tigertag.json`, from OpenRFID) | Brand and material names on TigerTag tags | GPL-3.0 (as distributed in OpenRFID) |
+| Spool tag reader design (PR #10 by BSDGuyShawn: PC/SC login variants, tag test dumps in `test/fixtures/tags`) | Reading spool tags | AGPL-3.0 (contributed to this project) |
 
 ## Data derived from Snapmaker Orca
 
@@ -25,7 +25,7 @@ The app does not include Snapmaker Orca itself. It uses the copy you install.
 
 ## Spool tag formats
 
-The tag layouts and keys spoolscan uses come from public community research: [Bambu-Research-Group/RFID-Tag-Guide](https://github.com/Bambu-Research-Group/RFID-Tag-Guide) (Bambu Lab), the Creality CFS research ([cfs-programmer](https://github.com/MakaiView/cfs-programmer)), OpenRFID (Snapmaker and others) and [ELEGOO's published tag guide](https://github.com/ELEGOO-3D/ELEGOO-RFID-Tag-Guide). spoolscan only reads tags; it can't write or copy them.
+The tag layouts and keys the app uses come from public community research: [Bambu-Research-Group/RFID-Tag-Guide](https://github.com/Bambu-Research-Group/RFID-Tag-Guide) (Bambu Lab), the Creality CFS research ([cfs-programmer](https://github.com/MakaiView/cfs-programmer)), OpenRFID (Snapmaker and others), [ELEGOO's published tag guide](https://github.com/ELEGOO-3D/ELEGOO-RFID-Tag-Guide), [OpenSpool](https://openspool.io) and [OpenTag3D](https://opentag3d.info). Brand tags are only read; the app never writes, copies or clones them. It writes only the open formats (OpenSpool, OpenTag3D), only to blank-style NFC stickers.
 
 ## Trademarks
 

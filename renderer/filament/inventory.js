@@ -581,6 +581,7 @@ function evText(e) {
     case 'weight': return `Set remaining to ${e.rem} g`;
     case 'tag': return `Linked ${T.tagLabel(e.id)}`;
     case 'untag': return `Unlinked ${T.tagLabel(e.id)}`;
+    case 'tagwrite': return `Wrote this filament to ${T.tagLabel(e.id)} (${e.format === 'opentag3d' ? 'OpenTag3D' : 'OpenSpool'})`;
     default: return e.type;
   }
 }
@@ -637,10 +638,11 @@ function renderSettings(fil) {
 let openFid = null, openPanel = null; // openPanel: {sid, kind:'weigh'|'use'|'hist'}
 
 // ======================================================================
-// Spool tags (NFC/RFID): tap a spool on a USB reader (turned on in Settings, read by the app with tools/spoolscan)
+// Spool tags (NFC/RFID): tap a spool on a reader (turned on in Settings; read by the app itself, src/nfc)
 //   a tag linked to a spool → that spool opens, highlighted
 //   a new tag              → add it as a new spool (filled in from the tag) or link it to a spool you have
-// Tags are only read, never written. A spool remembers its tags in spool.tags (see tags.js for the ids).
+// Your own filament can be written to a blank NFC sticker (🏷 on a spool), which is then linked to that spool.
+// A spool remembers its tags in spool.tags (see tags.js for the ids).
 // ======================================================================
 let scannedSid = null;   // the spool row to highlight after a scan
 let tagScan = null;      // the open "New spool tag" window: { scan, draft, match }
@@ -650,19 +652,17 @@ const screenOpen = () => { try { return window.parent.document.body.classList.co
 const NFC_TEXT = {
   off: 'Off',
   starting: 'Starting…',
-  no_service: 'Waiting for a reader. Plug in your USB NFC reader.',
-  no_reader: 'No reader found. Plug in your USB NFC reader.',
+  no_service: 'Waiting for a reader. Plug in your USB NFC reader or Arduino.',
+  no_reader: 'No reader found. Plug in your USB NFC reader or Arduino.',
   watching: 'Ready. Tap a spool’s tag on the reader.',
 };
 function nfcPanel() {
-  if (nfc.tour) return `<p class="muted" style="margin:0;font-size:13px">The tag reader is off in the guided tour.</p>`;
-  const ok = nfc.state === 'watching';
-  const msg = nfc.error || NFC_TEXT[nfc.state] || nfc.state;
-  return `<p class="muted" style="margin:0 0 8px;font-size:13px">With a USB NFC reader (any PC/SC reader that reads MIFARE Classic, such as an ACR122U or ACR1252U), tap a spool on the reader: the spool opens here, or you can add it with its details filled in from the tag. Reads Bambu Lab, Snapmaker, Creality, QIDI, Anycubic, ELEGOO, OpenSpool, OpenTag3D and TigerTag tags. For any other spool, stick on a cheap NTAG215 sticker and link it once. Tags are only read, never changed. Untick <b>Scanning on another screen opens this one</b> to only use scans while this screen is open. Prusa’s OpenPrintTag needs a reader that also does ISO 15693 (NFC-V).</p>
-    <div class="setrow"><label class="grow" style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-nfc-on ${nfc.enabled ? 'checked' : ''}> Scan spool tags</label></div>
-    <div class="setrow"><span class="grow" data-nfc-status style="color:${ok ? 'var(--petg)' : nfc.state === 'error' || nfc.state === 'missing' ? 'var(--danger)' : 'var(--muted)'}">${ok ? '✓ ' : ''}${esc(msg)}${ok && nfc.readers?.length ? ` <span class="muted">(${esc(nfc.readers.join(', '))})</span>` : ''}</span></div>
-    <div class="setrow"><label class="grow" style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-nfc-anywhere ${nfc.openAnywhere !== false ? 'checked' : ''}> Scanning on another screen opens this one</label></div>
-    <div class="setrow"><span class="grow">Only use the reader named <span class="muted">(optional, if you have several)</span></span><input type="text" style="width:160px" value="${esc(nfc.reader || '')}" data-nfc-reader placeholder="part of its name"></div>`;
+  if (nfc.tour) return `<p class="muted" style="margin:0;font-size:13px">Spool tags are off in the guided tour.</p>`;
+  const ok = nfc.enabled && nfc.state === 'watching';
+  const msg = !nfc.enabled ? 'Off.' : nfc.error || NFC_TEXT[nfc.state] || nfc.state;
+  return `<p class="muted" style="margin:0 0 8px;font-size:13px">Tap a spool on an NFC reader (a USB reader such as an ACR122U, or an Arduino with a PN532 shield): the spool opens here, or you can add it with its details filled in from the tag. Reads Bambu Lab, Snapmaker, Creality, QIDI, Anycubic, ELEGOO, OpenSpool, OpenTag3D, SpoolEase and TigerTag tags. For any other spool, write it to a cheap blank NFC sticker (NTAG215): open the filament and click <b>🏷 Write NFC tag</b>. Pick your reader and the sticker format in <b>Reader settings</b>.</p>
+    <div class="setrow"><label class="grow" style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-nfc-on ${nfc.enabled ? 'checked' : ''}> Scan and write spool tags</label><button class="btn small" data-nfc-settings>Reader settings…</button></div>
+    <div class="setrow"><span class="grow" data-nfc-status style="color:${ok ? 'var(--petg)' : nfc.state === 'error' ? 'var(--danger)' : 'var(--muted)'}">${ok ? '✓ ' : ''}${esc(msg)}${ok && nfc.readers?.length ? ` <span class="muted">(${esc(nfc.readers.join(', '))})</span>` : ''}</span></div>`;
 }
 async function nfcSet(patch) {
   try { nfc = { ...nfc, ...(await api.nfcSet(patch)) }; } catch (e) { toast(ipcMessage(e), 6000); }
@@ -672,8 +672,8 @@ function startTagScanning() {
   if (!api.onNfcTag) return;
   const offs = [
     api.onNfcTag(scan => { try { onTag(scan); } catch (e) { console.error(e); } }),
-    api.onNfcStatus(s => { nfc = { ...nfc, ...s, error: s.error || null }; if (ui.view === 'settings') render(); }),
-    api.onNfcReadError(() => toast('Couldn’t read that tag. Hold the spool still on the reader and try again.', 4000)),
+    api.onNfcStatus(s => { nfc = { ...nfc, ...s, error: s.error || null }; if (ui.view === 'settings') render(); if (openPanel?.kind === 'tag' && !tagWrite) renderSpoolBox(); }),
+    api.onNfcWriteProgress(p => onWriteProgress(p)),
   ];
   window.addEventListener('pagehide', () => offs.forEach(off => { try { off && off(); } catch {} }));
   api.nfcStatus().then(s => { nfc = { ...nfc, ...s }; if (ui.view === 'settings') render(); }).catch(() => {});
@@ -748,7 +748,7 @@ function renderTagDialog() {
     ${m ? linkHtml : ''}
     ${draft ? `<div class="tagopt"><h3>${m ? 'Or add' : 'Add'} it as a new filament</h3>
       <form class="add" id="tagForm" style="padding:0">
-        <label>Color name<input name="color" required placeholder="e.g. ${esc(draft.colorGuess)}" ${m ? '' : 'autofocus'}></label>
+        <label>Color name<input name="color" required value="${esc(draft.color || '')}" placeholder="e.g. ${esc(draft.colorGuess)}" ${m ? '' : 'autofocus'}></label>
         <label>Brand<input name="brand" required value="${esc(draft.brand)}"></label>
         <label>Type<select name="type">${FIL_TYPES.map(x => `<option ${x === draft.type ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
         <label>Product line<input name="line" value="${esc(draft.line)}"></label>
@@ -808,6 +808,102 @@ $('#overlay').addEventListener('click', e => {
   if (a) return addTaggedSpool(a.dataset.tagAddto);
   if (e.target.closest('[data-tag-link]')) return linkTag($('[data-taglink]').value);
 });
+// ======================================================================
+// Writing your filament to a blank NFC sticker (NTAG213/215/216), then linking the sticker to the spool, so
+// scanning it opens that spool. The app writes OpenSpool (or OpenTag3D, in Settings), which other tools read too.
+// ======================================================================
+let tagWrite = null;   // { sid, phase: 'waiting'|'writing'|'confirm'|'done'|'error', msg, uid, existing }
+const TAG_NOZZLE = { 'PLA-CF':'200–230', 'PETG-CF':'240–260', Nylon:'250–280' };   // when TYPICAL has none
+const numbersIn = v => (String(v || '').match(/\d+(?:\.\d+)?/g) || []).map(Number);
+function tempRange(v) { const n = numbersIn(v).filter(x => x >= 20 && x < 500); return n.length ? [Math.min(...n), Math.max(...n)] : [null, null]; }
+const escRe = x => String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// What gets written for a filament: from its card (your settings, else the manufacturer's, else typical values)
+function tagFilament(f) {
+  const typ = TYPICAL[f.type] || {}, sp = f.spec || {}, fx = f.fx || {};
+  const [nMin, nMax] = tempRange(fx.nozzle || sp.n || typ.nozzle || TAG_NOZZLE[f.type]);
+  const [bMin, bMax] = tempRange(fx.bed || sp.b || typ.bed);
+  const dry = String(fx.dry || sp.d || typ.dry || '');
+  const dryT = tempRange(dry.split('°')[0])[0];
+  const dryH = /(\d+)(?:\s*[–-]\s*(\d+))?\s*h/i.exec(dry);
+  const hex = Array.isArray(f.hex) ? f.hex : [f.hex];
+  const words = new RegExp(`\\b(?:${[f.brand, f.type].filter(Boolean).map(escRe).join('|')})\\b`, 'gi');
+  const subtype = f.finish && f.finish !== 'Standard' ? f.finish : String(f.line || '').replace(words, '').replace(/\s+/g, ' ').trim();
+  const out = { brand: f.brand, type: f.type === 'Nylon' ? 'PA' : f.type, subtype: subtype.slice(0, 24), colorName: f.color || '', hex: hex[0],
+    weight: +f.grams || 1000, diameter: 1.75 };
+  if (hex[1]) out.hex2 = hex[1];
+  if (nMin) Object.assign(out, { nozzleMin: nMin, nozzleMax: nMax });
+  if (bMin) Object.assign(out, { bedMin: bMin, bedMax: bMax });
+  if (dryT) out.dryTemp = dryT;
+  if (dryH) out.dryHours = +(dryH[2] || dryH[1]);
+  return out;
+}
+function tagPanel(s, f) {
+  if (nfc.tour) return `<div class="sub-panel tagw"><span class="muted">Writing NFC stickers is off in the guided tour.</span></div>`;
+  const tf = tagFilament(f);
+  const fmtName = nfc.writeFormat === 'opentag3d' ? 'OpenTag3D' : 'OpenSpool';
+  const deg = (a, b) => (a ? `${a}${b && b !== a ? '–' + b : ''} °C` : '');
+  const what = [`${tf.brand} ${tf.type}${tf.subtype ? ' ' + tf.subtype : ''}`, f.color, tf.nozzleMin ? `nozzle ${deg(tf.nozzleMin, tf.nozzleMax)}` : '',
+    tf.bedMin ? `bed ${deg(tf.bedMin, tf.bedMax)}` : '', fmtKg(f.grams)].filter(Boolean).join(' · ');
+  const w = tagWrite && tagWrite.sid === s.id ? tagWrite : { phase:'idle' };
+  const missing = !tf.nozzleMin ? 'Add the nozzle temperature on this filament’s card first (Nozzle °C, above).'
+    : f.type === 'Other' ? 'Set this filament’s material type first (Edit filament).' : '';
+  let status, cls = '', btns;
+  if (!nfc.enabled) {
+    status = 'Turn on spool tags in Settings first, and pick your reader.';
+    btns = `<button class="btn small primary" data-tagw-settings>Spool tag settings…</button>`;
+  } else if (w.phase === 'waiting' || w.phase === 'writing') {
+    status = w.phase === 'writing' ? '<b>Writing… keep the sticker still on the reader.</b>'
+      : `<b>Hold a blank NFC sticker on the reader…</b>${w.msg ? `<div class="warn">${esc(w.msg)}</div>` : ''}`;
+    btns = `<button class="btn small" data-tagw-cancel>Cancel</button>`;
+  } else if (w.phase === 'small') {
+    status = esc(w.msg);
+    btns = `<button class="btn small primary" data-tagw-link>Link it without writing</button><button class="btn small" data-tagw-cancel>Cancel</button>`;
+  } else if (w.phase === 'confirm') {
+    status = `This sticker already has data on it: <b>${esc(w.existing || 'something')}</b>. Write over it?`;
+    btns = `<button class="btn small danger" data-tagw-over>Write over it</button><button class="btn small" data-tagw-cancel>Cancel</button>`;
+  } else {
+    if (w.phase === 'done') { status = `✓ ${esc(w.msg)}`; cls = 'ok'; }
+    else if (w.phase === 'error') { status = `✗ ${esc(w.msg)}`; cls = 'bad'; }
+    else status = missing ? esc(missing) : `Writes this filament to a blank NFC sticker (NTAG215 or NTAG216; an NTAG213 is too small) and links the sticker to spool #${s.id}, so scanning it opens this spool. Other apps and readers that know ${fmtName} can read it too.`;
+    btns = `<button class="btn small primary" data-tagw-start ${missing ? 'disabled' : ''}>${w.phase === 'done' ? 'Write another sticker' : 'Write tag'}</button>`;
+  }
+  return `<div class="sub-panel tagw">
+    <div class="tagw-what"><b>🏷 Write to an NFC sticker</b> <span class="muted">· ${fmtName}</span><div class="muted">${esc(what)}</div></div>
+    <div class="tagw-status ${cls}">${status}</div>
+    <div class="tagw-btns">${btns}</div></div>`;
+}
+function linkWrittenTag(s, id, format) {
+  const prev = T.spoolForTag(state.spools, id);   // a tag belongs to one spool
+  if (prev && prev !== s) { prev.tags = prev.tags.filter(x => x !== id); if (!prev.tags.length) delete prev.tags; logEv(prev, 'untag', { id }); }
+  if (!(s.tags || []).includes(id)) s.tags = [...(s.tags || []), id];
+  logEv(s, 'tagwrite', { id, format });
+}
+async function startTagWrite(s, overwriteUid) {
+  const f = allFilaments().find(x => x.id === s.fid); if (!f) return;
+  tagWrite = { sid:s.id, phase:'waiting', msg:'' };
+  renderSpoolBox();
+  let r;
+  try { r = await api.nfcWrite({ filament: tagFilament(f), overwriteUid }); }
+  catch (e) { r = { status:'error', message: ipcMessage(e) }; }
+  if (!tagWrite || tagWrite.sid !== s.id) return;   // cancelled or closed meanwhile
+  r = r || { status:'error' };
+  if (r.status === 'written') {
+    linkWrittenTag(s, r.spoolId, nfc.writeFormat);
+    persist();
+    tagWrite = { sid:s.id, phase:'done', msg:`Written to sticker ${r.uid} and linked to spool #${s.id}. Scanning it opens this spool.` };
+    toast(`Sticker written and linked to spool #${s.id}`, 3500);
+  } else if (r.status === 'confirm') tagWrite = { sid:s.id, phase:'confirm', uid:r.uid, existing:r.existing };
+  else if (r.status === 'too-small') tagWrite = { sid:s.id, phase:'small', uid:r.uid, spoolId:r.spoolId, msg:r.message || 'This sticker is too small for the filament’s details.' };
+  else if (r.status === 'cancelled') tagWrite = null;
+  else tagWrite = { sid:s.id, phase:'error', msg: r.status === 'timeout' ? 'No sticker was tapped in time. Click Write tag and try again.' : (r.message || 'Couldn’t write the sticker.') };
+  renderSpoolBox();
+}
+function onWriteProgress(p) {
+  if (!tagWrite || !p) return;
+  if (p.status === 'not-writable') tagWrite.msg = p.message || 'That tag can’t be written.';
+  else if (p.status === 'writing') tagWrite.phase = 'writing';
+  renderSpoolBox();
+}
 function openDetail(fid) {
   openFid = fid; openPanel = null;
   const f = allFilaments().find(x => x.id === fid); if (!f) return;
@@ -861,7 +957,7 @@ function renderSpoolBox() {
   const locOpts = sel => `<option value="">— no location —</option>` + state.locations.map(l => `<option value="${l.id}" ${l.id === sel ? 'selected' : ''}>${esc(l.name)}</option>`).join('');
   const visible = f.spools.filter(s => s.status !== 'archived' || openPanel?.showArchived);
   box.innerHTML = `<h3>Spools <span class="muted" style="font-weight:500;font-size:14px">${f.qty} in stock${f.ordered ? ` · ${f.ordered} on order` : ''} · ${fmtKg(f.remG)} left</span>
-      <span class="spacer"></span><button class="btn small" data-addspool>+ Add spool</button>
+      <span class="spacer"></span><button class="btn small" data-tagwrite-fil title="Write this filament to a blank NFC sticker">🏷 Write NFC tag</button><button class="btn small" data-addspool>+ Add spool</button>
       ${f.stock.length ? `<button class="btn small" data-labels-fil>Print labels</button>` : ''}</h3>
     ${visible.map(s => {
       const lvl = lowLevel(s);
@@ -875,6 +971,7 @@ function renderSpoolBox() {
         <div class="acts">
           <button class="btn small" data-panel="weigh" title="Weigh on a scale">⚖ Weigh</button>
           <button class="btn small" data-panel="use" title="Log filament used by a print">Use</button>
+          <button class="btn small" data-panel="tag" title="Write this filament to an NFC sticker and link it to this spool">🏷</button>
           <button class="btn small" data-panel="hist" title="History">⋯</button>
         </div>
         ${panel}
@@ -883,6 +980,7 @@ function renderSpoolBox() {
     ${f.spools.some(s => s.status === 'archived') ? `<p><button class="btn small" data-toggle-arch>${openPanel?.showArchived ? 'Hide' : 'Show'} archived spools</button></p>` : ''}`;
 }
 function subPanel(s, f) {
+  if (openPanel.kind === 'tag') return tagPanel(s, f);
   if (openPanel.kind === 'weigh') {
     const ew = emptyWeightFor(s);
     const refill = /refill/i.test(f.note || '');
@@ -905,6 +1003,8 @@ function subPanel(s, f) {
     </div></div>`;
 }
 function closeModal() {
+  if (tagWrite && (tagWrite.phase === 'waiting' || tagWrite.phase === 'confirm')) api.nfcWriteCancel?.();
+  tagWrite = null;
   $('#overlay').classList.remove('open'); openFid = null; openPanel = null; tagScan = null; scannedSid = null;
   if (shot) { shot.urls.forEach(u => URL.revokeObjectURL(u)); shot = null; }
   render();
@@ -1063,8 +1163,6 @@ document.addEventListener('mousemove', e => {
 $('#view-settings').addEventListener('change', e => {
   const t = e.target, d = t.dataset;
   if (t.matches('[data-nfc-on]')) return nfcSet({ enabled: t.checked });
-  if (t.matches('[data-nfc-anywhere]')) return nfcSet({ openAnywhere: t.checked });
-  if (t.matches('[data-nfc-reader]')) return nfcSet({ reader: t.value });
   if (d.locname) { const l = state.locations.find(x => x.id === d.locname); l.name = t.value.trim() || l.name; }
   else if (d.locprinter) state.locations.find(x => x.id === d.locprinter).printer = t.checked;
   else if (d.emptyw !== undefined) { if (t.value === '') delete state.settings.empty[d.emptyw]; else state.settings.empty[d.emptyw] = +t.value; }
@@ -1115,6 +1213,7 @@ function advisorStock() {
 // ---------- Links from this screen into the app ----------
 document.addEventListener('click', e => {
   if (e.target.closest('[data-app-settings]')) { e.preventDefault(); return window.parent.document.getElementById('settingsBtn')?.click(); }
+  if (e.target.closest('[data-nfc-settings]')) { e.preventDefault(); return window.parent.__openNfcSettings?.(); }
   if (e.target.closest('[data-open-backups]')) { e.preventDefault(); return api.filamentOpenFolder().catch(err => toast(ipcMessage(err))); }
   const start = e.target.closest('[data-start]');
   if (start) return start.dataset.start === 'shot' ? openShot() : openForm();
@@ -1158,7 +1257,28 @@ $('#overlay').addEventListener('click', e => {
   if (t.closest('[data-addspool]')) { newSpool(openFid); persist(); renderSpoolBox(); return toast('Spool added'); }
   if (t.closest('[data-labels-fil]')) return printLabels(spoolsOf(openFid).filter(x => IN_STOCK.has(x.status)).map(x => x.id));
   if (t.closest('[data-toggle-arch]')) { openPanel = { ...(openPanel || {}), showArchived: !openPanel?.showArchived }; return renderSpoolBox(); }
+  if (t.closest('[data-tagwrite-fil]')) {
+    const sp = spoolsOf(openFid).filter(x => x.status !== 'archived');
+    const pick = sp.find(x => IN_STOCK.has(x.status) && !x.tags?.length) || sp.find(x => IN_STOCK.has(x.status)) || sp[0];
+    if (!pick) return toast('Add a spool first (+ Add spool), then write its tag.');
+    openPanel = { sid:pick.id, kind:'tag' }; renderSpoolBox();
+    $('#spoolbox')?.querySelector(`[data-sid="${pick.id}"]`)?.scrollIntoView({ block:'center', behavior:'smooth' });
+    return;
+  }
+  if (t.closest('[data-tagw-start]') && s) return startTagWrite(s);
+  if (t.closest('[data-tagw-over]') && s) return startTagWrite(s, tagWrite?.uid);
+  if (t.closest('[data-tagw-link]') && s && tagWrite?.spoolId) {
+    const id = tagWrite.spoolId, prev = T.spoolForTag(state.spools, id);
+    if (prev && prev !== s) { prev.tags = prev.tags.filter(x => x !== id); if (!prev.tags.length) delete prev.tags; logEv(prev, 'untag', { id }); }
+    if (!(s.tags || []).includes(id)) { s.tags = [...(s.tags || []), id]; logEv(s, 'tag', { id }); }
+    persist();
+    tagWrite = { sid:s.id, phase:'done', msg:`Sticker ${tagWrite.uid} linked to spool #${s.id} by its ID (nothing written). Scanning it here opens this spool.` };
+    renderSpoolBox(); return toast(`Sticker linked to spool #${s.id}`, 3000);
+  }
+  if (t.closest('[data-tagw-cancel]') && s) { api.nfcWriteCancel?.(); tagWrite = null; renderSpoolBox(); return; }
+  if (t.closest('[data-tagw-settings]')) return window.parent.__openNfcSettings?.();
   const p = t.closest('[data-panel]');
+  if (p && s && openPanel?.kind === 'tag' && tagWrite) { api.nfcWriteCancel?.(); tagWrite = null; }
   if (p && s) { openPanel = openPanel?.sid === s.id && openPanel.kind === p.dataset.panel ? null : { sid:s.id, kind:p.dataset.panel }; renderSpoolBox(); $("#spoolbox").querySelector(`[data-sid="${s.id}"] [autofocus]`)?.focus(); return; }
   if (t.closest('[data-doweigh]') && s) {
     const gross = +row.querySelector('[data-gross]').value, ew = row.querySelector('[data-emptyg]').value;

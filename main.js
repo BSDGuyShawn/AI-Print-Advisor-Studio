@@ -1243,41 +1243,62 @@ ipcMain.handle('filament-fetch', async (_e, { url, as }) => {
   return JSON.parse(buf.toString('utf8'));
 });
 
-// ---------- Spool tags (NFC/RFID): scan a spool's tag with a USB reader (src/nfc.js, tools/spoolscan) ----------
-// Off until turned on in Filament → Settings. Each scan goes to the window, which opens the Filament screen on
-// that spool (or offers to add it). Nothing is ever written to a tag.
+// ---------- Spool tags (NFC/RFID): scan a spool's tag, or write your filament to a blank NFC sticker (src/nfc.js)
+// Off until turned on in Settings. Each scan goes to the window, which opens the Filament screen on that spool (or
+// offers to add it). Readers: USB NFC readers (PC/SC), an Arduino + PN532 shield (tools/arduino), PN532 boards.
 const { TagReader } = require('./src/nfc');
-const Nfc = new TagReader({ appDir: __dirname, log: (...a) => logLine(...a) });
+const Nfc = new TagReader({ log: (...a) => logLine(...a) });
 const toWindow = (channel, data) => { if (win && !win.isDestroyed()) win.webContents.send(channel, data); };
-// openAnywhere: a scan anywhere in the app opens the Filament screen (default); off: scans only count there
-let nfcOpenAnywhere = true;
-Nfc.on('status', (s) => toWindow('nfc-status', { ...s, openAnywhere: nfcOpenAnywhere }));
+const NFC_FORMATS = ['openspool', 'opentag3d'];
+// The saved settings with defaults: USB readers on, Arduino boards found automatically, OpenSpool for writing
+function nfcConfig(cfg) {
+  const n = (cfg && cfg.nfc) || {};
+  return { enabled: !DEMO && !!n.enabled, pcsc: n.pcsc !== false, reader: n.reader || '',
+    serialPort: typeof n.serialPort === 'string' ? n.serialPort : 'auto', openAnywhere: n.openAnywhere !== false,
+    writeFormat: NFC_FORMATS.includes(n.writeFormat) ? n.writeFormat : 'openspool', confirmOverwrite: n.confirmOverwrite !== false };
+}
+let nfcOpenAnywhere = true, nfcWriteFormat = 'openspool';
+Nfc.on('status', (s) => toWindow('nfc-status', { ...s, openAnywhere: nfcOpenAnywhere, enabled: Nfc.enabled, writeFormat: nfcWriteFormat }));
 Nfc.on('tag', (t) => { logLine(`spool tag scanned: ${t.status} ${t.decoder || ''} ${t.spoolId}`); toWindow('nfc-tag', t); });
-Nfc.on('read-error', (e) => toWindow('nfc-read-error', e));
+Nfc.on('write-progress', (p) => toWindow('nfc-write-progress', p));
 async function applyNfcConfig() {
   if (DEMO) return Nfc.stop();
-  const cfg = await readConfig();
-  const n = cfg.nfc || {};
-  nfcOpenAnywhere = n.openAnywhere !== false;
-  if (n.enabled) { Nfc.stop(); Nfc.start({ reader: n.reader || '' }); } else Nfc.stop();
+  const n = nfcConfig(await readConfig());
+  nfcOpenAnywhere = n.openAnywhere; nfcWriteFormat = n.writeFormat;
+  if (n.enabled) Nfc.start({ pcsc: n.pcsc, reader: n.reader, serialPort: n.serialPort }); else Nfc.stop();
 }
-const nfcSettings = (n) => ({ ...Nfc.status, enabled: !DEMO && !!n.enabled, reader: n.reader || '', openAnywhere: n.openAnywhere !== false });
-ipcMain.handle('nfc-status', async () => {
-  const cfg = await readConfig();
-  return nfcSettings(cfg.nfc || {});
-});
+ipcMain.handle('nfc-status', async () => ({ ...Nfc.status, ...nfcConfig(await readConfig()), tour: DEMO || undefined }));
 ipcMain.handle('nfc-set', async (_e, patch) => {
   if (DEMO) throw new Error('not in the tour');
   const cfg = await readConfig();
   const n = { ...(cfg.nfc || {}) };
-  if (patch && typeof patch.enabled === 'boolean') n.enabled = patch.enabled;
-  if (patch && typeof patch.reader === 'string') n.reader = patch.reader.trim().slice(0, 100);
-  if (patch && typeof patch.openAnywhere === 'boolean') n.openAnywhere = patch.openAnywhere;
-  const restart = !patch || typeof patch.enabled === 'boolean' || typeof patch.reader === 'string';
+  const p = patch && typeof patch === 'object' ? patch : {};
+  for (const k of ['enabled', 'pcsc', 'openAnywhere', 'confirmOverwrite']) if (typeof p[k] === 'boolean') n[k] = p[k];
+  if (typeof p.reader === 'string') n.reader = p.reader.trim().slice(0, 100);
+  if (typeof p.serialPort === 'string' && /^(|auto|COM\d{1,3})$/i.test(p.serialPort.trim())) n.serialPort = p.serialPort.trim().toUpperCase().replace('AUTO', 'auto');
+  if (NFC_FORMATS.includes(p.writeFormat)) n.writeFormat = p.writeFormat;
   cfg.nfc = n; await writeConfig(cfg);
-  if (restart) await applyNfcConfig(); else nfcOpenAnywhere = n.openAnywhere !== false;
-  return nfcSettings(n);
+  await applyNfcConfig();
+  return { ...Nfc.status, ...nfcConfig(cfg) };
 });
+ipcMain.handle('nfc-ports', async () => (DEMO ? { ports: [] } : (await Nfc.listPorts()) || { ports: [] }));
+ipcMain.handle('nfc-test-port', async (_e, port) => {
+  if (DEMO || typeof port !== 'string' || !/^COM\d{1,3}$/i.test(port)) return { ok: false, error: 'Pick a COM port.' };
+  return (await Nfc.testPort(port.toUpperCase())) || { ok: false, error: 'The tag reader didn’t answer.' };
+});
+// Write a filament to the next blank sticker tapped. filament: see src/nfc/encoders.js normalize()
+ipcMain.handle('nfc-write', async (_e, { filament, overwriteUid } = {}) => {
+  if (DEMO) throw new Error('not in the tour');
+  const n = nfcConfig(await readConfig());
+  if (!n.enabled) return { status: 'error', message: 'Turn on spool tags in Settings first.' };
+  if (!filament || typeof filament !== 'object') return { status: 'error', message: 'Nothing to write.' };
+  const f = {};
+  for (const k of ['brand', 'type', 'subtype', 'colorName', 'hex', 'hex2']) if (typeof filament[k] === 'string') f[k] = filament[k].slice(0, 80);
+  for (const k of ['weight', 'diameter', 'nozzleMin', 'nozzleMax', 'bedMin', 'bedMax', 'dryTemp', 'dryHours']) if (Number.isFinite(filament[k])) f[k] = filament[k];
+  const uid = typeof overwriteUid === 'string' && /^[0-9A-F]{8,20}$/.test(overwriteUid) ? overwriteUid : null;
+  return Nfc.write({ format: n.writeFormat, filament: f, overwriteUid: uid, overwriteAny: !n.confirmOverwrite, timeoutMs: 90000 });
+});
+ipcMain.handle('nfc-write-cancel', () => { Nfc.cancelWrite(); return true; });
 
 // Color remix, step 1: cut the plate into patches along its grooves; the window shows them, the AI groups them
 // into named parts, the user checks and corrects them. Parts confirmed before for this shape come back as they were.

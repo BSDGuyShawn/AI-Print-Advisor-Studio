@@ -1,46 +1,29 @@
-// Spool tag scanning (NFC/RFID): runs the bundled reader program (spoolscan, built from tools/spoolscan) in the
-// background and turns its output into events for the Filament screen.
+// Spool tag scanning and writing (NFC/RFID): runs the reader (src/nfc/worker.js) in a background utility process
+// and turns what it reports into events for the Filament screen.
 //
-// spoolscan talks to a USB smart-card (PC/SC) reader, reads the tag on a filament spool (Bambu Lab, Snapmaker,
-// Creality, QIDI, Anycubic, Elegoo, OpenSpool, TigerTag…) and prints one JSON line per event:
-//   {"event":"tag_scanned", "status":"decoded"|"unrecognized"|"read_error", "spool_id", "tag":{uid,type}, "filament":{…}}
-//   {"event":"reader_status", "state":"no_service"|"no_reader"|"watching", "readers":[…]}
-//   {"event":"read_error", "error":"…"}
-// It only ever reads tags; it has no way to write one.
+// Readers (all built in, nothing to install): USB NFC readers through Windows' smart-card system (ACR122U,
+// ACR1252U, Cryptnox, HID Omnikey…), an Arduino with a PN532 shield running tools/arduino/SpoolTagBridge, or a
+// PN532 board on a USB-serial adapter. Tags: Bambu Lab, Snapmaker, Creality, QIDI, Anycubic, ELEGOO, OpenSpool,
+// OpenTag3D, SpoolEase and TigerTag are read; blank NTAG stickers can be written (OpenSpool or OpenTag3D).
 //
-// No Electron imports here, so this can be tested with plain Node (test/nfc.test.js).
-const { spawn } = require('child_process');
+// The worker's records are checked here (clean): this is the boundary between another process and the window, so
+// only the fields the screen uses, with the types it expects, get through.
+// No Electron imports at the top, so this can be tested with plain Node (test/nfc.test.js).
+'use strict';
+
 const { EventEmitter } = require('events');
-const fs = require('fs');
 const path = require('path');
 
-const MAX_LINE = 256 * 1024;          // a tag record is ~2 KB; anything far bigger is not ours
 const RESTART_DELAYS = [1000, 3000, 10000, 30000];
-const EVENTS = new Set(['tag_scanned', 'reader_status', 'read_error']);
-const STATES = new Set(['no_service', 'no_reader', 'watching']);
-
-// Where to find the reader program: next to the app (release builds ship it there), an override for testing,
-// or one installed with `pip install tools/spoolscan` (on PATH) when running from source.
-function locate(appDir, env = process.env, platform = process.platform) {
-  if (env.AIPA_SPOOLSCAN) return { cmd: env.AIPA_SPOOLSCAN, bundled: false };
-  const exe = path.join(appDir, 'spoolscan', platform === 'win32' ? 'spoolscan.exe' : 'spoolscan');
-  if (fs.existsSync(exe)) return { cmd: exe, bundled: true };
-  return { cmd: 'spoolscan', bundled: false };
-}
+const STATES = new Set(['off', 'starting', 'no_service', 'no_reader', 'watching', 'error']);
 
 const str = (v, max = 200) => (typeof v === 'string' ? v.slice(0, max) : null);
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const hexColor = (v) => (typeof v === 'string' && /^#[0-9A-Fa-f]{6}$/.test(v) ? v.toUpperCase() : null);
 
-// Keep only the fields the screen uses, with the types it expects. The reader is our own program, but this is
-// the boundary between another process and the window, so nothing unexpected gets through.
+// A scan record from the worker -> what the window gets (null if it doesn't look right)
 function clean(rec) {
-  if (!rec || typeof rec !== 'object' || !EVENTS.has(rec.event)) return null;
-  if (rec.event === 'reader_status') {
-    if (!STATES.has(rec.state)) return null;
-    return { event: rec.event, state: rec.state, readers: Array.isArray(rec.readers) ? rec.readers.map(r => str(r)).filter(Boolean).slice(0, 8) : [] };
-  }
-  if (rec.event === 'read_error') return { event: rec.event, error: str(rec.error, 300) || 'read failed', reader: str(rec.reader) };
+  if (!rec || typeof rec !== 'object' || rec.event !== 'tag_scanned') return null;
   const tag = rec.tag || {};
   const uid = str(tag.uid, 32);
   if (!uid || !/^[0-9A-F]+$/i.test(uid)) return null;
@@ -54,6 +37,7 @@ function clean(rec) {
     filament: null,
     extras: null,
   };
+  if (!/^(bambu|uid):[0-9A-F]+$/.test(out.spoolId)) out.spoolId = `uid:${out.tag.uid}`;
   const f = rec.filament;
   if (out.status === 'decoded' && f && typeof f === 'object') {
     out.filament = {
@@ -72,101 +56,130 @@ function clean(rec) {
   const x = rec.extras;
   if (x && typeof x === 'object') {
     out.extras = { materialId: str(x.material_id, 20), variantId: str(x.material_variant_id, 20), detailedType: str(x.detailed_type, 40),
-      lengthM: num(x.filament_length_m), made: str(x.production_datetime, 20) };
+      lengthM: num(x.filament_length_m), made: str(x.production_datetime, 20), colorName: str(x.color_name, 40) };
   }
   return out;
 }
 
+// A write result from the worker -> what the window gets
+function cleanWrite(m) {
+  const status = ['written', 'confirm', 'too-small', 'error', 'timeout', 'cancelled', 'not-writable', 'writing'].includes(m.status) ? m.status : 'error';
+  const uid = str(m.uid, 32);
+  return { status, uid: uid && /^[0-9A-F]+$/.test(uid) ? uid : null, spoolId: uid && /^[0-9A-F]+$/.test(uid) ? `uid:${uid}` : null,
+    message: str(m.message, 300), existing: str(m.existing, 120), readBack: str(m.readBack, 120), format: str(m.format, 20) };
+}
+
+const defaultFork = (file) => require('electron').utilityProcess.fork(file, [], { serviceName: 'Spool tag reader', stdio: 'pipe' });
+
 class TagReader extends EventEmitter {
-  constructor({ appDir, log = () => {}, spawnFn = spawn, env = process.env } = {}) {
+  constructor({ log = () => {}, forkFn = defaultFork, workerPath = path.join(__dirname, 'nfc', 'worker.js') } = {}) {
     super();
-    this.appDir = appDir;
-    this.log = log;
-    this.spawnFn = spawnFn;
-    this.env = env;
-    this.child = null;
-    this.enabled = false;
-    this.restarts = 0;
-    this.timer = null;
+    this.log = log; this.forkFn = forkFn; this.workerPath = workerPath;
+    this.child = null; this.enabled = false; this.restarts = 0; this.timer = null;
+    this.cfg = { pcsc: true, reader: '', serialPort: '' };
     this.status = { state: 'off', readers: [] };
+    this.pending = new Map();   // request id -> { resolve, timer, kind }
+    this.seq = 0;
   }
 
-  setStatus(s) {
-    this.status = { readers: [], ...s };
-    this.emit('status', this.status);
-  }
+  setStatus(s) { this.status = { readers: [], ...s }; this.emit('status', this.status); }
 
-  start({ reader } = {}) {
+  start(cfg = {}) {
     this.enabled = true;
-    this.readerFilter = reader || '';
+    this.cfg = { pcsc: cfg.pcsc !== false, reader: String(cfg.reader || '').slice(0, 100), serialPort: String(cfg.serialPort || '').slice(0, 20) };
     if (!this.child) this.launch();
+    else this.post({ type: 'config', ...this.cfg });
   }
 
   stop() {
     this.enabled = false;
-    clearTimeout(this.timer);
-    this.timer = null;
-    if (this.child) { try { this.child.kill(); } catch {} this.child = null; }
+    clearTimeout(this.timer); this.timer = null;
+    if (this.child) {
+      const c = this.child; this.child = null;
+      try { c.postMessage({ type: 'stop' }); } catch {}
+      setTimeout(() => { try { c.kill(); } catch {} }, 1000);
+    }
+    for (const [, p] of this.pending) { clearTimeout(p.timer); p.resolve(p.kind === 'write' ? { status: 'cancelled' } : null); }
+    this.pending.clear();
     this.setStatus({ state: 'off' });
   }
 
+  post(m) { if (this.child) { try { this.child.postMessage(m); } catch (e) { this.log(`spool tag reader: ${e.message}`); } } }
+
   launch() {
-    const { cmd, bundled } = locate(this.appDir, this.env);
-    const args = ['watch', '--emit-status', '--dedupe', '3'];
-    if (this.readerFilter) args.push('--reader', this.readerFilter);
     this.setStatus({ state: 'starting' });
     let child;
-    try {
-      child = this.spawnFn(cmd, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    } catch (e) {
-      return this.failed(e, bundled);
-    }
+    try { child = this.forkFn(this.workerPath); } catch (e) { return this.failed(e); }
     this.child = child;
     const started = Date.now();
-    let buf = '';
-    child.stdout.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => {
-      buf += chunk;
-      if (buf.length > MAX_LINE && !buf.includes('\n')) { buf = ''; return; }
-      let i;
-      while ((i = buf.indexOf('\n')) >= 0) {
-        const line = buf.slice(0, i).trim();
-        buf = buf.slice(i + 1);
-        if (line) this.onLine(line);
-      }
-    });
-    child.stderr.setEncoding('utf8');
-    child.stderr.on('data', (t) => { for (const l of String(t).split(/\r?\n/)) if (l.trim()) this.log(`spoolscan: ${l.trim().slice(0, 500)}`); });
-    child.on('error', (e) => { if (this.child === child) { this.child = null; this.failed(e, bundled); } });
+    child.on('message', (m) => { if (this.child === child) this.onMessage(m); });
+    if (child.stderr) child.stderr.on('data', (t) => String(t).split(/\r?\n/).filter(l => l.trim()).forEach(l => this.log(`spool tag reader: ${l.trim().slice(0, 500)}`)));
     child.on('exit', (code) => {
       if (this.child !== child) return;
       this.child = null;
       if (!this.enabled) return;
-      if (Date.now() - started > 60000) this.restarts = 0;   // it ran fine for a while: start the back-off over
+      if (Date.now() - started > 60000) this.restarts = 0;
       const delay = RESTART_DELAYS[Math.min(this.restarts++, RESTART_DELAYS.length - 1)];
-      this.log(`spoolscan stopped (code ${code}); restarting in ${delay / 1000} s`);
-      this.setStatus({ state: 'error', error: 'The tag reader program stopped; restarting…' });
+      this.log(`spool tag reader stopped (code ${code}); restarting in ${delay / 1000} s`);
+      this.setStatus({ state: 'error', error: 'The tag reader stopped; restarting…' });
+      for (const [, p] of this.pending) { clearTimeout(p.timer); p.resolve(p.kind === 'write' ? { status: 'error', message: 'The tag reader stopped. Try again.' } : null); }
+      this.pending.clear();
       this.timer = setTimeout(() => { if (this.enabled && !this.child) this.launch(); }, delay);
+    });
+    this.post({ type: 'config', ...this.cfg });
+  }
+
+  failed(e) {
+    this.log(`spool tag reader: couldn't start (${e && e.message})`);
+    this.setStatus({ state: 'error', error: `Couldn’t start the tag reader: ${e && e.message}` });
+  }
+
+  onMessage(m) {
+    if (!m || typeof m !== 'object') return;
+    if (m.type === 'status') {
+      if (!STATES.has(m.state)) return;
+      this.setStatus({ state: m.state, readers: Array.isArray(m.readers) ? m.readers.map(r => str(r)).filter(Boolean).slice(0, 8) : [], error: str(m.error, 300) });
+    } else if (m.type === 'tag') {
+      const ev = clean(m.record);
+      if (ev) this.emit('tag', ev);
+    } else if (m.type === 'log') {
+      this.log(`spool tag reader: ${str(m.line, 500)}`);
+    } else if (m.type === 'write-progress') {
+      this.emit('write-progress', { id: m.id, ...cleanWrite(m) });
+    } else if (['write-result', 'ports', 'port-test'].includes(m.type)) {
+      const p = this.pending.get(m.id);
+      if (!p) return;
+      this.pending.delete(m.id); clearTimeout(p.timer);
+      if (m.type === 'write-result') p.resolve(cleanWrite(m));
+      else if (m.type === 'ports') p.resolve({ open: str(m.open, 20), ports: Array.isArray(m.ports) ? m.ports.slice(0, 64).map(x => ({
+        port: str(x.port, 10), name: str(x.name, 80), arduino: !!x.arduino })).filter(x => /^COM\d+$/.test(x.port || '')) : [] });
+      else p.resolve({ ok: !!m.ok, kind: str(m.kind, 10), name: str(m.name, 80), version: str(m.version, 60), error: str(m.error, 300) });
+    }
+  }
+
+  request(kind, msg, timeoutMs) {
+    if (!this.child) return Promise.resolve(kind === 'write' ? { status: 'error', message: 'Turn on spool tags in Settings first.' } : null);
+    const id = `${kind}-${++this.seq}`;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => { this.pending.delete(id); resolve(kind === 'write' ? { status: 'timeout' } : null); }, timeoutMs);
+      this.pending.set(id, { resolve, timer, kind });
+      this.post({ ...msg, id });
     });
   }
 
-  failed(e, bundled) {
-    const missing = e && e.code === 'ENOENT';
-    this.log(`spoolscan: couldn't start (${e && e.message})`);
-    this.setStatus({ state: missing ? 'missing' : 'error',
-      error: missing ? (bundled ? 'The tag reader program is missing from this copy of the app.' : 'The tag reader program isn’t installed.') : `Couldn’t start the tag reader: ${e && e.message}` });
+  // Arm a write: the next sticker tapped gets the filament. Resolves with the outcome (see cleanWrite).
+  write({ format, filament, overwriteUid, overwriteAny = false, timeoutMs = 90000 }) {
+    if (this.writeId) this.cancelWrite();
+    const id = `write-${this.seq + 1}`;   // the id request() is about to use
+    const p = this.request('write', { type: 'write', format, filament, overwriteUid, overwriteAny: !!overwriteAny, timeoutMs }, timeoutMs + 5000);
+    this.writeId = this.child ? id : null;
+    return p.finally(() => { if (this.writeId === id) this.writeId = null; });
   }
-
-  onLine(line) {
-    if (line.length > MAX_LINE) return;
-    let rec;
-    try { rec = JSON.parse(line); } catch { return; }
-    const ev = clean(rec);
-    if (!ev) return;
-    if (ev.event === 'reader_status') this.setStatus({ state: ev.state, readers: ev.readers });
-    else if (ev.event === 'read_error') this.emit('read-error', ev);
-    else this.emit('tag', ev);
-  }
+  cancelWrite() { if (this.writeId) this.post({ type: 'cancel-write', id: this.writeId }); this.writeId = null; }
+  // Settings can list and test ports while scanning is off: start the worker idle (it reads no tags)
+  idle() { if (!this.child) { const cfg = this.cfg; this.cfg = { pcsc: false, reader: '', serialPort: '' }; this.launch(); this.cfg = cfg; } }
+  listPorts() { this.idle(); return this.request('ports', { type: 'list-ports' }, 8000); }
+  testPort(port) { this.idle(); return this.request('port-test', { type: 'test-port', port }, 15000); }
 }
 
-module.exports = { TagReader, clean, locate };
+module.exports = { TagReader, clean, cleanWrite };

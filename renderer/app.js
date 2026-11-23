@@ -2548,6 +2548,82 @@ async function loadConfig() {
   const kl = $('keyLink'); if (kl) kl.onclick = openSettings;
   offerBooklet();
 }
+// ---------- Settings: spool tags (NFC) ----------
+// The reader runs in the background (src/nfc.js); its status shows here live while Settings is open.
+let NFC = { state: 'off', readers: [] };
+const NFC_TEXT = {
+  off: 'Off.',
+  starting: 'Starting the reader…',
+  no_service: 'Waiting for a reader: plug in your USB NFC reader or Arduino.',
+  no_reader: 'No reader found yet: plug in your USB NFC reader or Arduino.',
+};
+function renderNfcStatus() {
+  const el = $('nfcStatus');
+  if (!el) return;
+  let text, cls = '';
+  if (!$('nfcOn').checked) text = NFC.enabled ? 'Turns off when you save settings.' : 'Off.';
+  else if (!NFC.enabled) text = 'Starts when you save settings.';
+  else if (NFC.state === 'watching') { text = `✓ Ready: ${(NFC.readers || []).join(', ')}. Tap a spool’s tag on the reader.`; cls = 'ok'; }
+  else if (NFC.state === 'error') { text = NFC.error || 'The tag reader has a problem.'; cls = 'bad'; }
+  else text = NFC_TEXT[NFC.state] || NFC.state;
+  el.textContent = text;
+  el.className = `nfc-status ${cls}`;
+}
+async function fillNfcPorts(selected) {
+  const sel = $('nfcPort');
+  const opt = (v, t, arduino) => { const o = document.createElement('option'); o.value = v; o.textContent = t; if (arduino) o.dataset.arduino = '1'; return o; };
+  sel.replaceChildren(opt('', 'None'), opt('auto', 'Find an Arduino automatically'));
+  sel.value = selected || '';
+  const r = await api.nfcPorts().catch(() => null);
+  const ports = (r && r.ports) || [];
+  for (const p of ports) sel.append(opt(p.port, `${p.port}: ${p.name}`, p.arduino));
+  if (/^COM\d+$/.test(selected || '') && !ports.some(p => p.port === selected)) sel.append(opt(selected, `${selected} (not plugged in)`));
+  sel.value = selected || '';
+}
+async function renderNfcSettings() {
+  const tour = !!api.tour;
+  $('nfcTour').classList.toggle('hidden', !tour);
+  $('nfcOn').disabled = tour;
+  const s = (await api.nfcStatus().catch(() => null)) || {};
+  NFC = { ...NFC, ...s };
+  $('nfcOn').checked = !!s.enabled;
+  $('nfcPcsc').checked = s.pcsc !== false;
+  $('nfcReader').value = s.reader || '';
+  $('nfcAnywhere').checked = s.openAnywhere !== false;
+  $('nfcFormat').value = s.writeFormat || 'openspool';
+  $('nfcConfirm').checked = s.confirmOverwrite !== false;
+  $('nfcPortStatus').dataset.base = $('nfcPortStatus').dataset.base || $('nfcPortStatus').innerHTML;
+  $('nfcPortStatus').innerHTML = $('nfcPortStatus').dataset.base;
+  const showOpts = () => $('nfcOpts').classList.toggle('hidden', !$('nfcOn').checked || tour);
+  showOpts();
+  const port = typeof s.serialPort === 'string' ? s.serialPort : 'auto';
+  $('nfcPort').replaceChildren(new Option(port || 'None', port));
+  if ($('nfcOn').checked && !tour) fillNfcPorts(port);
+  $('nfcOn').onchange = () => { showOpts(); if ($('nfcOn').checked && $('nfcPort').options.length < 3) fillNfcPorts($('nfcPort').value || 'auto'); renderNfcStatus(); };
+  $('nfcTest').onclick = async () => {
+    const out = $('nfcPortStatus');
+    let port = $('nfcPort').value;
+    if (port === 'auto') port = ([...$('nfcPort').options].find(o => o.dataset.arduino) || {}).value || '';
+    if (!port) { out.textContent = $('nfcPort').value === 'auto' ? 'No Arduino is plugged in.' : 'Pick the COM port of your Arduino or PN532 board first.'; return; }
+    out.textContent = `Testing ${port}…`;
+    $('nfcTest').disabled = true;
+    const r = await api.nfcTestPort(port).catch(e => ({ ok: false, error: String(e.message || e) }));
+    $('nfcTest').disabled = false;
+    out.textContent = r && r.ok
+      ? `✓ Found ${r.kind === 'bridge' ? 'the SpoolTagBridge Arduino' : 'a PN532 board'} on ${port}${r.version ? ` (${r.version.replace(/^SPOOLBRIDGE \d+ /, '')})` : ''}.`
+      : `✗ ${(r && r.error) || `Nothing answered on ${port}.`}`;
+  };
+  renderNfcStatus();
+}
+if (api.onNfcStatus) api.onNfcStatus(s => { NFC = { ...NFC, ...s }; if ($('settingsDialog').open) renderNfcStatus(); });
+// The Filament screen's "Reader settings" button: open Settings at the spool tags section
+window.__openNfcSettings = () => { openSettings(); setTimeout(() => $('nfcField').scrollIntoView({ block: 'center' }), 60); };
+async function saveNfcSettings() {
+  if (api.tour || !api.nfcSet) return;
+  const patch = { enabled: $('nfcOn').checked, pcsc: $('nfcPcsc').checked, reader: $('nfcReader').value.trim(), serialPort: $('nfcPort').value,
+    openAnywhere: $('nfcAnywhere').checked, writeFormat: $('nfcFormat').value, confirmOverwrite: $('nfcConfirm').checked };
+  try { NFC = { ...NFC, ...(await api.nfcSet(patch)) }; } catch (e) { toast(String(e.message || e), 5000); }
+}
 function openSettings() {
   const sel = $('modelSelect');
   const known = [...sel.options].some(o => o.value === state.config.model);
@@ -2585,6 +2661,7 @@ function openSettings() {
   $('tourAgain').classList.toggle('hidden', !state.config.tourAvailable);
   $('autoUpdate').checked = state.config.autoUpdate !== false;
   $('updateStatus').textContent = UPDATE.info && UPDATE.info.available ? `Version ${UPDATE.info.latest} is available.` : `You have version ${state.config.version || ''}.`;
+  renderNfcSettings();
   $('settingsDialog').showModal();
   guideEvent('settings');
 }
@@ -2766,6 +2843,7 @@ $('settingsDialog').addEventListener('close', async () => {
   if ($('apiKey').value.trim()) patch.apiKey = $('apiKey').value;
   const before = state.info.available;
   await api.setConfig(patch);
+  await saveNfcSettings();
   await loadConfig();
   state.history = null;
   toast('Settings saved.', 2500);

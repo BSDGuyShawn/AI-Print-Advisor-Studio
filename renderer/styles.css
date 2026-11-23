@@ -696,6 +696,17 @@ dialog.update h2 { margin: 0 0 4px; }
 .upd-progress { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
 .upd-progress .bar { flex: 1; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
 .upd-progress .bar span { display: block; height: 100%; width: 0; background: var(--accent, #1F9AAE); transition: width .2s; }
+fieldset.nfc { border: 1px solid var(--line); border-radius: var(--radius-s); padding: 8px 10px 10px; margin: 12px 0 0; display: flex; flex-direction: column; gap: 6px; }
+fieldset.nfc legend { font-size: 14px; padding: 0 4px; }
+fieldset.nfc small { color: var(--muted); }
+fieldset.nfc .check { display: block; font-size: 13.5px; }
+fieldset.nfc .check input { accent-color: var(--accent); }
+.nfc-opts { display: flex; flex-direction: column; gap: 8px; padding-left: 4px; }
+.nfc-opts .field { margin: 0; }
+.nfc-opts select { max-width: 100%; }
+.nfc-status { margin: 2px 0; font-size: 13px; color: var(--muted); }
+.nfc-status.ok { color: var(--ok, #2e8b57); }
+.nfc-status.bad { color: var(--danger, #c0392b); }
 fieldset.updates .check { display: block; margin: 8px 0 4px; }
 
 /* links to open from a guide step (Claude Console, Snapmaker Orca download) */
