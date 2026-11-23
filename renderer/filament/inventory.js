@@ -731,7 +731,7 @@ function renderTagDialog() {
   const mid = match?.filament.id;
   // the matching filament's spools first, then untagged ones, then the rest
   linkable.sort((a, b) => (b.fid === mid) - (a.fid === mid) || (!!a.tags?.length) - (!!b.tags?.length) || a.id.localeCompare(b.id));
-  const locSel = `<select class="sel" data-tagloc><option value="">— no location —</option>${state.locations.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select>`;
+  const locSel = `<select class="sel" data-tagloc style="max-width:none"><option value="">— no location —</option>${state.locations.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select>`;
   const stSel = `<select class="sel" data-tagstatus><option value="new">Sealed</option><option value="opened">Opened</option></select>`;
   const m = match?.filament;
   const linkHtml = `<div class="tagopt"><h3>${m || draft ? 'Or link this tag to a spool you already have' : 'Link this tag to a spool'}</h3>
