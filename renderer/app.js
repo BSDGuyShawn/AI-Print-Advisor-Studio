@@ -2648,6 +2648,9 @@ function renderPhoneStatus() {
   el.textContent = text;
   el.className = `nfc-status ${cls}`;
   $('phonePairBtn').disabled = !PH.running;
+  const certOk = !!(PH.running && PH.https && PH.urls && PH.urls.https);
+  $('phoneCertRow').classList.toggle('hidden', !certOk);
+  if (!certOk) $('phoneCert').classList.add('hidden');
   const devs = PH.devices || [];
   $('phoneDevices').innerHTML = devs.length ? `<small><b>Paired phones</b></small>${devs.map(d => `<div class="phone-dev"><span class="grow">${esc(d.name)} <small>· paired ${new Date(d.paired).toLocaleDateString()} · last seen ${ago(d.lastSeen)}${d.localOk === false ? ' · <span style="color:var(--warn)">can’t find this PC by name, so links use its address</span>' : ''}</small></span><button type="button" class="link" data-phone-remove="${esc(d.id)}">Remove</button></div>`).join('')}` : '';
 }
@@ -2664,6 +2667,15 @@ async function renderPhoneSettings() {
   $('phoneHttps').checked = !!s.https;
   $('phonePort').value = s.port || 8765;
   $('phonePair').classList.add('hidden');
+  $('phoneCert').classList.add('hidden');
+  // the certificate is on the plain address (the phone doesn't trust the secure one yet)
+  $('phoneCertBtn').onclick = () => {
+    const url = `${(PH.urls && PH.urls.ips && PH.urls.ips[0]) || (PH.urls && PH.urls.name)}/cert/aipa-ca.crt`;   // by number: some phones can't find the PC by name
+    const q = window.qrcode(0, 'M'); q.addData(url); q.make();
+    $('phoneCertQr').src = q.createDataURL(5, 2);
+    $('phoneCertUrl').textContent = url;
+    $('phoneCert').classList.toggle('hidden');
+  };
   const showOpts = () => $('phoneOpts').classList.toggle('hidden', !$('phoneOn').checked || tour);
   showOpts();
   $('phoneOn').onchange = () => { showOpts(); renderPhoneStatus(); };

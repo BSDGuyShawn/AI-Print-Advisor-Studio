@@ -554,6 +554,11 @@ function renderDashboard(fil) {
   const sealed = stock.filter(s => s.status === 'new').length;
   const priced = stock.filter(s => s.price);
   const perKg = priced.length ? priced.reduce((t, s) => t + s.price / (byId[s.fid].grams / 1000), 0) / priced.length : 0;
+  const paidAll = all.filter(s => s.price > 0), avgRoll = paidAll.length ? paidAll.reduce((t, s) => t + s.price, 0) / paidAll.length : null;
+  const pstats = fil.map(f => ({ f, st: priceStats(f) }));
+  const cheaper = pstats.filter(x => x.st.cheaper).sort((a, b) => (b.st.last.p - b.st.cheaper.p) - (a.st.last.p - a.st.cheaper.p));
+  const lowFids = [...new Set(low.map(s => s.fid))].slice(0, 8);
+  const topAvg = pstats.filter(x => x.st.avg != null && x.st.paid.length > 1).sort((a, b) => b.st.paid.length - a.st.paid.length).slice(0, 6);
 
   const agg = keyFn => { const m = new Map(); for (const s of stock) for (const k of [].concat(keyFn(s))) { const e = m.get(k) || { g:0, n:0 }; e.g += s.rem; e.n++; m.set(k, e); } return m; };
   const bars = (m, opts = {}) => {
@@ -577,6 +582,7 @@ function renderDashboard(fil) {
       <div class="kpi"><div class="v">${fmtKg(remG)}</div><div class="l">Filament on hand</div></div>
       <div class="kpi"><div class="v">${new Set(stock.map(s => s.fid)).size}</div><div class="l">Different colors</div></div>
       <div class="kpi"><div class="v">${fmt$0(spent)}</div><div class="l">Spent on tracked spools</div></div>
+      <div class="kpi"><div class="v">${avgRoll != null ? fmt$(avgRoll) : '—'}</div><div class="l">Average per roll · ${paidAll.length} with a price</div></div>
       <div class="kpi"><div class="v">${fmt$0(value)}</div><div class="l">Value of what's left · ~$${perKg.toFixed(2)}/kg</div></div>
       <div class="kpi ${low.length ? 'alert' : ''}"><div class="v">${low.length}</div><div class="l">Running low (≤ ${state.settings.low} g)</div></div>
     </div>
@@ -591,6 +597,12 @@ function renderDashboard(fil) {
       <div class="panel"><h3>On hand by brand <small>· kg · spools</small></h3>${bars(agg(s => byId[s.fid].brand))}</div>
       <div class="panel"><h3>By location <small>· kg · spools</small></h3>${bars(agg(s => locName(s.loc) || 'No location set'))}</div>
       <div class="panel"><h3>By finish <small>· kg · spools</small></h3>${bars(agg(s => byId[s.fid].finish))}</div>
+      <div class="panel"><h3>Prices <small>· cheaper now than you last paid</small></h3><div class="list">
+        ${cheaper.length ? cheaper.map(({ f, st }) => `<div class="it" data-open-fid="${esc(f.id)}">${itemSwatch(f, '')}<span class="grow"><b>${esc(f.color)}</b> <span class="muted">${esc(f.brand)} ${esc(f.type)} · ${esc(st.cheaper.store || '')}</span></span><span class="badge good">${fmt$(st.cheaper.p)} <small>(paid ${fmt$(st.last.p)})</small></span></div>`).join('')
+          : '<span class="muted">Nothing found cheaper yet. Open a filament and click <b>Check prices now</b>, or check the ones running low.</span>'}
+        ${topAvg.length ? `<div class="muted" style="font-size:12px;margin-top:8px">Average per roll, filaments you buy most</div>${topAvg.map(({ f, st }) => `<div class="it" data-open-fid="${esc(f.id)}">${itemSwatch(f, '')}<span class="grow"><b>${esc(f.color)}</b> <span class="muted">${esc(f.brand)} ${esc(f.type)} · ${st.paid.length} rolls</span></span><span>${fmt$(st.avg)}</span></div>`).join('')}` : ''}
+        </div>
+        ${lowFids.length ? `<button class="btn small" style="margin-top:8px" data-price-check-low="${esc(lowFids.join(' '))}">Check prices for ${lowFids.length} running low</button>` : ''}</div>
       <div class="panel"><h3>Running low <small>· ${low.length}</small></h3><div class="list">${low.length ? low.map(s => listItem(s, `<span class="badge ${lowLevel(s) === 2 ? 'crit' : 'warn'}">${s.rem} g</span>`)).join('') : '<span class="muted">Nothing is running low. Weigh opened spools to keep this accurate.</span>'}</div></div>
       ${ordered.length ? `<div class="panel"><h3>On order <small>· ${ordered.length}</small></h3><div class="list">${ordered.map(s => listItem(s, `<button class="btn small" data-arrived="${s.id}">Arrived</button>`)).join('')}</div></div>` : ''}
       <div class="panel"><h3>Recent activity</h3><div class="list">${recent.length ? recent.map(({ e, s }) => listItem(s, `<span class="muted" style="font-size:12px">${esc(evText(e))} · ${fmtDT(e.t)}</span>`)).join('') : '<span class="muted">Changes you make (status, weigh-ins, moves) show up here.</span>'}</div></div>
@@ -1029,6 +1041,7 @@ function openDetail(fid) {
       ${f.note ? `<div class="muted" style="font-size:13px;margin-top:6px">${esc(f.note)}</div>` : ''}
       ${mfr}
       ${f.sources?.length ? `<div class="orders"><strong>Orders</strong>${f.sources.map(s => `<div><span>${fmtDate(s.date)} · ${s.n} spool${s.n > 1 ? 's' : ''}${s.bundle ? ' (bundle)' : ''}${s.price != null ? ' · ' + fmt$(s.price) + ' each' : ''}</span><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.store)} ↗</a></div>`).join('')}</div>` : ''}
+      <div id="pricebox">${priceBox(f)}</div>
       <div class="actions">
         ${src0 ? `<a class="btn small" href="${esc(src0.url)}" target="_blank" rel="noopener">Reorder on ${esc(src0.store)} ↗</a>` : ''}
         ${f.custom ? `<button class="btn small" data-edit>Edit filament</button><button class="btn small danger" data-delfil>Delete filament</button>` : ''}
@@ -1249,6 +1262,8 @@ $('#view-spools').addEventListener('change', e => {
 $('#view-dashboard').addEventListener('click', e => {
   const a = e.target.closest('[data-arrived]');
   if (a) { const s = state.spools[a.dataset.arrived]; setStatus(s, "new", "Delivered"); persist(); toast(`#${s.id} marked arrived`); return render(); }
+  const pc = e.target.closest('[data-price-check-low]');
+  if (pc) return runPriceCheck(pc.dataset.priceCheckLow.split(' '), pc);
   const o = e.target.closest('[data-open-fid]'); if (o) openDetail(o.dataset.openFid);
 });
 // tooltip for dashboard bars
@@ -1346,6 +1361,7 @@ $('#overlay').addEventListener('click', e => {
   }
   const ut = t.closest('[data-untag]');
   if (ut && s) { s.tags = (s.tags || []).filter(x => x !== ut.dataset.untag); if (!s.tags.length) delete s.tags; logEv(s, 'untag', { id:ut.dataset.untag }); persist(); renderSpoolBox(); return toast('Tag unlinked'); }
+  if (t.closest('[data-price-check]') && openFid) return runPriceCheck([openFid], t.closest('[data-price-check]'));
   if (t.closest('[data-edit]')) return openForm(state.custom.find(c => c.id === openFid));
   if (t.closest('[data-delfil]')) {
     const b = t.closest('[data-delfil]');
@@ -1550,6 +1566,168 @@ async function readScreenshots(files) {
   }
   bitmaps.forEach(b => b.close?.());
   return { items, notes: out.notes || '', secs: (performance.now() - t0) / 1000, cost };
+}
+
+// ---------- Prices: what you paid per roll over time, average per roll, and current prices ----------
+// Paid prices come from the spools themselves (price + bought date). Current prices come from "Check prices now":
+// Claude searches the web (the app's API key, a few cents) for this exact product at Amazon, the brand's own store
+// and other filament shops; they're kept with the filament (fx.prices) so the graph shows them over time.
+// camelcamelcamel and Keepa have no free API (and don't allow programs to read their pages), so they're links:
+// they open the Amazon price history in the browser.
+const PRICE_KEEP = 80;   // checked prices kept per filament
+const PRICE_FRESH_DAYS = 30;   // "cheaper now" only from checks this recent
+function priceStats(f) {
+  const paid = spoolsOf(f.id).filter(s => s.price > 0)
+    .map(s => ({ d: s.bought || '', p: +s.price, id: s.id })).sort((a, b) => a.d.localeCompare(b.d));
+  const rolls = spoolsOf(f.id).length;
+  const spent = paid.reduce((t, x) => t + x.p, 0);
+  const checks = ((state.fil[f.id] || {}).prices || []).filter(c => c && c.p > 0);
+  const last = paid.length ? paid[paid.length - 1] : null;
+  const cutoff = new Date(Date.now() - PRICE_FRESH_DAYS * 864e5).toISOString().slice(0, 10);
+  const fresh = checks.filter(c => c.d >= cutoff);
+  const lastCheck = checks.map(c => c.d).sort().pop() || null;
+  const latest = lastCheck ? checks.filter(c => c.d === lastCheck).sort((a, b) => a.p - b.p) : [];
+  const best = fresh.slice().sort((a, b) => a.p - b.p)[0] || null;
+  return { paid, rolls, unpriced: rolls - paid.length, spent, avg: paid.length ? spent / paid.length : null, last,
+    low: paid.length ? Math.min(...paid.map(x => x.p)) : null, checks, latest, lastCheck, best,
+    cheaper: best && last && best.p < last.p - 0.005 ? best : null };
+}
+function asinOf(f) {
+  const s = (f.sources || []).find(x => /^[A-Z0-9]{10}$/.test(x.asin || '') && /amazon/i.test(x.store || 'Amazon'));
+  return s ? s.asin : null;
+}
+function trackerLinks(f) {
+  const asin = asinOf(f), q = encodeURIComponent(`${f.brand} ${f.line} ${f.type} ${f.color}`.replace(/\s+/g, ' ').trim());
+  return `<a class="btn small" href="${asin ? `https://camelcamelcamel.com/product/${asin}` : `https://camelcamelcamel.com/search?sq=${q}`}" target="_blank" rel="noopener" title="Amazon price history">camelcamelcamel ↗</a>
+    <a class="btn small" href="${asin ? `https://keepa.com/#!product/1-${asin}` : `https://keepa.com/#!search/1-${q}`}" target="_blank" rel="noopener" title="Amazon price history">Keepa ↗</a>`;
+}
+// The price graph: dots for each roll you bought (joined by a line), diamonds for checked prices, a dashed line at
+// your average per roll.
+function priceChart(st) {
+  const pts = [...st.paid.map(x => ({ ...x, k: 'paid' })), ...st.checks.map(c => ({ d: c.d, p: c.p, k: 'check', store: c.store }))].filter(x => x.d);
+  if (!pts.length) return '';
+  const W = 520, H = 170, L = 44, R = 10, T = 10, B = 24;
+  const t = d => new Date(d + 'T12:00:00').getTime();
+  let x0 = Math.min(...pts.map(x => t(x.d))), x1 = Math.max(...pts.map(x => t(x.d)));
+  if (x1 - x0 < 864e5 * 14) { x0 -= 864e5 * 7; x1 += 864e5 * 7; }
+  const ps = pts.map(x => x.p);
+  let y0 = Math.min(...ps), y1 = Math.max(...ps);
+  const pad = Math.max(1, (y1 - y0) * 0.15); y0 = Math.max(0, y0 - pad); y1 += pad;
+  const X = v => L + (t(v) - x0) / (x1 - x0) * (W - L - R), Y = v => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
+  const ticks = [y0, (y0 + y1) / 2, y1];
+  const long = x1 - x0 > 864e5 * 300;
+  const fmtM = ms => new Date(ms).toLocaleDateString(undefined, long ? { month: 'short', year: 'numeric' } : { month: 'short', day: 'numeric' });
+  // rolls bought together (same day, same price) are one dot with a count
+  const groups = [...st.paid.filter(x => x.d).reduce((m, x) => { const k = `${x.d}|${x.p}`; const g = m.get(k) || { d: x.d, p: x.p, ids: [] }; g.ids.push(x.id); return m.set(k, g); }, new Map()).values()];
+  const line = st.paid.filter(x => x.d).map((x, i) => `${i ? 'L' : 'M'}${X(x.d).toFixed(1)},${Y(x.p).toFixed(1)}`).join('');
+  return `<svg class="pchart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Price per roll over time">
+    ${ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" class="grid"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">$${v.toFixed(v < 100 ? 2 : 0)}</text>`).join('')}
+    <text x="${L}" y="${H - 6}">${fmtM(x0)}</text><text x="${W - R}" y="${H - 6}" text-anchor="end">${fmtM(x1)}</text>
+    ${st.avg != null ? `<line x1="${L}" x2="${W - R}" y1="${Y(st.avg)}" y2="${Y(st.avg)}" class="avg"><title>Your average: ${fmt$(st.avg)} per roll</title></line>` : ''}
+    ${line ? `<path d="${line}" class="paidline"/>` : ''}
+    ${groups.map(g => `<circle cx="${X(g.d)}" cy="${Y(g.p)}" r="${g.ids.length > 1 ? 6.5 : 4.5}" class="paid"><title>${g.ids.length > 1 ? `${g.ids.length} rolls` : `#${esc(g.ids[0])}`}: paid ${fmt$(g.p)}${g.ids.length > 1 ? ' each' : ''} on ${esc(fmtDate(g.d))}</title></circle>${g.ids.length > 1 ? `<text x="${X(g.d) + 9}" y="${Y(g.p) + 4}" class="cnt">×${g.ids.length}</text>` : ''}`).join('')}
+    ${st.checks.map(c => { const cx = X(c.d), cy = Y(c.p); return `<path d="M${cx},${cy - 5.5}L${cx + 5.5},${cy}L${cx},${cy + 5.5}L${cx - 5.5},${cy}Z" class="check"><title>${esc(c.store || 'Store')}: ${fmt$(c.p)} on ${esc(fmtDate(c.d))}${c.sale ? ' (on sale)' : ''}</title></path>`; }).join('')}
+  </svg>
+  <div class="plegend"><span><i class="lp"></i>You paid</span><span><i class="lc"></i>Price found</span>${st.avg != null ? '<span><i class="la"></i>Your average</span>' : ''}</div>`;
+}
+function priceBox(f) {
+  const st = priceStats(f);
+  const kpi = (v, l) => `<div class="pk"><b>${v}</b><span>${l}</span></div>`;
+  const latest = st.latest.length ? `<div class="plist"><div class="muted" style="font-size:12px">Prices found ${esc(fmtDate(st.lastCheck))} (per ${fmtKg(f.grams)} roll; check the store before buying):</div>
+    ${st.latest.map(c => {
+      const diff = st.last ? c.p - st.last.p : null;
+      const badge = diff == null ? '' : diff < -0.005 ? `<span class="badge good">${fmt$(-diff)} less than you last paid</span>` : diff > 0.005 ? `<span class="muted">${fmt$(diff)} more</span>` : '<span class="muted">same as you paid</span>';
+      return `<div><span><b>${fmt$(c.p)}</b> · ${c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.store || 'Store')} ↗</a>` : esc(c.store || 'Store')}${c.sale ? ' <span class="badge sale">Sale</span>' : ''}${c.note ? ` <span class="muted">${esc(c.note)}</span>` : ''}</span>${badge}</div>`;
+    }).join('')}</div>` : '';
+  return `<div class="prices"><strong>Prices</strong>
+    <div class="pkpis">${kpi(st.avg != null ? fmt$(st.avg) : '—', `Average per roll${st.paid.length ? ` (${fmt$(st.spent)} ÷ ${st.paid.length} roll${st.paid.length === 1 ? '' : 's'})` : ''}`)}
+      ${kpi(st.last ? fmt$(st.last.p) : '—', st.last ? `Last paid · ${esc(fmtDate(st.last.d))}` : 'Last paid')}
+      ${kpi(st.low != null ? fmt$(st.low) : '—', 'Lowest you paid')}
+      ${kpi(st.best ? fmt$(st.best.p) : '—', st.best ? `Best found · ${esc(st.best.store || '')}` : 'Best price found')}</div>
+    ${st.unpriced > 0 ? `<div class="muted" style="font-size:12px">${st.unpriced} roll${st.unpriced === 1 ? ' has' : 's have'} no price; open a spool’s details to add what you paid.</div>` : ''}
+    ${priceChart(st) || '<div class="muted" style="font-size:13px;margin:6px 0">No prices yet. Add what you paid to a spool, or check current prices.</div>'}
+    ${latest}
+    <div class="actions" style="margin-top:8px"><button class="btn small primary" data-price-check>Check prices now</button>${trackerLinks(f)}</div>
+    <div class="muted" style="font-size:12px">Check prices now uses Claude with web search (your API key, usually a few cents). camelcamelcamel and Keepa show Amazon’s price history${asinOf(f) ? '' : ' (a search, since this filament has no Amazon order)'}.</div>
+  </div>`;
+}
+function renderPriceBox() {
+  const f = allFilaments().find(x => x.id === openFid), el = $('#pricebox');
+  if (f && el) el.innerHTML = priceBox(f);
+}
+
+const PRICE_TOOL = {
+  name: 'report_prices', strict: true,
+  description: 'Report the current prices you found for each numbered item. Call this once, at the end, with every item number.',
+  input_schema: { type:'object', additionalProperties:false, required:['items'], properties:{
+    items:{ type:'array', items:{ type:'object', additionalProperties:false, required:['item', 'offers'], properties:{
+      item:{ type:'integer' },
+      offers:{ type:'array', items:{ type:'object', additionalProperties:false, required:['store', 'price_per_spool', 'url', 'on_sale', 'note'], properties:{
+        store:{ type:'string' }, price_per_spool:{ type:'number' }, url:nullable('string'), on_sale:{ type:'boolean' }, note:nullable('string') } } } } } } } },
+};
+const PRICE_SYSTEM = `You check current prices of 3D-printer filament for someone's home filament inventory, so they can see whether it's cheaper than what they last paid.
+
+For each numbered item, use web search (and web fetch, to open a product page) to find the current price of that exact product: the same brand, product line, material, color and spool size. Look at Amazon (when an ASIN is given, that's the product they bought), the brand's own online store, and other well-known filament sellers. Give at most 4 offers per item, cheapest first.
+
+Rules:
+- Only report a price you actually saw on a page or in a search result during this task. Never guess or estimate. If you can't find a price for an item, give it no offers.
+- price_per_spool is in US dollars for ONE spool of the given size: split multi-packs and bundles across their spools, and say so in note (for example "4-pack, $79.96"). Skip offers for a different color, material or spool size.
+- on_sale is true when the page shows a discount, sale, coupon or "was" price; put the details (for example "was $24.99", "20% coupon") in note. note is null when there's nothing to add.
+- url is the product page, or null if you only have a search result.
+When you're done, call report_prices once with every item.`;
+
+async function checkPrices(fids) {
+  if (!await refreshKey()) throw new Error('Add your Anthropic API key in Settings first (the gear at the top right).');
+  const fils = fids.map(id => allFilaments().find(f => f.id === id)).filter(Boolean);
+  if (!fils.length) return { found: 0, cost: 0 };
+  const messages = [{ role:'user', content: 'Find current prices for these filaments:\n' + fils.map((f, i) => {
+    const st = priceStats(f), asin = asinOf(f);
+    return `${i + 1}. ${f.brand} ${f.line} (${f.type}), color "${f.color}", ${f.grams} g spool${asin ? `, Amazon ASIN ${asin}` : ''}${st.last ? `. They last paid ${fmt$(st.last.p)} per spool` : ''}`;
+  }).join('\n') }];
+  let resp, cost = 0;
+  for (let turn = 0; turn < 5; turn++) {
+    resp = await callClaude({
+      model: CLAUDE_MODEL, max_tokens: 16000,
+      betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
+      output_config: { effort: 'medium' }, system: PRICE_SYSTEM, messages,
+      tools: [{ type:'web_search_20260209', name:'web_search', max_uses: Math.min(20, fils.length * 3 + 2) },
+              { type:'web_fetch_20260209', name:'web_fetch', max_uses: Math.min(20, fils.length * 3) }, PRICE_TOOL],
+    });
+    const u = resp.usage || {};
+    cost += ((u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0) * 0.1) * CLAUDE_PRICE.in / 1e6
+          + (u.output_tokens || 0) * CLAUDE_PRICE.out / 1e6 + (u.server_tool_use?.web_search_requests || 0) * SEARCH_PRICE;
+    if (resp.stop_reason !== 'pause_turn') break;
+    messages.push({ role:'assistant', content: resp.content });
+  }
+  if (resp.stop_reason === 'refusal') throw new Error('Claude declined this search.');
+  const call = resp.content.find(b => b.type === 'tool_use' && b.name === PRICE_TOOL.name);
+  if (!call || !Array.isArray(call.input?.items)) throw new Error('Claude didn’t come back with prices. Try again.');
+  const d = today();
+  let found = 0;
+  for (const it of call.input.items) {
+    const f = fils[(it.item | 0) - 1];
+    if (!f || !Array.isArray(it.offers)) continue;
+    const fx = (state.fil[f.id] ||= {});
+    const offers = it.offers.filter(o => Number.isFinite(o.price_per_spool) && o.price_per_spool > 0 && o.price_per_spool < 1000).slice(0, 4)
+      .map(o => ({ d, p: Math.round(o.price_per_spool * 100) / 100, store: String(o.store || '').slice(0, 60),
+        url: /^https:\/\//.test(o.url || '') ? String(o.url).slice(0, 500) : null, sale: !!o.on_sale, note: o.note ? String(o.note).slice(0, 120) : null }));
+    // today's check replaces an earlier one from today
+    fx.prices = [...(fx.prices || []).filter(c => c.d !== d), ...offers].slice(-PRICE_KEEP);
+    found += offers.length;
+  }
+  persist();
+  return { found, cost };
+}
+async function runPriceCheck(fids, btn) {
+  const was = btn && btn.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking prices…'; }
+  try {
+    const { found, cost } = await checkPrices(fids);
+    toast(found ? `Found ${found} price${found === 1 ? '' : 's'} · cost about ${fmt$(cost)}` : `No current prices found · cost about ${fmt$(cost)}`, 5000);
+  } catch (e) { toast(e.message || String(e), 6000); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = was; } }
+  render();
+  if (openFid) renderPriceBox();
 }
 
 // ---------- "Find missing photos online": Claude finds the brand's own store page, the app takes the photo from it ----------

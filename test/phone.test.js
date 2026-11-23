@@ -243,3 +243,22 @@ test('labels link by address when a paired phone can’t find the PC by name', a
   assert.deepStrictEqual(env.s.linkVia(), { via: 'ip', because: 'Android (Pixel 9)' });
   assert.match(env.s.linkBase(), /^http:\/\/\d+\.\d+\.\d+\.\d+:/);
 });
+
+test('with the secure address on: the certificate is public, pairing goes through it, the plain page learns where it is', async (t) => {
+  const env = await setup(t);
+  assert.strictEqual((await req(env.port, '/cert/aipa-ca.crt')).status, 404, 'no certificate while the secure address is off');
+  const cfg = env.cfg; cfg.https = true; cfg.httpsPort = 8766;
+  fs.mkdirSync(path.join(env.s.dataDir, 'phone'), { recursive: true });
+  fs.writeFileSync(path.join(env.s.dataDir, 'phone', 'ca.pem'), '-----BEGIN CERTIFICATE-----\nAAECAw==\n-----END CERTIFICATE-----\n');
+  const cert = await req(env.port, '/cert/aipa-ca.crt');
+  assert.strictEqual(cert.status, 200, 'a download link (no key, no cookie) gets the certificate');
+  assert.match(cert.headers['content-type'], /x509-ca-cert/);
+  const code = new URL(env.s.newPairCode().url).searchParams.get('c');
+  const look = await req(env.port, `/pair?c=${code}`, { headers: { 'user-agent': 'Mozilla/5.0 (Linux; Android 15; Pixel 9) Chrome/140' } });
+  assert.strictEqual(look.status, 200);
+  assert.ok(look.body.includes('action="https://127.0.0.1:8766/pair"'), 'pairs on the secure address of the same host');
+  assert.ok(look.body.includes('/cert/aipa-ca.crt') && look.body.includes('action="/pair"'), 'certificate steps, and a plain fallback');
+  const r = JSON.parse((await req(env.port, '/api/load')).body);
+  assert.strictEqual(r.secure, 'https://127.0.0.1:8766');
+  assert.strictEqual(env.cfg.devices.length, 0, 'opening the page paired nothing');
+});

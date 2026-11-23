@@ -18,6 +18,12 @@
     try { r = await fetch(path, init); } catch { throw new Error('Can’t reach the PC. Is it on, with the app open, and is this phone on the same Wi-Fi?'); }
     const j = await r.json().catch(() => ({}));
     if (r.status === 401) {
+      // paired on the PC's secure address (labels and stickers link to the plain one, which works without the
+      // certificate): go there when this phone trusts it, keeping the spool to open
+      if (j.secure && location.protocol === 'http:') {
+        const ok = await fetch(`${j.secure}/ping`, { cache: 'no-store', signal: AbortSignal.timeout(4000) }).then(x => x.ok, () => false);
+        if (ok) { location.replace(j.secure + location.pathname + location.search + location.hash); await new Promise(() => {}); }
+      }
       const others = (j.others || []).map(o => `<a href="${o}/app/index.html">${o}</a>`).join(' · ');
       throw Object.assign(new Error('This phone isn’t paired with this address. On your PC, open the app’s Settings → Phone access, click Pair a phone and scan the QR code with this phone.'), { others, notPaired: true });
     }

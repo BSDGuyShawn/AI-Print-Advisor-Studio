@@ -278,6 +278,11 @@
           <label class="field"><span>Links on labels and stickers use</span>
             <select id="phoneLinkHost"><option value="name">This PC’s name, or its address if a paired phone can’t use the name</option><option value="ip">Always this PC’s address</option></select></label>
           <label class="check"><input type="checkbox" id="phoneHttps"> <b>Secure address</b> for scanning inside the phone page (camera, and NFC on Android). Each phone trusts the app’s certificate once; the page explains how.</label>
+          <div class="row-btns hidden" id="phoneCertRow"><button type="button" class="btn" id="phoneCertBtn">Get the certificate on a phone</button></div>
+          <div class="phone-pair hidden" id="phoneCert">
+            <img id="phoneCertQr" alt="QR code to download the app’s certificate">
+            <div><b>Scan this with the phone’s camera</b> to download the app’s certificate.<br><small>Then install it: <b>Android</b>: Settings → search <b>CA certificate</b> → Install anyway → pick the file in Downloads, then close Chrome completely and open the page again. <b>iPhone</b>: Settings → <b>Profile Downloaded</b> → Install, then Settings → General → About → <b>Certificate Trust Settings</b> → switch it on.</small><br><small>Or type this on the phone: <code id="phoneCertUrl"></code></small></div>
+          </div>
           <label class="field"><span>Port <small>(change only if another program uses it)</small></span><input type="number" id="phonePort" min="1024" max="65535" style="width:110px"></label>
         </div>
         <p class="hint hidden" id="phoneTour">Phone access is off in the guided tour.</p>

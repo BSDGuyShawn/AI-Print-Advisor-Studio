@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.31.0
+- **Filament prices.** Each filament's details now have a **Prices** section: the **average cost per roll** (total
+  spent ÷ rolls), last and lowest price paid, and a **graph** of what you paid for each roll over time. **Check prices
+  now** has Claude search the web (your API key, usually a few cents) for that exact product at Amazon, the brand's
+  store and other filament shops, flags sales, and shows how much less (or more) than you last paid; found prices are
+  kept, so the graph builds a history. **camelcamelcamel** and **Keepa** buttons open Amazon's price history for it.
+- The Dashboard shows the **average per roll** for your whole library, filaments that are **cheaper now than you last
+  paid**, and a button to check prices for everything running low.
+- **Phones: easier secure scanning.** With the secure address on, pairing walks the phone through installing the
+  app's certificate (it checks by itself when it's trusted), then pairs on the secure address. The certificate is also
+  a QR code in **Settings → Phone access** and under **⚙** on the phone page. Links on labels and stickers move to
+  the secure address on phones that trust it.
+- **Android: tapping a sticker no longer pops up Android's “New tag scanned” screen** while the filament page is open
+  on the secure address: the page keeps listening for stickers (allow it once).
+
 ## 2.30.0
 - **Your filament library on your phone** (iPhone and Android), on your home Wi-Fi: turn on **Settings → Phone access**,
   click **Pair a phone** and scan the QR code. Look things up, update spools (open, empty, move, weigh, log grams),

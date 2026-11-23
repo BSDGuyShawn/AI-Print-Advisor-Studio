@@ -24,7 +24,7 @@ const path = require('path');
 const { EventEmitter } = require('events');
 const { makeCA, makeServerCert, serverCertFits } = require('./cert');
 
-const PAIR_MS = 5 * 60 * 1000, LINK_MS = 2 * 60 * 1000;
+const PAIR_MS = 15 * 60 * 1000, LINK_MS = 2 * 60 * 1000;
 const COOKIE = 'aipa_phone';
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp',
@@ -225,6 +225,7 @@ class PhoneServer extends EventEmitter {
       this.failures.set(ip, { n: (f && f.until > Date.now() ? f.n : 0) + 1, until: Date.now() + 10 * 60 * 1000 });
       return this.send(res, 403, page('This pairing link has expired', '<p>On your PC, open the app’s <b>Settings → Phone access</b> and click <b>Pair a phone</b> to get a new QR code.</p>'), 'text/html; charset=utf-8');
     }
+    if (req.method === 'GET' && !entry.deviceId && !secure && this.secureOrigin(req)) return this.send(res, 200, this.securePairPage(req, code), 'text/html; charset=utf-8');
     if (req.method === 'GET' && !entry.deviceId) {
       return this.send(res, 200, page('Pair this phone?', `<p>This lets this phone open your filament library from <b>AI 3D Print Advisor Studio</b> on <b>${esc(this.pcName)}</b>, while it’s on your home Wi-Fi.</p>
         <form method="post" action="/pair"><input type="hidden" name="c" value="${esc(code)}">
@@ -246,6 +247,44 @@ class PhoneServer extends EventEmitter {
     res.setHeader('Set-Cookie', `${COOKIE}=${t}; Path=/; Max-Age=315360000; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`);
     res.writeHead(303, { location: `/app/index.html${!entry.deviceId || entry.welcome ? '?paired=1' : ''}#k=${t}`, 'cache-control': 'no-store' });
     return res.end();
+  }
+
+  // With the secure address on, a phone pairs there: scanning (camera, NFC) only works on secure pages, and a phone's
+  // pairing belongs to one address. The QR code opens this plain page (it works before the phone trusts anything);
+  // it gets the certificate onto the phone, checks the phone trusts it, then pairs on the secure address.
+  securePairPage(req, code) {
+    const ios = /iPhone|iPad/.test(req.headers['user-agent'] || ''), sec = this.secureOrigin(req);
+    const btn = 'font:inherit;font-weight:600;padding:12px 22px;border:0;border-radius:10px;width:100%;box-sizing:border-box';
+    return page('Pair this phone?', `<p>This lets this phone open your filament library from <b>AI 3D Print Advisor Studio</b> on <b>${esc(this.pcName)}</b>, while it’s on your home Wi-Fi.</p>
+      <p style="font-size:14px;opacity:.75">Opened in a preview inside your camera app? Open it in your browser (Chrome or Safari) first.</p>
+      <h2 style="font-size:17px;margin:18px 0 6px">1. Trust the app’s secure address (once per phone)</h2>
+      <p id="st">Checking…</p>
+      <div id="steps" hidden>
+        <p><a href="/cert/aipa-ca.crt" style="display:block;text-align:center;text-decoration:none;${btn};background:#d5dde3;color:#18232E">Download the app’s certificate</a></p>
+        ${ios ? `<p>Then open <b>Settings</b>, tap <b>Profile Downloaded</b> near the top and <b>Install</b>; then <b>Settings → General → About → Certificate Trust Settings</b> and switch on <b>AI 3D Print Advisor Studio on ${esc(this.pcName)}</b>.</p>`
+          : `<p>Then open the downloaded file, or go to <b>Settings → Security → More security settings → Install from device storage → CA certificate</b> and pick it (menu names vary a little by phone).</p>`}
+        <p>Come back here when it’s installed: this page checks again by itself. <button type="button" id="again" style="font:inherit">Check again</button></p>
+      </div>
+      <h2 style="font-size:17px;margin:18px 0 6px">2. Pair</h2>
+      <form method="post" action="${esc(sec)}/pair"><input type="hidden" name="c" value="${esc(code)}">
+        <button type="submit" id="go" disabled style="${btn};background:#1F7A8C;color:#fff;opacity:.45">Pair this phone</button></form>
+      <form method="post" action="/pair" style="margin-top:14px"><input type="hidden" name="c" value="${esc(code)}">
+        <button type="submit" style="font:inherit;font-size:14px;background:none;border:0;padding:0;color:inherit;text-decoration:underline;opacity:.75;text-align:left">Skip this and pair without the secure address (no scanning inside the page; Android shows its own “New tag” screen for NFC stickers)</button></form>
+      <script>
+        const st = document.getElementById('st'), steps = document.getElementById('steps'), go = document.getElementById('go');
+        let busy = false;
+        async function check() {
+          if (busy) return; busy = true; st.textContent = 'Checking…';
+          let ok = false;
+          try { ok = (await fetch(${JSON.stringify(sec + '/ping')}, { cache: 'no-store' })).ok; } catch {}
+          busy = false;
+          st.textContent = ok ? '✓ This phone trusts the app’s secure address.' : 'This phone doesn’t trust it yet:';
+          steps.hidden = ok; go.disabled = !ok; go.style.opacity = ok ? 1 : .45;
+        }
+        document.getElementById('again').onclick = check;
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+        check();
+      </script>`);
   }
 
   // ---------------------------------------------------------------- live updates (Server-Sent Events)
@@ -285,7 +324,9 @@ class PhoneServer extends EventEmitter {
     try {
       const body = await fsp.readFile(norm);
       const ext = path.extname(norm).toLowerCase();
-      const extra = ext === '.html' ? { 'content-security-policy': "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self' http://*.local:* https://*.local:*; frame-ancestors 'none'" } : {};
+      // the plain page may check this PC's secure address (and move there when the phone trusts it)
+      const u = this.urls(), secureOrigins = [u.https, ...u.httpsIps].filter(Boolean).join(' ');
+      const extra = ext === '.html' ? { 'content-security-policy': `default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self' http://*.local:* https://*.local:* ${secureOrigins}; frame-ancestors 'none'` } : {};
       this.send(res, 200, body, MIME[ext] || 'application/octet-stream', extra);
     } catch { this.send(res, 404, 'Not found', 'text/plain'); }
   }
@@ -307,6 +348,12 @@ class PhoneServer extends EventEmitter {
         if (s) return this.redirect(res, `/app/index.html#spool=${s[1]}`);
         for (const [prefix, root] of Object.entries(this.statics)) if (p.startsWith(prefix)) return this.file(res, path.join(root, decodeURIComponent(p.slice(prefix.length))), root);
         if (this.libs[p]) return this.file(res, this.libs[p], path.dirname(this.libs[p]));
+        // the certificate the secure address uses: public (a certificate isn't a secret), so a phone can get it before
+        // it's paired, and a plain download link works (it can't send the phone's key)
+        if (p === '/cert/aipa-ca.crt') {
+          const der = this.cfg.https ? await this.caCertDer() : null;
+          return der ? this.send(res, 200, der, 'application/x-x509-ca-cert', { 'content-disposition': 'attachment; filename="AI-3D-Print-Advisor-Studio.crt"' }) : this.send(res, 404, 'Turn on the secure address in the app first.', 'text/plain');
+        }
       }
       const dev = this.deviceFor(req, u);
       if (!dev) {
@@ -314,7 +361,7 @@ class PhoneServer extends EventEmitter {
         const names = (req.headers.cookie || '').split(';').map(c => c.trim().split('=')[0]).filter(Boolean);
         const why = req.headers['x-aipa-key'] ? 'a key this PC doesn’t know (phone removed?)' : names.includes(COOKIE) ? 'a phone that isn’t paired anymore' : 'no key';
         this.log(`phone access: refused ${p.replace(/^\/i\/[^/]+/, '/i/…')} from ${req.socket.remoteAddress} (${why}; ${String(req.headers['user-agent'] || '').slice(0, 160)})`);
-        if (p.startsWith('/api/') || p.startsWith('/i/')) return this.send(res, 401, { error: 'This phone isn’t paired.', others: this.otherAddresses(req, secure) });
+        if (p.startsWith('/api/') || p.startsWith('/i/')) return this.send(res, 401, { error: 'This phone isn’t paired.', others: this.otherAddresses(req, secure), secure: secure ? null : this.secureOrigin(req) });
         // phones keep "paired" per address: one paired on another address of this PC can go there
         const others = this.otherAddresses(req, secure);
         return this.send(res, 401, page('Pair this phone first', `<p>To open your filament library here, on your PC open the app’s <b>Settings → Phone access</b>, click <b>Pair a phone</b> and scan the QR code with this phone’s camera.</p>
@@ -324,10 +371,6 @@ class PhoneServer extends EventEmitter {
       if (req.method === 'GET') {
         const img = /^\/(?:images|i\/[A-Za-z0-9_-]{20,100})\/([A-Za-z0-9_.-]{1,120}\.(?:jpe?g|png|webp|gif))$/i.exec(p);
         if (img) return this.file(res, path.join(this.imagesDir, img[1]), this.imagesDir);
-        if (p === '/cert/aipa-ca.crt') {
-          const der = await this.caCertDer();
-          return der ? this.send(res, 200, der, 'application/x-x509-ca-cert', { 'content-disposition': 'attachment; filename="AI-3D-Print-Advisor-Studio.crt"' }) : this.send(res, 404, 'Turn on the secure address in the app first.', 'text/plain');
-        }
         if (p === '/api/load') {
           const k = req.headers['x-aipa-key'];
           return this.send(res, 200, { ...(await this.api.load()), imagesBase: k ? `/i/${k}/` : '/images/', phone: this.phoneInfo(dev, secure) });
@@ -361,6 +404,12 @@ class PhoneServer extends EventEmitter {
       const msg = e instanceof Error && typeof e.message === 'string' ? e.message.split(/\r?\n/)[0].slice(0, 300) : 'Something went wrong.';
       this.send(res, e.status || 500, { error: msg });
     }
+  }
+  // the secure address for the host a phone used (same name or number), when that's on
+  secureOrigin(req) {
+    if (!this.cfg.https) return null;
+    const host = String(req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
+    return host && this.allowedHost(host) ? `https://${host}:${this.cfg.httpsPort}` : null;
   }
   // this PC's other addresses (a phone is paired per address; one paired on another can go there)
   otherAddresses(req, secure) {

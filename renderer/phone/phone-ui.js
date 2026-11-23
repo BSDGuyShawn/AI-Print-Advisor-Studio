@@ -65,7 +65,7 @@
       if (P.localOk !== true) api.call('/api/local-check', { ok: true }).catch(() => {});
       return;
     }
-    if (location.protocol !== 'http:') return;
+    if (location.protocol !== 'http:') { if (params.get('paired')) welcome(P.localOk === false); return; }
     if (!params.get('paired') && P.localOk === false) return;
     const ok = await nameWorks();
     if (ok !== null) api.call('/api/local-check', { ok }).catch(() => {});
@@ -93,6 +93,14 @@
   const add = $('#addBtn');
   if (add) add.parentNode.insertBefore(btn, add);
   btn.addEventListener('click', () => (window.isSecureContext ? scanChoices() : secureHowTo()));
+  // "This phone": the certificate, the secure address and NFC, whenever they're needed
+  const setupBtn = document.createElement('button');
+  setupBtn.className = 'btn';
+  setupBtn.id = 'phoneSetupBtn';
+  setupBtn.textContent = '⚙';
+  setupBtn.title = setupBtn.ariaLabel = 'This phone: certificate and scanning';
+  if (add) add.parentNode.insertBefore(setupBtn, btn);
+  setupBtn.addEventListener('click', phoneSetup);
 
   function scanChoices() {
     const nfc = 'NDEFReader' in window;
@@ -106,8 +114,32 @@
     const n = $('[data-scan="nfc"]', sheet); if (n) n.onclick = scanNfc;
   }
 
+  const ios = /iPhone|iPad/.test(navigator.userAgent);
+  function certSteps() {
+    return `<li><a href="/cert/aipa-ca.crt" class="btn primary" download>Download the app’s certificate</a></li>
+      ${ios ? `<li>Open <b>Settings</b>: tap <b>Profile Downloaded</b> near the top, then <b>Install</b>.</li>
+      <li>Then <b>Settings → General → About → Certificate Trust Settings</b> and switch on <b>AI 3D Print Advisor Studio on ${esc(P.pcName || '')}</b>.</li>`
+        : `<li>Go to the phone’s <b>Settings</b> and search for <b>CA certificate</b> (usually <b>Security → More security settings → Encryption &amp; credentials → Install a certificate → CA certificate</b>). Tap <b>Install anyway</b> and pick the downloaded file (in <b>Downloads</b>).</li>
+      <li>Close Chrome completely (swipe it away in the recent apps), then open this page again.</li>`}`;
+  }
+  function phoneSetup() {
+    const secureOn = !!(P.httpsPort || P.https);
+    const nfcOk = window.isSecureContext && 'NDEFReader' in window;
+    let cert;
+    if (!secureOn) cert = `<p>Scanning inside this page needs the app’s <b>Secure address</b>: turn it on in the app on your PC (<b>Settings → Phone access</b>), then come back here.</p>`;
+    else if (location.protocol === 'https:') cert = `<p>You’re on the app’s secure address. If the browser shows a warning sign by the address (or a red “Not secure”), this phone doesn’t trust the app’s certificate yet:</p><ol>${certSteps()}</ol>`;
+    else cert = `<p>Scanning inside this page needs the app’s secure address, which this phone trusts once:</p><ol>${certSteps()}<li><button class="btn primary" data-go-secure>Open the secure page</button></li></ol>`;
+    openSheet(`<h2>This phone</h2>
+      <h3>Secure address and certificate</h3>${cert}
+      <p class="muted">The certificate is made by the app on your PC and only covers your PC. You can remove it in the phone’s settings any time.</p>
+      ${nfcOk ? `<h3>NFC stickers</h3><p>${nfcOn ? '✓ This page reads stickers while it’s open.' : 'Let this page read stickers, so tapping one opens it here instead of Android’s “New tag” screen.'}</p>${nfcOn ? '' : '<button class="btn primary" data-nfc-allow>Allow reading stickers</button>'}` : ''}`);
+    const g = $('[data-go-secure]', sheet);
+    if (g) g.onclick = () => goTo(P.httpsPort ? `https://${location.hostname}:${P.httpsPort}` : P.https);
+    const a = $('[data-nfc-allow]', sheet);
+    if (a) a.onclick = () => nfcStart().then(phoneSetup, (e) => toast(`NFC isn’t available: ${e.message || e}`, 5000));
+  }
+
   function secureHowTo() {
-    const ios = /iPhone|iPad/.test(navigator.userAgent);
     if (!P.https) {
       openSheet(`<h2>Scanning</h2>
         <p><b>Spool labels:</b> point your phone’s <b>camera app</b> at a label’s QR code and tap the link: the spool opens here.</p>
@@ -118,10 +150,7 @@
     openSheet(`<h2>Set up scanning</h2>
       <p>Phones only allow the camera and NFC on secure (https) pages. The app has its own secure address; this phone needs to trust it once:</p>
       <ol>
-        <li><a href="/cert/aipa-ca.crt" class="btn">Download the app’s certificate</a></li>
-        ${ios ? `<li>Open <b>Settings</b>: tap <b>Profile Downloaded</b> near the top, then <b>Install</b>.</li>
-        <li>Then <b>Settings → General → About → Certificate Trust Settings</b> and switch on <b>AI 3D Print Advisor Studio on ${esc(P.pcName || '')}</b>.</li>`
-          : `<li>Open the downloaded file, or go to <b>Settings → Security → More security settings → Install from device storage → CA certificate</b>, and pick it. (Menu names vary a little by phone.)</li>`}
+        ${certSteps()}
         <li><button class="btn primary" data-go-secure>Open the secure page</button></li>
       </ol>
       <p class="muted">This certificate is made by the app on your PC and only covers your PC. You can remove it from the phone’s settings any time. Labels’ QR codes work with the camera app without any of this.</p>`);
@@ -164,43 +193,68 @@
     tick();
   }
 
-  // Web NFC (Chrome on Android): links the app wrote, OpenSpool stickers, or any sticker by its ID
-  async function scanNfc() {
-    const ctrl = new AbortController();
-    openSheet(`<h2>Hold a sticker to the back of the phone</h2><p class="muted">Keep it there for a second.</p>`, () => ctrl.abort());
-    try {
-      const r = new window.NDEFReader();
-      await r.scan({ signal: ctrl.signal });
-      r.onreading = ({ serialNumber, message }) => {
-        ctrl.abort(); closeSheet();
-        const uid = String(serialNumber || '').replace(/:/g, '').toUpperCase();
-        const dec = new TextDecoder();
-        for (const rec of message.records) {
-          if (rec.recordType === 'url' || rec.recordType === 'absolute-url') {
-            const url = dec.decode(rec.data);
-            if (/\/s\/[A-Za-z0-9_-]+/.test(url)) return openFromLink(url);
-          }
-        }
-        const base = { event: 'tag_scanned', status: 'unrecognized', decoder: null, spoolId: `uid:${uid}`, tag: { uid, type: 'MifareUltralight' }, filament: null, extras: null };
-        for (const rec of message.records) {
-          if (rec.recordType !== 'mime' || rec.mediaType !== 'application/json') continue;
-          try {
-            const j = JSON.parse(dec.decode(rec.data));
-            if (j.protocol !== 'openspool') continue;
-            const hex = /^#?([0-9a-f]{6})/i.exec(String(j.color_hex || '')) ? `#${/^#?([0-9a-f]{6})/i.exec(j.color_hex)[1].toUpperCase()}` : null;
-            const n = (v) => (Number.isFinite(+v) && v !== '' && v != null ? +v : null);
-            return window.__onTag({ ...base, status: 'decoded', decoder: 'openspool', filament: { manufacturer: String(j.brand || 'Generic').slice(0, 80),
-              material: String(j.type || 'PLA').toUpperCase().slice(0, 40), modifiers: j.subtype ? [String(j.subtype).slice(0, 40)] : [], colorHex: hex,
-              colorsHex: hex ? [hex] : [], diameterMm: n(j.diameter), weightG: n(j.weight), nozzleMin: n(j.min_temp), nozzleMax: n(j.max_temp),
-              bed: n(j.bed_max_temp), dryTemp: null, dryHours: null, made: null } });
-          } catch { /* not OpenSpool */ }
-        }
-        if (uid) window.__onTag(base);
-      };
-      r.onreadingerror = () => toast('Couldn’t read that sticker. Try again.', 4000);
-    } catch (e) {
-      if (e.name !== 'AbortError') openSheet(`<h2>NFC isn’t available</h2><p>${esc(e.message || e)}. Check that NFC is on in the phone’s settings.</p>`);
+  // Web NFC (Chrome on Android): links the app wrote, OpenSpool stickers, or any sticker by its ID.
+  // The page keeps listening while it's open (once allowed): while it does, Chrome gets the tags, not Android's own
+  // "New tag scanned" screen. Android pauses it by itself while the page is in the background.
+  let nfcOn = false, nfcWait = false;
+  function onNfcReading({ serialNumber, message }) {
+    if (nfcWait) { nfcWait = false; closeSheet(); }
+    const uid = String(serialNumber || '').replace(/:/g, '').toUpperCase();
+    const dec = new TextDecoder();
+    for (const rec of message.records) {
+      if (rec.recordType === 'url' || rec.recordType === 'absolute-url') {
+        const url = dec.decode(rec.data);
+        if (/\/s\/[A-Za-z0-9_-]+/.test(url)) return openFromLink(url);
+      }
     }
+    const base = { event: 'tag_scanned', status: 'unrecognized', decoder: null, spoolId: `uid:${uid}`, tag: { uid, type: 'MifareUltralight' }, filament: null, extras: null };
+    for (const rec of message.records) {
+      if (rec.recordType !== 'mime' || rec.mediaType !== 'application/json') continue;
+      try {
+        const j = JSON.parse(dec.decode(rec.data));
+        if (j.protocol !== 'openspool') continue;
+        const hex = /^#?([0-9a-f]{6})/i.exec(String(j.color_hex || '')) ? `#${/^#?([0-9a-f]{6})/i.exec(j.color_hex)[1].toUpperCase()}` : null;
+        const n = (v) => (Number.isFinite(+v) && v !== '' && v != null ? +v : null);
+        return window.__onTag({ ...base, status: 'decoded', decoder: 'openspool', filament: { manufacturer: String(j.brand || 'Generic').slice(0, 80),
+          material: String(j.type || 'PLA').toUpperCase().slice(0, 40), modifiers: j.subtype ? [String(j.subtype).slice(0, 40)] : [], colorHex: hex,
+          colorsHex: hex ? [hex] : [], diameterMm: n(j.diameter), weightG: n(j.weight), nozzleMin: n(j.min_temp), nozzleMax: n(j.max_temp),
+          bed: n(j.bed_max_temp), dryTemp: null, dryHours: null, made: null } });
+      } catch { /* not OpenSpool */ }
+    }
+    if (uid) window.__onTag(base);
+  }
+  async function nfcStart() {
+    if (nfcOn) return;
+    const r = new window.NDEFReader();
+    r.onreading = onNfcReading;
+    r.onreadingerror = () => toast('This phone couldn’t read that tag. Brand tags (Bambu Lab, Snapmaker…) need the reader on your PC.', 5000);
+    await r.scan();
+    nfcOn = true;
+    nfcBar.classList.remove('show');
+  }
+  async function scanNfc() {
+    try {
+      await nfcStart();
+      nfcWait = true;
+      openSheet(`<h2>Hold a sticker to the back of the phone</h2><p class="muted">Keep it there for a second. This page reads stickers whenever it’s open, so next time you can just tap one.</p>`, () => { nfcWait = false; });
+    } catch (e) {
+      openSheet(`<h2>NFC isn’t available</h2><p>${esc(e.message || e)}. Check that NFC is on in the phone’s settings, and that this page is allowed to use NFC (the ⓘ or lock icon by the address).</p>`);
+    }
+  }
+  // Already allowed: start listening now. Not yet: offer it once (the phone asks for permission on a tap).
+  const nfcBar = document.createElement('div');
+  nfcBar.className = 'pnfc';
+  nfcBar.innerHTML = '<span>Let this page read spool stickers? Then tapping one opens it here, not Android’s “New tag” screen.</span><button class="btn primary" data-nfc-yes>Allow</button><button class="btn" data-nfc-no aria-label="Not now">✕</button>';
+  document.body.appendChild(nfcBar);
+  $('[data-nfc-yes]', nfcBar).onclick = () => nfcStart().catch((e) => { nfcBar.classList.remove('show'); toast(`NFC isn’t available: ${e.message || e}`, 5000); });
+  $('[data-nfc-no]', nfcBar).onclick = () => { nfcBar.classList.remove('show'); try { localStorage.setItem('aipaNfcAsk', 'no'); } catch {} };
+  if (window.isSecureContext && 'NDEFReader' in window) {
+    (async () => {
+      let state = 'prompt';
+      try { state = (await navigator.permissions.query({ name: 'nfc' })).state; } catch { /* older Chrome */ }
+      if (state === 'granted') nfcStart().catch(() => {});
+      else if (state === 'prompt' && localStorage.getItem('aipaNfcAsk') !== 'no') nfcBar.classList.add('show');
+    })();
   }
 
   // ---------------------------------------------------------------- connection to the PC

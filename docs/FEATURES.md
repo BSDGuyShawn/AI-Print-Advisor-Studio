@@ -54,7 +54,8 @@ Everything AI 3D Print Advisor Studio can do, in one list. New to 3D printing? S
 - **Write your own filament to NFC stickers** (OpenSpool or OpenTag3D on NTAG215/216), linked to the spool so scanning it opens that spool. Other tools that read OpenSpool understand it too. Brand tags are never written.
 - **Add from a screenshot** of any order page, receipt or product page (read by Claude), with photos cut out automatically and **missing photos found online** from the brand's store.
 - **Manufacturer print settings** and Snapmaker Orca presets for many brands.
-- **Dashboard**: totals, value, what's running low, what's loaded in each printer.
+- **Prices**: average cost per roll, a graph of what you paid for each roll, and **Check prices now** (Claude web search) for current prices and sales below what you last paid; camelcamelcamel and Keepa links for Amazon price history.
+- **Dashboard**: totals, value, average per roll, what's running low, what's cheaper now, what's loaded in each printer.
 - **Labels** for spools (Avery sheet or label printer), **CSV export**, **backups** (daily automatic copies too).
 - **What to buy**: when a model needs colors you don't own, the closest ones you have and shop links.
 

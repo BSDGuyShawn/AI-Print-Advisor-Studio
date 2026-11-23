@@ -167,7 +167,7 @@ Click **Filament** (top right). Click **Back to model** to return.
 
 - **Inventory**: every filament you own, grouped by type and color, with photos. Click one for its spools, print settings and history.
 - **Spools**: a table of every spool: sealed, opened, loaded in a printer, empty.
-- **Dashboard**: totals, what's running low, what's loaded in each printer.
+- **Dashboard**: totals, average cost per roll, what's running low, what's cheaper now than you paid, what's loaded in each printer.
 - **Settings**: your storage places (shelves, dry boxes, printer slots), empty-spool weights for weighing, labels and backups, and whether spool tags are on.
 
 **Adding filament**
@@ -219,7 +219,7 @@ On the phone you can search and browse, update spools (open, empty, move to a dr
 - **Labels**: with phone access on, printed spool labels get a QR code. Point the phone's camera at it and the spool opens.
 - **Stickers**: stickers the app writes link to their spool, so tapping one with the phone opens it (iPhone XS or newer, or Android with NFC on). Small NTAG203/213 stickers get just the link.
 - **The PC's reader**: a scan on the PC's NFC reader also opens the spool on the phone (switch it off in Settings).
-- **Secure address** (optional): for scanning inside the phone page (camera, and NFC stickers on Android Chrome). Turn it on in Settings; then on the phone tap **📷 Scan** and follow the steps to trust the app's certificate once. The camera app works for labels without this.
+- **Secure address** (optional): for scanning inside the phone page (camera, and NFC stickers on Android Chrome). Turn it on in Settings, then pair the phone: the pairing page has you download and install the app's certificate first (also under **⚙** on the phone page, and as a QR code in **Settings → Phone access → Get the certificate on a phone**). On Android, close Chrome completely after installing it. While the page is open on the secure address it reads stickers itself (allow it once), so Android's own "New tag scanned" screen stays away. The camera app works for labels without any of this.
 - Links use the PC's name (like `mypc.local`), which keeps working if the PC's address changes. Some Android phones can't find PCs by name: then they use the PC's address, labels and stickers link to the address too (Settings says so), and you should reserve that address for the PC in your router ("DHCP reservation") so it doesn't change.
 - **Phone can't connect?** Windows may be blocking the app: Windows Security → Firewall & network protection → Allow an app through firewall → Change settings, and tick **Private** for AI 3D Print Advisor Studio.
 
@@ -228,6 +228,14 @@ On the phone you can search and browse, update spools (open, empty, move to a dr
 Color remix and the "What to buy" box use what's in your library, so keeping it up to date pays off.
 
 ---
+
+### Prices
+
+Open a filament: **Prices** shows the **average per roll** (everything you paid ÷ the rolls with a price), the last and lowest price you paid, and a graph of each roll's price over time (blue dots; rolls bought together show "×5"), with a dashed line at your average.
+
+- **Check prices now**: Claude searches the web for that exact product (brand, line, color, spool size) at Amazon, the brand's own store and other filament shops, using your API key (usually a few cents; the cost is shown). Each price says how much less or more it is than you last paid, sales and coupons are marked, and found prices are kept as orange diamonds on the graph. Always check the store before buying: prices change.
+- **camelcamelcamel** and **Keepa** open Amazon's price history for the product you ordered (or a search, for filament you didn't buy on Amazon).
+- The **Dashboard** lists filaments found cheaper than you last paid (checks from the last 30 days) and can check everything running low at once.
 
 ## 12. When a print fails: the troubleshooter
 
