@@ -681,7 +681,7 @@ function startTagScanning() {
 function onTag(scan) {
   if (!scan || scan.status === 'read_error') return toast('Couldn’t read that tag. Hold the spool still on the reader and try again.', 4000);
   if (shot && shot.busy) return toast('A spool tag was scanned. Scan it again once Claude has finished reading.', 5000);
-  if ($('#addForm')) return toast('A spool tag was scanned. Finish or cancel adding the filament, then scan it again.', 5000);
+  if ($('#overlay').classList.contains('open') && $('#addForm')) return toast('A spool tag was scanned. Finish or cancel adding the filament, then scan it again.', 5000);
   const s = T.spoolForTag(state.spools, scan.spoolId);
   if (s) return showScannedSpool(s);
   openTagDialog(scan);
