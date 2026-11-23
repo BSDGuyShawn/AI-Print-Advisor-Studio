@@ -357,7 +357,10 @@ class PhoneServer extends EventEmitter {
       this.send(res, 405, { error: 'Not allowed' });
     } catch (e) {
       this.log(`phone access: ${req.method} ${String(req.url).replace(/^\/i\/[^/]+/, '/i/…').replace(/([?&]k=)[^&]+/, '$1…')}: ${e.message}`);
-      this.send(res, e.status || 500, { error: String(e.message || e).replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, '') });
+      // only the message, one line (never a stack trace)
+      const msg = e instanceof Error && typeof e.message === 'string' ? e.message.split('
+')[0].slice(0, 300) : 'Something went wrong.';
+      this.send(res, e.status || 500, { error: msg });
     }
   }
   // this PC's other addresses (a phone is paired per address; one paired on another can go there)
