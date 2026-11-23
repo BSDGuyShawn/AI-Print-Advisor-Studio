@@ -24,6 +24,7 @@
     </div>
     <div class="top-actions">
       <button class="btn ghost spend-chip" id="spendChip" title="What this app’s AI requests cost this month (details in Settings)">AI $0.00</button>
+      <button class="btn ghost hidden" id="monitorBtn" title="Every printer: what's printing, camera, time left, timelapses and final photos">Print Monitor</button>
       <button class="btn ghost" id="filamentBtn" aria-pressed="false" title="Your filament inventory: what you have, spools, locations and print settings">Filament</button>
       <button class="btn update-pill hidden" id="updateBtn" title="A new version is available: see what's new">Update available</button>
       <button class="btn ghost" id="guideBtn" title="Step-by-step guide">Guide</button>
@@ -35,6 +36,7 @@
       </button>
     </div>
   </header>
+  <div class="kpibar hidden" id="kpiBar" aria-label="What your printers are doing"></div>
   <div class="busy" id="busyBar" role="status" aria-live="polite">
     <div class="busy-track"><span id="busyFill"></span></div>
     <span class="busy-label" id="busyLabel">Starting…</span>
@@ -184,6 +186,15 @@
   <dialog id="settingsDialog" class="settings">
     <form method="dialog" id="settingsForm">
       <h2>Settings</h2>
+      <div class="stabs" role="tablist" aria-label="Settings sections">
+        <button type="button" role="tab" data-stab="general" class="on">General</button>
+        <button type="button" role="tab" data-stab="ai">AI</button>
+        <button type="button" role="tab" data-stab="printers">Printers</button>
+        <button type="button" role="tab" data-stab="monitor">Print monitor</button>
+        <button type="button" role="tab" data-stab="filament">Filament</button>
+        <button type="button" role="tab" data-stab="phone">Phone</button>
+      </div>
+      <div class="stab" data-stab="general" role="tabpanel">
       <label class="field">
         <span>Your 3D printing experience</span>
         <select id="experienceSelect">
@@ -194,6 +205,22 @@
         </select>
       </label>
       <label class="check-field"><input type="checkbox" id="explainWords"> <span><b>Explain 3D printing words.</b> Words like “brim” or “infill” get a dotted underline; hover over one to see what it means, with a picture. (The Glossary button at the top lists them all.)</span></label>
+      <label class="field">
+        <span>Snapmaker Orca program</span>
+        <div class="inline"><input type="text" id="slicerPath" placeholder="Detected automatically"><button class="btn" type="button" id="browseSlicer">Browse</button></div>
+        <small id="slicerStatus"></small>
+      </label>
+      <fieldset class="updates">
+        <legend>Updates</legend>
+        <div class="row-btns">
+          <button type="button" class="btn" id="updateCheckBtn">Check for updates</button>
+          <span class="hint" id="updateStatus"></span>
+        </div>
+        <label class="check"><input type="checkbox" id="autoUpdate"> Check automatically when the app starts and once a day</label>
+        <small>Updates install in place, in the same folder. Your settings, API key, filament library and print history are kept.</small>
+      </fieldset>
+      </div>
+      <div class="stab hidden" data-stab="ai" role="tabpanel">
       <fieldset class="ai-mode">
         <legend>How should the app get AI advice?</legend>
         <label><input type="radio" name="aiMode" value="api"><span><b>Claude API key</b> (automatic). Pay-as-you-go from platform.claude.com; no subscription needed.</span></label>
@@ -223,11 +250,8 @@
         <div class="model-card" id="modelCard" aria-live="polite"></div>
       </label>
       <p class="hint">The key is stored encrypted on this computer and only sent to api.anthropic.com.</p>
-      <label class="field">
-        <span>Snapmaker Orca program</span>
-        <div class="inline"><input type="text" id="slicerPath" placeholder="Detected automatically"><button class="btn" type="button" id="browseSlicer">Browse</button></div>
-        <small id="slicerStatus"></small>
-      </label>
+      </div>
+      <div class="stab hidden" data-stab="printers" role="tabpanel">
       <fieldset class="printers">
         <legend>Your printers</legend>
         <small>For sending prints and print history. Use the address you’d type to open Fluidd or Mainsail in a browser, e.g. 192.168.1.50 (add :7125 if that doesn’t work).</small>
@@ -239,6 +263,61 @@
         </div>
         <div id="discoverResults"></div>
       </fieldset>
+      </div>
+      <div class="stab hidden" data-stab="monitor" role="tabpanel">
+      <fieldset class="monitor" id="monitorField">
+        <legend>Print Monitor</legend>
+        <label class="check"><input type="checkbox" id="monOn"> <b>Watch my printers</b>: status, camera, time left, the final photo and alerts</label>
+        <small>Uses the printers on the <b>Printers</b> tab (address and API key). Works with any Klipper / Moonraker printer; Snapmaker U1s also get their built-in camera, four toolheads with filament colors and timelapses. Replaces U1 Studio and the Home Assistant dashboard scripts: nothing else needs to run.</small>
+        <div class="mon-opts" id="monOpts">
+          <label class="check"><input type="checkbox" id="monBar"> Show what's printing in a bar on the main screen</label>
+          <label class="check"><input type="checkbox" id="monTray"> Keep watching from the tray (by the clock) when the window is closed, for alerts and the final photo</label>
+          <label class="check" id="monLoginRow"><input type="checkbox" id="monLogin"> Start with Windows, in the tray</label>
+          <div class="mon-grid">
+            <label class="field"><span>Temperatures in</span><select id="monUnits"><option value="F">°F</option><option value="C">°C</option></select></label>
+            <label class="field"><span>Final photo at progress (%)</span><input type="number" id="monSnap" min="50" max="100" step="0.5"></label>
+            <label class="field"><span>Safe-to-remove bed temperature (°C)</span><input type="number" id="monSafe" min="20" max="80" step="1"></label>
+            <label class="field"><span>Layer preview every (minutes)</span><input type="number" id="monPrev" min="1" max="60" step="1"></label>
+          </div>
+          <h4>Alerts</h4>
+          <table class="mon-alerts">
+            <thead><tr><th></th><th><label class="check"><input type="checkbox" id="monDesk"> Windows</label></th><th><label class="check"><input type="checkbox" id="monNtfy"> Phone (ntfy)</label></th><th><label class="check"><input type="checkbox" id="monMail"> Email</label></th></tr></thead>
+            <tbody id="monEvents"></tbody>
+          </table>
+          <div class="mon-ch hidden" id="monNtfyBox">
+            <b>Phone push with ntfy</b>
+            <small>Install the free <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy</a> app on your phone and subscribe to the same topic. On ntfy.sh, use a long topic nobody could guess (anyone who knows it can read the alerts), or your own ntfy server.</small>
+            <div class="mon-grid">
+              <label class="field"><span>Server</span><input type="url" id="monNtfyServer" placeholder="https://ntfy.sh"></label>
+              <label class="field"><span>Topic</span><div class="inline"><input type="text" id="monNtfyTopic" placeholder="e.g. prints-7fk2q9"><button type="button" class="btn" id="monNtfyNew">New</button></div></label>
+              <label class="field"><span>Access token <small id="monNtfyTokenSet"></small></span><input type="password" id="monNtfyToken" autocomplete="off" placeholder="only for protected servers"></label>
+            </div>
+          </div>
+          <div class="mon-ch hidden" id="monMailBox">
+            <b>Email</b>
+            <small>Like the Home Assistant automations: a progress email with a camera photo and the printer's numbers at the steps you tick, and an email with the final photo when the print is done and the bed has cooled. For Gmail, Outlook or iCloud use an <b>app password</b> (a normal password won't work).</small>
+            <div class="mon-grid">
+              <label class="field"><span>Mail server (SMTP)</span><input type="text" id="monMailHost" placeholder="smtp.gmail.com"></label>
+              <label class="field"><span>Port and security</span><div class="inline"><input type="number" id="monMailPort" min="1" max="65535" style="width:90px"><select id="monMailSec"><option value="starttls">STARTTLS (587)</option><option value="tls">SSL/TLS (465)</option><option value="none">None</option></select></div></label>
+              <label class="field"><span>User name</span><input type="text" id="monMailUser" autocomplete="off" placeholder="you@gmail.com"></label>
+              <label class="field"><span>Password <small id="monMailPassSet"></small></span><input type="password" id="monMailPass" autocomplete="off" placeholder="app password"></label>
+              <label class="field"><span>Send to</span><input type="text" id="monMailTo" placeholder="you@example.com (several: separate with commas)"></label>
+              <label class="field"><span>From <small>(if not the user name)</small></span><input type="text" id="monMailFrom" placeholder="optional"></label>
+            </div>
+            <div class="mon-miles"><span>Progress emails with a camera photo at</span> <span id="monMiles"></span></div>
+          </div>
+          <div class="row-btns">
+            <button type="button" class="btn" id="monTest">Send a test alert</button>
+            <button type="button" class="btn" id="monOpen">Open the Print Monitor</button>
+            <button type="button" class="link" id="monImport">Bring over settings and photos from U1 Studio</button>
+            <span class="hint" id="monStatus"></span>
+          </div>
+          <small>Paired phones (the <b>Phone</b> tab) can open the Print Monitor too. Alerts are saved when you click <b>Save settings</b>; a test uses the saved settings.</small>
+        </div>
+        <p class="hint hidden" id="monTour">The Print Monitor is off in the guided tour.</p>
+      </fieldset>
+      </div>
+      <div class="stab hidden" data-stab="filament" role="tabpanel">
       <fieldset class="nfc" id="nfcField">
         <legend>Spool tags (NFC)</legend>
         <label class="check"><input type="checkbox" id="nfcOn"> <b>Scan spool tags with an NFC reader</b></label>
@@ -261,6 +340,14 @@
         </div>
         <p class="hint hidden" id="nfcTour">Spool tags are off in the guided tour.</p>
       </fieldset>
+      <fieldset class="samples hidden" id="sampleField">
+        <legend>Filament library</legend>
+        <p class="hint" id="sampleText"></p>
+        <div class="row-btns"><button type="button" class="btn" id="sampleBtn"></button></div>
+        <p class="sample-confirm hidden" id="sampleConfirm">Remove the sample filament, its spools and photos? Anything you added yourself stays. <button type="button" class="btn primary" id="sampleYes">Remove the samples</button> <button type="button" class="link" id="sampleNo">Keep them</button></p>
+      </fieldset>
+      </div>
+      <div class="stab hidden" data-stab="phone" role="tabpanel">
       <fieldset class="nfc phone" id="phoneField">
         <legend>Phone access</legend>
         <label class="check"><input type="checkbox" id="phoneOn"> <b>Open my filament library on phones on my home Wi-Fi</b></label>
@@ -287,21 +374,7 @@
         </div>
         <p class="hint hidden" id="phoneTour">Phone access is off in the guided tour.</p>
       </fieldset>
-      <fieldset class="samples hidden" id="sampleField">
-        <legend>Filament library</legend>
-        <p class="hint" id="sampleText"></p>
-        <div class="row-btns"><button type="button" class="btn" id="sampleBtn"></button></div>
-        <p class="sample-confirm hidden" id="sampleConfirm">Remove the sample filament, its spools and photos? Anything you added yourself stays. <button type="button" class="btn primary" id="sampleYes">Remove the samples</button> <button type="button" class="link" id="sampleNo">Keep them</button></p>
-      </fieldset>
-      <fieldset class="updates">
-        <legend>Updates</legend>
-        <div class="row-btns">
-          <button type="button" class="btn" id="updateCheckBtn">Check for updates</button>
-          <span class="hint" id="updateStatus"></span>
-        </div>
-        <label class="check"><input type="checkbox" id="autoUpdate"> Check automatically when the app starts and once a day</label>
-        <small>Updates install in place, in the same folder. Your settings, API key, filament library and print history are kept.</small>
-      </fieldset>
+      </div>
       <p class="hint">Printable cheat sheets (PDF): <button type="button" class="link" data-sheet="quick">1-page quick sheet</button> · <button type="button" class="link" data-sheet="booklet">booklet with every word and picture</button> <button type="button" class="link hidden" id="tourAgain">· Take the guided tour</button></p>
       <p class="hint about" id="aboutLine"></p>
       <div class="dialog-actions">

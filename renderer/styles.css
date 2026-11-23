@@ -68,7 +68,7 @@ button { font: inherit; color: inherit; }
 .link.small { font-size: 13px; margin-top: 6px; }
 
 /* layout */
-.layout { height: calc(100vh - 56px); display: grid; grid-template-columns: 340px minmax(0, 1fr) 460px; }
+.layout { height: calc(100vh - 56px - var(--kpi-h, 0px)); display: grid; grid-template-columns: 340px minmax(0, 1fr) 460px; }
 .panel { background: var(--panel); overflow-y: auto; }
 .panel.left { border-right: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 18px; }
 .panel.right { border-left: 1px solid var(--line); padding: 18px; }
@@ -285,7 +285,7 @@ table.ctable { width: 100%; border-collapse: collapse; font-size: 12.5px; font-v
 .job .rate input { flex: 1; min-width: 140px; font-size: 12px; padding: 4px 7px; }
 .job .adv { font-size: 11px; color: var(--accent); }
 
-dialog.settings { width: min(560px, 94vw); }
+dialog.settings { width: min(780px, 96vw); }
 .inline { display: flex; gap: 6px; }
 fieldset.printers { border: 1px solid var(--line); border-radius: var(--radius-s); padding: 8px 10px 10px; margin: 12px 0 0; display: flex; flex-direction: column; gap: 6px; }
 fieldset.printers legend { font-size: 14px; padding: 0 4px; }
@@ -657,7 +657,7 @@ dialog.batch { width: min(760px, 94vw); padding: 0; }
 .heavy-text summary { cursor: pointer; color: var(--ink); }
 
 /* Filament: the built-in inventory (renderer/filament/) takes the place of the model view */
-.filament-view { display: none; height: calc(100vh - 56px); }
+.filament-view { display: none; height: calc(100vh - 56px - var(--kpi-h, 0px)); }
 .filament-view iframe { display: block; width: 100%; height: 100%; border: 0; background: var(--plate); }
 body.filament-open .filament-view { display: block; }
 body.filament-open main.layout { display: none; }
@@ -757,3 +757,50 @@ dialog.setup section { margin-top: 6px; }
 #suSlicerBox .row-btns { display: flex; gap: 8px; align-items: center; }
 #suSlicerBox .su-key { margin: 0; max-width: none; flex: 1; }
 .sample-confirm { font-size: 13px; line-height: 1.5; }
+
+/* ---------- Settings tabs ---------- */
+.stabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 0 0 12px; position: sticky; top: -1px; background: var(--raised, var(--panel)); z-index: 2; padding-top: 2px; }
+.stabs button { border: 0; background: none; padding: 8px 12px; border-bottom: 2px solid transparent; color: var(--muted); cursor: pointer; font-weight: 600; }
+.stabs button.on { color: var(--ink); border-bottom-color: var(--accent); }
+.stabs button:hover { color: var(--ink); }
+.stab > fieldset:first-child { margin-top: 0; }
+/* printers: Print Monitor + camera per printer */
+.printer-row .p-mon { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13px; color: var(--muted); padding: 0 2px 6px; border-bottom: 1px dashed var(--line); }
+.printer-row .p-mon select { font-size: 13px; }
+.printer-row .p-camurl { flex: 1 1 240px; }
+/* Print monitor settings */
+fieldset.monitor { border: 1px solid var(--line); border-radius: var(--radius-s); padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+fieldset.monitor small { color: var(--muted); }
+.mon-opts { display: flex; flex-direction: column; gap: 8px; }
+.mon-opts h4 { margin: 8px 0 0; font-size: 14px; }
+.mon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 12px; }
+.mon-grid .field { margin: 0; }
+.mon-alerts { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+.mon-alerts th, .mon-alerts td { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: center; }
+.mon-alerts th:first-child, .mon-alerts td:first-child { text-align: left; }
+.mon-alerts th .check { justify-content: center; font-weight: 600; }
+.mon-ch { display: flex; flex-direction: column; gap: 6px; background: var(--plate); border-radius: var(--radius-s); padding: 8px 10px; }
+.mon-miles { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 13.5px; }
+
+/* ---------- the printing bar on the main screen ---------- */
+body.has-kpi { --kpi-h: 64px; }
+.kpibar { height: 64px; display: flex; align-items: center; gap: 12px; padding: 6px 16px; background: var(--panel); border-bottom: 1px solid var(--line); overflow: hidden; }
+.kpi-sum { display: flex; flex-direction: column; font-size: 12.5px; color: var(--muted); white-space: nowrap; min-width: 110px; }
+.kpi-sum b { font-size: 18px; color: var(--ink); margin-right: 4px; }
+.kpi-sum .kpi-ready { color: var(--ok, #2f855a); font-weight: 600; }
+.kpi-cards { display: flex; gap: 8px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+.kpi-card { display: flex; gap: 8px; align-items: center; min-width: 210px; max-width: 280px; padding: 4px 10px 4px 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); cursor: pointer; text-align: left; }
+.kpi-card:hover { border-color: var(--accent); }
+.kpi-card img, .kpi-card .kpi-ph { width: 46px; height: 46px; border-radius: 7px; object-fit: contain; background: #1c2430; flex: none; }
+.kpi-txt { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.25; }
+.kpi-txt b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi-st { font-size: 12.5px; font-weight: 600; }
+.kpi-sub { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi-prog { height: 4px; border-radius: 3px; background: var(--line); margin-top: 3px; overflow: hidden; }
+.kpi-prog i { display: block; height: 100%; background: linear-gradient(90deg, #8b5cf6, #3b82f6, #06b6d4); }
+.kpi-card.st-printing .kpi-st { color: #6d5bd0; } .kpi-card.st-preparing .kpi-st { color: #d97706; } .kpi-card.st-paused .kpi-st { color: #d97706; }
+.kpi-card.st-cooling .kpi-st { color: #2563eb; } .kpi-card.st-ready .kpi-st { color: #16a34a; } .kpi-card.st-error .kpi-st, .kpi-card.st-cancelled .kpi-st { color: var(--danger); }
+.kpi-card.st-offline, .kpi-card.st-idle, .kpi-card.st-waiting { opacity: .75; }
+.kpi-card.st-offline .kpi-st, .kpi-card.st-idle .kpi-st, .kpi-card.st-waiting .kpi-st { color: var(--muted); }
+:root[data-theme="dark"] .kpi-card.st-printing .kpi-st { color: #a78bfa; }
+.kpi-open { flex: none; }

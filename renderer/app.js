@@ -2753,6 +2753,8 @@ function openSettings() {
   $('updateStatus').textContent = UPDATE.info && UPDATE.info.available ? `Version ${UPDATE.info.latest} is available.` : `You have version ${state.config.version || ''}.`;
   renderNfcSettings();
   renderPhoneSettings();
+  renderMonitorSettings();
+  selectSettingsTab('general');
   $('settingsDialog').showModal();
   guideEvent('settings');
 }
@@ -2860,7 +2862,7 @@ api.onSpend(({ usd, feature, month }) => {
   if ($('settingsDialog').open) renderSpend();
 });
 api.spendSummary().then(s => showSpendChip(s.month)).catch(() => {});
-$('spendChip').onclick = () => { openSettings(); setTimeout(() => $('spendField').scrollIntoView({ block: 'center' }), 50); };
+$('spendChip').onclick = () => { openSettings(); selectSettingsTab('ai'); setTimeout(() => $('spendField').scrollIntoView({ block: 'center' }), 50); };
 async function renderSpend() {
   const s = await api.spendSummary().catch(() => null);
   if (!s) return;
@@ -2881,9 +2883,30 @@ function addPrinterRow(p = {}) {
   row.innerHTML = `<input type="text" class="p-name" placeholder="Name, e.g. Office U1" aria-label="Printer ${n} name">
     <input type="text" class="p-url" placeholder="Address, e.g. 192.168.1.50" aria-label="Printer ${n} address">
     <input type="password" class="p-key" placeholder="${p.hasKey ? 'Key saved' : 'API key (optional)'}" aria-label="Printer ${n} API key">
-    <button type="button" class="btn ghost p-remove" aria-label="Remove printer ${n}" title="Remove this printer">×</button>`;
+    <button type="button" class="btn ghost p-remove" aria-label="Remove printer ${n}" title="Remove this printer">×</button>
+    <div class="p-mon">
+      <label class="check"><input type="checkbox" class="p-watch"> Print Monitor</label>
+      <label>Camera <select class="p-cam" aria-label="Printer ${n} camera">
+        <option value="u1">Snapmaker U1’s built-in camera</option><option value="snapshot">A picture address (webcam snapshot)</option>
+        <option value="mjpeg">A video stream address (MJPEG)</option><option value="off">No camera</option></select></label>
+      <input type="url" class="p-camurl hidden" placeholder="http://192.168.1.50/webcam/?action=snapshot" aria-label="Printer ${n} camera address">
+      <button type="button" class="link p-ka" title="Wakes the U1's camera with the API key, like the app does every minute while it's watching">Test camera keep-alive</button>
+      <span class="hint p-kastatus"></span>
+    </div>`;
   row.querySelector('.p-name').value = p.name || '';
   row.querySelector('.p-url').value = p.url || '';
+  const cam = p.camera || {};
+  row.querySelector('.p-watch').checked = p.monitor !== false;
+  row.querySelector('.p-cam').value = cam.mode || 'u1';
+  row.querySelector('.p-camurl').value = cam.url || '';
+  const syncCam = () => { const m = row.querySelector('.p-cam').value; row.querySelector('.p-camurl').classList.toggle('hidden', m !== 'snapshot' && m !== 'mjpeg'); row.querySelector('.p-ka').classList.toggle('hidden', m !== 'u1'); };
+  row.querySelector('.p-cam').onchange = syncCam; syncCam();
+  row.querySelector('.p-ka').onclick = async () => {
+    const st = row.querySelector('.p-kastatus');
+    st.textContent = 'Sending…';
+    const r = await api.monitorKeepalive(row.querySelector('.p-url').value.trim()).catch(e => ({ ok: false, status: cleanErr(e) }));
+    st.textContent = r.ok ? 'The camera accepted it.' : r.status;
+  };
   row.querySelector('.p-remove').onclick = () => { row.remove(); if (!$('printerRows').children.length) addPrinterRow(); };
   $('printerRows').appendChild(row);
   return row;
@@ -2927,7 +2950,8 @@ $('modelSelect').onchange = e => { $('customModel').classList.toggle('hidden', e
 $('settingsDialog').addEventListener('close', async () => {
   if ($('settingsDialog').returnValue !== 'save') return;
   const model = $('modelSelect').value === 'custom' ? $('customModel').value : $('modelSelect').value;
-  const printers = [...document.querySelectorAll('.printer-row')].map(r => ({ name: r.querySelector('.p-name').value.trim(), url: r.querySelector('.p-url').value.trim(), apiKey: r.querySelector('.p-key').value.trim() })).filter(p => p.url);
+  const printers = [...document.querySelectorAll('.printer-row')].map(r => ({ name: r.querySelector('.p-name').value.trim(), url: r.querySelector('.p-url').value.trim(), apiKey: r.querySelector('.p-key').value.trim(),
+    monitor: r.querySelector('.p-watch').checked, camera: { mode: r.querySelector('.p-cam').value, url: r.querySelector('.p-camurl').value.trim() } })).filter(p => p.url);
   const patch = { model, printers, slicerPath: $('slicerPath').value.trim(), aiMode: (document.querySelector('input[name=aiMode]:checked') || {}).value || 'api', experience: Number($('experienceSelect').value) };
   // remember the switch only when it differs from what the level would choose, so changing level later still applies
   patch.explainWords = $('explainWords').checked === (patch.experience <= 1) ? null : $('explainWords').checked;
@@ -2936,6 +2960,7 @@ $('settingsDialog').addEventListener('close', async () => {
   await api.setConfig(patch);
   await saveNfcSettings();
   await savePhoneSettings();
+  await saveMonitorSettings();
   await loadConfig();
   state.history = null;
   toast('Settings saved.', 2500);
@@ -2954,5 +2979,157 @@ function toast(msg, ms = 4000, onReveal) {
 }
 function hideToast() { $('toast').classList.add('hidden'); }
 document.querySelector('[data-tab=compare]').addEventListener('click', e => { e.currentTarget.textContent = 'Compare slices'; });
+
+
+// ---------- Settings tabs ----------
+function selectSettingsTab(tab) {
+  const t = document.querySelector(`#settingsDialog .stabs [data-stab="${tab}"]`) ? tab : 'general';
+  document.querySelectorAll('#settingsDialog .stabs [data-stab]').forEach(b => { const on = b.dataset.stab === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+  document.querySelectorAll('#settingsDialog .stab').forEach(p => p.classList.toggle('hidden', p.dataset.stab !== t));
+}
+document.querySelector('#settingsDialog .stabs').addEventListener('click', (e) => { const b = e.target.closest('[data-stab]'); if (b) selectSettingsTab(b.dataset.stab); });
+if (api.onOpenSettingsTab) api.onOpenSettingsTab((tab) => { if (!$('settingsDialog').open) openSettings(); selectSettingsTab(tab); });
+
+// ---------- Settings: Print Monitor (src/monitor) ----------
+const MON_EVENTS = [['start', 'Print started'], ['paused', 'Paused'], ['error', 'Printer error'], ['cancelled', 'Cancelled'], ['snapshot', 'Final photo taken'], ['complete', 'Finished (bed still hot)'], ['ready', 'Done and cooled: ready to remove']];
+const MON_MILES = [1, 10, 25, 50, 75, 90];
+let MON = null;
+async function renderMonitorSettings() {
+  if (!api.monitorSettings) return;
+  const m = MON = await api.monitorSettings().catch(() => null);
+  if (!m) return;
+  const tour = !!m.tour;
+  $('monTour').classList.toggle('hidden', !tour);
+  $('monOn').disabled = tour;
+  $('monOn').checked = m.enabled !== false && !tour;
+  $('monBar').checked = m.kpiBar !== false;
+  $('monTray').checked = m.keepInTray !== false;
+  $('monLogin').checked = !!m.startWithWindows;
+  $('monLoginRow').classList.toggle('hidden', !m.canStartWithWindows);
+  $('monUnits').value = m.units === 'C' ? 'C' : 'F';
+  $('monSnap').value = m.snapshot_progress; $('monSafe').value = m.safe_bed_c; $('monPrev').value = m.preview_minutes;
+  const n = m.notifications;
+  $('monDesk').checked = !!n.desktop.enabled; $('monNtfy').checked = !!n.ntfy.enabled; $('monMail').checked = !!n.email.enabled;
+  $('monEvents').innerHTML = MON_EVENTS.map(([k, label]) => `<tr><td>${esc(label)}</td>${['desktop', 'ntfy', 'email'].map(ch =>
+    `<td><input type="checkbox" data-mon-ch="${ch}" data-mon-ev="${k}" aria-label="${esc(label)}: ${ch}" ${n[ch].events[k] ? 'checked' : ''}></td>`).join('')}</tr>`).join('');
+  $('monNtfyServer').value = n.ntfy.server || 'https://ntfy.sh'; $('monNtfyTopic').value = n.ntfy.topic || ''; $('monNtfyToken').value = '';
+  $('monNtfyTokenSet').textContent = n.ntfy.tokenSet ? '· saved, leave blank to keep' : '';
+  $('monMailHost').value = n.email.host || ''; $('monMailPort').value = n.email.port || 587; $('monMailSec').value = n.email.security || 'starttls';
+  $('monMailUser').value = n.email.user || ''; $('monMailPass').value = ''; $('monMailTo').value = n.email.to || ''; $('monMailFrom').value = n.email.from || '';
+  $('monMailPassSet').textContent = n.email.passSet ? '· saved, leave blank to keep' : '';
+  $('monMiles').innerHTML = MON_MILES.map(v => `<label class="check"><input type="checkbox" data-mon-mile="${v}" ${(n.email.milestones || []).includes(v) ? 'checked' : ''}> ${v}%</label>`).join(' ');
+  $('monStatus').textContent = '';
+  syncMonitorSettings();
+}
+function syncMonitorSettings() {
+  $('monOpts').classList.toggle('hidden', !$('monOn').checked);
+  $('monNtfyBox').classList.toggle('hidden', !$('monNtfy').checked);
+  $('monMailBox').classList.toggle('hidden', !$('monMail').checked);
+  document.querySelectorAll('[data-mon-ch]').forEach(c => { c.disabled = !$({ desktop: 'monDesk', ntfy: 'monNtfy', email: 'monMail' }[c.dataset.monCh]).checked; });
+}
+['monOn', 'monDesk', 'monNtfy', 'monMail'].forEach(id => $(id).addEventListener('change', syncMonitorSettings));
+$('monMailSec').onchange = () => { $('monMailPort').value = $('monMailSec').value === 'tls' ? 465 : 587; };
+$('monNtfyNew').onclick = () => {
+  const a = new Uint8Array(9); crypto.getRandomValues(a);
+  $('monNtfyTopic').value = 'prints-' + [...a].map(b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join('');
+};
+function monitorPatch() {
+  const ev = (ch) => Object.fromEntries([...document.querySelectorAll(`[data-mon-ch="${ch}"]`)].map(c => [c.dataset.monEv, c.checked]));
+  const patch = {
+    enabled: $('monOn').checked, kpiBar: $('monBar').checked, keepInTray: $('monTray').checked, startWithWindows: $('monLogin').checked,
+    units: $('monUnits').value, snapshot_progress: Number($('monSnap').value), safe_bed_c: Number($('monSafe').value), preview_minutes: Number($('monPrev').value),
+    notifications: {
+      desktop: { enabled: $('monDesk').checked, events: ev('desktop') },
+      ntfy: { enabled: $('monNtfy').checked, events: ev('ntfy'), server: $('monNtfyServer').value.trim(), topic: $('monNtfyTopic').value.trim() },
+      email: { enabled: $('monMail').checked, events: ev('email'), host: $('monMailHost').value.trim(), port: Number($('monMailPort').value), security: $('monMailSec').value,
+        user: $('monMailUser').value.trim(), to: $('monMailTo').value.trim(), from: $('monMailFrom').value.trim(),
+        milestones: [...document.querySelectorAll('[data-mon-mile]')].filter(c => c.checked).map(c => Number(c.dataset.monMile)) },
+    },
+  };
+  if ($('monNtfyToken').value.trim()) patch.notifications.ntfy.token = $('monNtfyToken').value.trim();
+  if ($('monMailPass').value) patch.notifications.email.pass = $('monMailPass').value;
+  return patch;
+}
+async function saveMonitorSettings() {
+  if (!MON || MON.tour || !api.monitorSet) return;
+  try { await api.monitorSet(monitorPatch()); } catch (e) { toast(`Print Monitor settings: ${cleanErr(e)}`, 6000); }
+  refreshKpiBar();
+}
+$('monTest').onclick = async () => {
+  $('monStatus').textContent = 'Saving and sending…';
+  try {
+    await api.monitorSet(monitorPatch());
+    const r = await api.monitorTest();
+    const res = Object.entries(r.results || {});
+    $('monStatus').textContent = res.length ? res.map(([k, v]) => `${k}: ${v}`).join(' · ') : 'No alert channel is switched on.';
+    const s = await api.monitorSettings(); MON = s;
+    $('monNtfyTokenSet').textContent = s.notifications.ntfy.tokenSet ? '· saved, leave blank to keep' : '';
+    $('monMailPassSet').textContent = s.notifications.email.passSet ? '· saved, leave blank to keep' : '';
+    $('monNtfyToken').value = ''; $('monMailPass').value = '';
+  } catch (e) { $('monStatus').textContent = `Couldn’t send it: ${cleanErr(e)}`; }
+};
+$('monOpen').onclick = () => api.openMonitor();
+$('monImport').onclick = async () => {
+  try {
+    const r = await api.monitorImportU1Studio();
+    if (!r) return;
+    await renderMonitorSettings();
+    $('monStatus').textContent = `Brought over U1 Studio's settings${r.photos ? ` and ${r.photos} final photo${r.photos === 1 ? '' : 's'}` : ''}. Stop U1 Studio from starting with Windows, so alerts don't come twice.`;
+  } catch (e) { $('monStatus').textContent = cleanErr(e); }
+};
+
+// ---------- the printing bar on the main screen ----------
+const KPI = { state: null, timer: null };
+const kpiTime = (s) => (s == null || !isFinite(s) ? '--:--' : `${Math.floor(s / 3600)}:${String(Math.round((s % 3600) / 60)).padStart(2, '0')}`);
+async function refreshKpiBar() {
+  try { const r = await fetch('/api/monitor/state', { cache: 'no-store' }); KPI.state = await r.json(); }
+  catch { KPI.state = null; }
+  const s = await (api.monitorSettings ? api.monitorSettings().catch(() => null) : null);
+  KPI.show = !!(s && !s.tour && s.enabled !== false && s.kpiBar !== false);
+  renderKpiBar();
+}
+function renderKpiBar() {
+  const bar = $('kpiBar'), st = KPI.state;
+  const ps = st && st.printers ? st.order.map(id => st.printers.find(p => p.id === id)).filter(Boolean) : [];
+  $('monitorBtn').classList.toggle('hidden', !ps.length);
+  const show = KPI.show && ps.length > 0;
+  bar.classList.toggle('hidden', !show);
+  document.body.classList.toggle('has-kpi', show);
+  if (!show) return;
+  const now = Date.now() / 1000;
+  const printing = ps.filter(p => ['printing', 'paused', 'preparing'].includes(p.stage));
+  const next = printing.map(p => p.time && p.time.left != null ? now + p.time.left : null).filter(Boolean).sort((a, b) => a - b)[0];
+  const ready = ps.filter(p => p.stage === 'ready' || p.stage === 'cooling').length;
+  const clock = (t) => new Date(t * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const label = { printing: 'Printing', preparing: 'Heating up', paused: 'Paused', cooling: 'Done · cooling', ready: 'Ready to remove', waiting: 'Idle', idle: 'Idle', error: 'Error', cancelled: 'Cancelled', offline: 'Offline' };
+  const card = (p) => {
+    const active = ['printing', 'paused', 'preparing'].includes(p.stage);
+    const pct = Math.round((p.progress || 0) * 100);
+    const left = p.time && p.time.left;
+    const name = String((p.status && p.status.print_stats && p.status.print_stats.filename) || (p.job && p.job.filename) || '').replace(/\.gcode$/i, '').split('/').pop().replace(/_/g, ' ');
+    const thumb = p.thumb && (active || ['cooling', 'ready'].includes(p.stage)) ? `<img src="/api/monitor/p/${encodeURIComponent(p.id)}/thumbnail?v=${esc(p.thumb_v)}" alt="">` : `<span class="kpi-ph"></span>`;
+    return `<button type="button" class="kpi-card st-${esc(p.stage.replace(/^klippy_.*/, 'offline'))}" data-mon-open="${esc(p.id)}" title="${esc(p.name)}: open in the Print Monitor">
+      ${thumb}<span class="kpi-txt"><b>${esc(p.name)}</b><span class="kpi-st">${esc(label[p.stage] || 'Offline')}${active ? ` · ${pct}%` : ''}</span>
+      ${active ? `<span class="kpi-sub">${left != null ? `${kpiTime(left)} left · ends ${clock(now + left)}` : 'estimating…'}</span>` : name && ['cooling', 'ready'].includes(p.stage) ? `<span class="kpi-sub">${esc(name)}</span>` : ''}
+      ${active ? `<span class="kpi-prog"><i style="width:${pct}%"></i></span>` : ''}</span></button>`;
+  };
+  const html = `<div class="kpi-sum"><b>${printing.length}</b> printing${next ? `<span>next done ${clock(next)}</span>` : ''}${ready ? `<span class="kpi-ready">${ready} ready to remove</span>` : ''}</div>
+    <div class="kpi-cards">${ps.map(card).join('')}</div>
+    <button type="button" class="btn ghost kpi-open" data-mon-open="">Print Monitor</button>`;
+  if (bar.__html !== html) { bar.innerHTML = html; bar.__html = html; }   // only when something shows differently
+}
+$('kpiBar').addEventListener('click', (e) => { const b = e.target.closest('[data-mon-open]'); if (b) api.openMonitor(b.dataset.monOpen || undefined); });
+$('monitorBtn').onclick = () => api.openMonitor();
+if (api.onMonitor) {
+  api.onMonitor((msg) => {
+    if (msg.type === 'printer' && KPI.state) {
+      const i = KPI.state.printers.findIndex(p => p.id === msg.printer.id);
+      if (i >= 0) KPI.state.printers[i] = msg.printer; else return refreshKpiBar();
+      renderKpiBar();
+    } else if (msg.type === 'state') refreshKpiBar();
+  });
+  refreshKpiBar();
+  setInterval(() => { if (!document.hidden) renderKpiBar(); }, 30000);
+}
 
 loadConfig();

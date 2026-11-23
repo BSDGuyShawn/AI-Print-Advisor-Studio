@@ -74,6 +74,7 @@ class PhoneServer extends EventEmitter {
     this.statics = {
       '/app/': path.join(appDir, 'renderer', 'filament'),
       '/phone/': path.join(appDir, 'renderer', 'phone'),
+      '/monitor/': path.join(appDir, 'renderer', 'monitor'),   // the Print Monitor (its data needs the key)
     };
     this.libs = {
       '/node_modules/qrcode-generator/dist/qrcode.js': path.join(appDir, 'node_modules', 'qrcode-generator', 'dist', 'qrcode.js'),
@@ -187,7 +188,9 @@ class PhoneServer extends EventEmitter {
     const ok = (k) => (typeof k === 'string' && /^[A-Za-z0-9_-]{20,100}$/.test(k) ? k : null);
     const fromCookie = new RegExp(`(?:^|;\\s*)${COOKIE}=([A-Za-z0-9_-]{20,100})`).exec(req.headers.cookie || '');
     const img = /^\/i\/([A-Za-z0-9_-]{20,100})\//.exec(u.pathname);
-    return ok(req.headers['x-aipa-key']) || (img && img[1]) || (u.pathname === '/api/events' && ok(u.searchParams.get('k'))) || (fromCookie && fromCookie[1]) || null;
+    // ?k= also for the Print Monitor's pictures and videos (an <img> or <video> can't send a header)
+    const kParam = (u.pathname === '/api/events' || u.pathname.startsWith('/api/monitor/')) && ok(u.searchParams.get('k'));
+    return ok(req.headers['x-aipa-key']) || (img && img[1]) || kParam || (fromCookie && fromCookie[1]) || null;
   }
   deviceFor(req, u = new URL(req.url, 'http://x')) {
     const k = this.keyOf(req, u);
@@ -288,14 +291,15 @@ class PhoneServer extends EventEmitter {
   }
 
   // ---------------------------------------------------------------- live updates (Server-Sent Events)
-  broadcast(event, data) {
+  // only = 'monitor': just to phones with the Print Monitor open (printer updates come about once a second)
+  broadcast(event, data, only) {
     const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-    for (const s of this.streams) { try { s.res.write(msg); } catch {} }
+    for (const s of this.streams) { if (only === 'monitor' && !s.monitor) continue; try { s.res.write(msg); } catch {} }
   }
   events(req, res, dev) {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive', 'x-accel-buffering': 'no' });
     res.write(': hello\n\n');
-    const s = { res, deviceId: dev.id };
+    const s = { res, deviceId: dev.id, monitor: new URL(req.url, 'http://x').searchParams.get('monitor') === '1' };
     this.streams.add(s);
     const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 25000);
     req.on('close', () => { clearInterval(ping); this.streams.delete(s); });
@@ -368,6 +372,21 @@ class PhoneServer extends EventEmitter {
           ${others.length ? `<p><b>Already paired this phone?</b> It may be paired on another address of your PC. Try:</p><ul>${others.map(o => `<li><a href="${esc(o)}/app/index.html">${esc(o)}</a></li>`).join('')}</ul>` : ''}`), 'text/html; charset=utf-8');
       }
       this.touch(dev);
+      // the Print Monitor (src/monitor/hub.js): reads, plus controls and deleting photos, which need the same
+      // anti-forgery header as the other changes
+      if (p.startsWith('/api/monitor/') && this.api.monitor) {
+        if (req.method !== 'GET' && req.headers['x-aipa'] !== '1') return this.send(res, 403, { error: 'Refused.' });
+        const body = req.method === 'POST' ? JSON.stringify(await this.body(req, 64 * 1024)) : undefined;
+        const r = await this.api.monitor(new Request(`http://phone${req.url}`, { method: req.method, headers: req.headers.range ? { range: req.headers.range } : {}, body }));
+        const headers = {};
+        r.headers.forEach((v, k) => { headers[k] = v; });
+        res.writeHead(r.status, headers);
+        if (!r.body) return res.end();
+        const stream = require('stream').Readable.fromWeb(r.body);
+        req.on('close', () => stream.destroy());
+        stream.on('error', () => res.destroy());
+        return stream.pipe(res);
+      }
       if (req.method === 'GET') {
         const img = /^\/(?:images|i\/[A-Za-z0-9_-]{20,100})\/([A-Za-z0-9_.-]{1,120}\.(?:jpe?g|png|webp|gif))$/i.exec(p);
         if (img) return this.file(res, path.join(this.imagesDir, img[1]), this.imagesDir);

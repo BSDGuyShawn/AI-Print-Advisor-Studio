@@ -1,0 +1,402 @@
+[
+[
+10.7,
+"the length of a school bus"
+],
+[
+12.2,
+"the length of a 40-foot shipping container"
+],
+[
+18.3,
+"the length of a bowling lane"
+],
+[
+23.8,
+"the length of a tennis court"
+],
+[
+27.0,
+"the length of a blue whale"
+],
+[
+38.0,
+"the height of Christ the Redeemer, pedestal included"
+],
+[
+50.0,
+"the length of an Olympic swimming pool"
+],
+[
+73.0,
+"the height of the Taj Mahal"
+],
+[
+91.4,
+"the length of a football field, goal line to goal line"
+],
+[
+96.0,
+"the height of Big Ben's clock tower"
+],
+[
+100.0,
+"an Olympic 100-meter dash"
+],
+[
+109.7,
+"the length of a football field, end zone to end zone"
+],
+[
+135.0,
+"the height of the London Eye"
+],
+[
+146.6,
+"the height of the Great Pyramid of Giza"
+],
+[
+169.0,
+"the height of the Washington Monument"
+],
+[
+184.0,
+"the height of the Space Needle"
+],
+[
+192.0,
+"the height of the Gateway Arch"
+],
+[
+221.0,
+"the height of the Hoover Dam"
+],
+[
+269.0,
+"the length of the Titanic"
+],
+[
+319.0,
+"the height of the Chrysler Building"
+],
+[
+330.0,
+"the height of the Eiffel Tower"
+],
+[
+333.0,
+"the length of a Nimitz-class aircraft carrier"
+],
+[
+365.0,
+"the length of the cruise ship Icon of the Seas"
+],
+[
+381.0,
+"the height of the Empire State Building"
+],
+[
+400.0,
+"one lap around a running track"
+],
+[
+442.0,
+"the height of the Willis Tower"
+],
+[
+452.0,
+"the height of the Petronas Towers"
+],
+[
+508.0,
+"the height of Taipei 101"
+],
+[
+553.0,
+"the height of the CN Tower"
+],
+[
+632.0,
+"the height of the Shanghai Tower"
+],
+[
+634.0,
+"the height of the Tokyo Skytree"
+],
+[
+828.0,
+"the height of the Burj Khalifa"
+],
+[
+1000.0,
+"one kilometer"
+],
+[
+1609.0,
+"one mile, the height of a mile-high city like Denver"
+],
+[
+1825.0,
+"the length of the Brooklyn Bridge"
+],
+[
+2737.0,
+"the length of the Golden Gate Bridge"
+],
+[
+3776.0,
+"the height of Mount Fuji"
+],
+[
+4022.9999999999995,
+"the length of Central Park"
+],
+[
+4302.0,
+"the height of Pikes Peak"
+],
+[
+4807.0,
+"the height of Mont Blanc"
+],
+[
+5000.0,
+"a 5K race"
+],
+[
+5895.0,
+"the height of Mount Kilimanjaro"
+],
+[
+8038.0,
+"the length of the Mackinac Bridge"
+],
+[
+8849.0,
+"the height of Mount Everest"
+],
+[
+10000.0,
+"a 10K race"
+],
+[
+10670.0,
+"a jet's cruising altitude"
+],
+[
+10940.0,
+"the depth of the Mariana Trench"
+],
+[
+21100.0,
+"a half marathon"
+],
+[
+21600.0,
+"the length of Manhattan island"
+],
+[
+33300.0,
+"the width of the English Channel at its narrowest"
+],
+[
+42200.0,
+"a full marathon"
+],
+[
+50500.0,
+"the length of the Channel Tunnel"
+],
+[
+57100.0,
+"the length of the Gotthard Base Tunnel"
+],
+[
+82000.0,
+"the length of the Panama Canal"
+],
+[
+100000.0,
+"the height of the edge of space, the Karman line"
+],
+[
+112000.0,
+"the drive from Denver to Colorado Springs"
+],
+[
+117000.0,
+"the length of Hadrian's Wall"
+],
+[
+193300.0,
+"the length of the Suez Canal"
+],
+[
+408000.0,
+"the height of the International Space Station's orbit"
+],
+[
+804700.0,
+"the 500 miles of the Indy 500"
+],
+[
+1000000.0,
+"one thousand kilometers"
+],
+[
+1600000.0,
+"the length of the Iditarod trail"
+],
+[
+1609000.0,
+"one thousand miles"
+],
+[
+3400000.0,
+"the length of the Tour de France route"
+],
+[
+3474000.0,
+"the diameter of the Moon"
+],
+[
+3500000.0,
+"the length of the Appalachian Trail"
+],
+[
+3940000.0,
+"the distance from New York to Los Angeles as the crow flies"
+],
+[
+3945000.0,
+"the length of Route 66"
+],
+[
+4265000.0,
+"the length of the Pacific Crest Trail"
+],
+[
+4879000.0,
+"the diameter of Mercury"
+],
+[
+4990000.0,
+"the length of the Continental Divide Trail"
+],
+[
+6650000.0,
+"the length of the Nile River"
+],
+[
+6779000.0,
+"the diameter of Mars"
+],
+[
+9289000.0,
+"the length of the Trans-Siberian Railway"
+],
+[
+10921000.0,
+"the circumference of the Moon"
+],
+[
+12104000.0,
+"the diameter of Venus"
+],
+[
+12742000.0,
+"the diameter of the Earth"
+],
+[
+21196000.0,
+"the length of the Great Wall of China"
+],
+[
+40075000.0,
+"the circumference of the Earth, once around the equator"
+],
+[
+116460000.0,
+"the diameter of Saturn"
+],
+[
+139820000.0,
+"the diameter of Jupiter"
+],
+[
+299792000.0,
+"the distance light travels in one second"
+],
+[
+384400000.0,
+"the distance from the Earth to the Moon"
+],
+[
+768800000.0,
+"a round trip to the Moon"
+],
+[
+1392700000.0,
+"the diameter of the Sun"
+],
+[
+17987000000.0,
+"the distance light travels in one minute"
+],
+[
+38000000000.0,
+"the distance from Earth to Venus at its closest"
+],
+[
+54600000000.0,
+"the distance from Earth to Mars at its closest"
+],
+[
+57900000000.0,
+"the average distance from the Sun to Mercury"
+],
+[
+149600000000.0,
+"the distance from the Earth to the Sun"
+],
+[
+299200000000.0,
+"a round trip to the Sun"
+],
+[
+778500000000.0,
+"the distance from the Sun to Jupiter"
+],
+[
+1079000000000.0,
+"the distance light travels in one hour"
+],
+[
+1433000000000.0,
+"the distance from the Sun to Saturn"
+],
+[
+2870000000000.0,
+"the distance from the Sun to Uranus"
+],
+[
+4495000000000.0,
+"the distance from the Sun to Neptune"
+],
+[
+5900000000000.0,
+"the distance from the Sun to Pluto"
+],
+[
+25902000000000.0,
+"the distance light travels in one day"
+],
+[
+9460700000000000.0,
+"one light-year"
+],
+[
+4.0113368e+16,
+"the distance to Proxima Centauri, our nearest neighboring star"
+]
+]

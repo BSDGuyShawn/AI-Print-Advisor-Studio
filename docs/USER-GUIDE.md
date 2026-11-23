@@ -22,7 +22,8 @@ This guide takes you from "I downloaded a model" to "it's printing", one step at
 12. [When a print fails: the troubleshooter](#12-when-a-print-fails-the-troubleshooter)
 13. [Models from MakerWorld (Bambu Lab files)](#13-models-from-makerworld-bambu-lab-files)
 14. [Keeping an eye on AI costs](#14-keeping-an-eye-on-ai-costs)
-15. [Glossary](#glossary)
+15. [Watching your prints: the Print Monitor](#15-watching-your-prints-the-print-monitor)
+16. [Glossary](#glossary)
 
 ---
 
@@ -285,6 +286,30 @@ The **AI** button at the top shows what the app's AI requests cost this month. I
 To see what your API key has cost **in total** (including use outside this app), open your [API keys page](https://platform.claude.com/settings/keys) in the Claude Console. Settings → AI spending links there too.
 
 ---
+
+## 15. Watching your prints: the Print Monitor
+
+Add your printers in **Settings → Printers** (the address you'd type to open Fluidd or Mainsail, and for a Snapmaker U1 its API key, from the printer's screen). The app then watches them while it's running:
+
+- **The bar on the main screen** shows each printer: a thumbnail of the print, how far along it is, the time left and when it ends. Click one to open it in the Print Monitor.
+- **Print Monitor** (top bar, or the bar's button) shows every printer side by side with its camera, and a full page per printer: the live camera; the slicer's picture, the whole model from another angle and the model filling in layer by layer; progress and layers; when it started, the time printed, the time left, the estimated duration and when it ends; each toolhead's temperature and filament color (the one printing is marked ACTIVE); bed, enclosure, fans and speed; the filament used compared with everyday things; and the printer's lifetime totals.
+- **Pause, Resume and Cancel** each ask first. Cancel can't be undone.
+- **Timelapses** plays and downloads the printer's timelapse videos. **Final photos** keeps a photo of every print, taken at 99 % (before the bed drops) on your PC.
+- **Time left** is the slicer's plan scaled to how fast this print is really going (like Home Assistant's and Mainsail's "Print ETA"), so it stays right when a print runs slower or faster than the slicer guessed. While the printer is heating, the slicer's estimate is shown.
+
+**Alerts** (Settings → Print monitor): tick which events go where:
+
+- **Windows** notifications: print started, paused, error, cancelled, finished, and done and cooled (ready to remove, with the final photo).
+- **Phone (ntfy)**: install the free [ntfy](https://ntfy.sh) app, click **New** for a topic nobody could guess, subscribe to the same topic in the app.
+- **Email**: your mail server (for Gmail `smtp.gmail.com`, port 587, STARTTLS, and an **app password**). Progress emails come with a camera photo and the printer's numbers at the steps you tick (1 / 25 / 50 / 75 %), and the "done" email has the final photo. **Send a test alert** checks it.
+
+**Keep watching**: closing the window keeps the app in the tray (by the clock) so alerts and the final photo still happen; right-click the tray icon to quit. **Start with Windows** opens it in the tray when you sign in. Untick either in Settings → Print monitor.
+
+**Cameras**: a Snapmaker U1's built-in camera needs the printer's API key (the app keeps it awake while you watch or print). For other printers pick a webcam snapshot or MJPEG address in Settings → Printers, or No camera.
+
+**On your phone**: with Phone access on, the phone page has **🖨 Printers**: the same Print Monitor.
+
+**Coming from U1 Studio?** Settings → Print monitor → **Bring over settings and photos from U1 Studio** (pick its `data` folder), then stop U1 Studio from starting with Windows so you don't get every alert twice.
 
 ## Words you don't know
 

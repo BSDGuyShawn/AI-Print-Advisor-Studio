@@ -100,6 +100,13 @@
   setupBtn.textContent = '⚙';
   setupBtn.title = setupBtn.ariaLabel = 'This phone: certificate and scanning';
   if (add) add.parentNode.insertBefore(setupBtn, btn);
+  // the Print Monitor: every printer's print, camera and time left (from the app's Settings → Printers)
+  const monBtn = document.createElement('a');
+  monBtn.className = 'btn';
+  monBtn.id = 'phoneMonitorBtn';
+  monBtn.href = '/monitor/index.html';
+  monBtn.textContent = '🖨 Printers';
+  if (add) add.parentNode.insertBefore(monBtn, setupBtn);
   setupBtn.addEventListener('click', phoneSetup);
 
   function scanChoices() {

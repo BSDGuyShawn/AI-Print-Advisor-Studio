@@ -1,0 +1,41 @@
+// Small hand-drawn stroke icons (24x24), inline so the app works fully offline.
+const P = {
+  flag: '<path d="M5 21V4"/><path d="M5 4h12l-2 4 2 4H5"/><path d="M9 4v8M13 4v8M5 8h12" opacity=".5"/>',
+  pauseCircle: '<circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/>',
+  nozzleHeat: '<path d="M8 3h8v6l-2 3h-4L8 9z"/><path d="M11 12v3h2v-3"/><path d="M7 19c1-1 1-2 0-3M12 21c1-1 1-2 0-3M17 19c1-1 1-2 0-3"/>',
+  snowflake: '<path d="M12 2v20M4.5 6.5l15 11M4.5 17.5l15-11"/><path d="M9 4l3 2 3-2M9 20l3-2 3 2"/>',
+  check: '<path d="M12 2l2.4 2.1 3.2-.3.9 3.1 2.8 1.6-1.2 3 1.2 3-2.8 1.6-.9 3.1-3.2-.3L12 22l-2.4-2.1-3.2.3-.9-3.1-2.8-1.6 1.2-3-1.2-3 2.8-1.6.9-3.1 3.2.3z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
+  hourglass: '<path d="M6 3h12M6 21h12M7 3c0 5 5 6 5 9s-5 4-5 9M17 3c0 5-5 6-5 9s5 4 5 9"/>',
+  alert: '<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5"/>',
+  cancel: '<circle cx="12" cy="12" r="9"/><path d="M6 6l12 12"/>',
+  printer: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 8h18M10 8v4h4V8M7 18h10"/>',
+  offline: '<path d="M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0"/><path d="M3 3l18 18"/>',
+  fire: '<path d="M12 3c1 3 5 5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-6 1-9z"/>',
+  thermoCheck: '<path d="M10 14V5a2 2 0 0 1 4 0v9a4 4 0 1 1-4 0z"/><path d="M16 9l2 2 3-4"/>',
+  sleep: '<path d="M4 6h5l-5 6h5M13 12h4l-4 5h4M18 3h3l-3 3h3"/>',
+  bed: '<path d="M3 17h18M5 17v3M19 17v3"/><path d="M7 13c1-1 1-2 0-3s-1-2 0-3M12 13c1-1 1-2 0-3s-1-2 0-3M17 13c1-1 1-2 0-3s-1-2 0-3"/>',
+  enclosure: '<path d="M3 11l9-7 9 7v9H3z"/><path d="M14 13v4a2 2 0 1 1-2 0v-4a1 1 0 0 1 2 0z" />',
+  layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12l9 5 9-5M3 16l9 5 9-5"/>',
+  chip: '<rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/>',
+  ruler: '<path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/>',
+  history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 3"/>',
+  pause: '<path d="M9 5v14M15 5v14"/>',
+  play: '<path d="M7 4l13 8-13 8z"/>',
+  stop: '<rect x="5" y="5" width="14" height="14" rx="2"/>',
+  camera: '<path d="M3 8h4l2-3h6l2 3h4v12H3z"/><circle cx="12" cy="13" r="4"/>',
+  film: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/>',
+  cog: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+  grid: '<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/>',
+  download: '<path d="M12 3v12M7 10l5 5 5-5M4 20h16"/>',
+  trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+  fan: '<circle cx="12" cy="12" r="2"/><path d="M12 10c0-4 1-7 4-7 2 0 2 3-1 5M14 12c4 0 7 1 7 4 0 2-3 2-5-1M12 14c0 4-1 7-4 7-2 0-2-3 1-5M10 12c-4 0-7-1-7-4 0-2 3-2 5 1"/>',
+  speed: '<path d="M4 18a9 9 0 1 1 16 0"/><path d="M12 14l4-5"/>',
+  bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  wifi: '<path d="M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1"/>',
+};
+
+function icon(name, size = 22, extra = "") {
+  return `<svg class="ic ${extra}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || P.printer}</svg>`;
+}

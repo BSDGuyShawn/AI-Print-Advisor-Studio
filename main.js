@@ -184,12 +184,15 @@ function slicerInfo() {
   };
 }
 
+// started by "Start with Windows": open in the tray, not on screen
+const START_HIDDEN = process.argv.includes('--hidden');
 function createWindow() {
   win = new BrowserWindow({
-    width: 1500, height: 940, minWidth: 1150, minHeight: 720, title: DEMO ? 'AI 3D Print Advisor Studio (guided tour)' : 'AI 3D Print Advisor Studio', backgroundColor: '#E9ECEE', autoHideMenuBar: false,
+    show: !START_HIDDEN, width: 1500, height: 940, minWidth: 1150, minHeight: 720, title: DEMO ? 'AI 3D Print Advisor Studio (guided tour)' : 'AI 3D Print Advisor Studio', backgroundColor: '#E9ECEE', autoHideMenuBar: false,
     webPreferences: { preload: path.join(__dirname, DEMO ? 'preload-demo.js' : 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
   win.loadURL('app://bundle/renderer/index.html');
+  keepInTrayOnClose(win);
   win.webContents.setWindowOpenHandler(({ url }) => {
     // the demo's stand-in shop links go nowhere: the window explains instead
     if (DEMO && /^https?:\/\/demo\.invalid(\/|$)/i.test(url)) win.webContents.send('demo-notice', 'link');
@@ -1316,7 +1319,8 @@ let phoneCfg = { ...PHONE_DEFAULTS };
 let phoneSaveTimer = null;
 const Phone = new PhoneServer({
   appDir: __dirname, imagesDir: Fil.imagesDir, dataDir: app.getPath('userData'), log: (...a) => logLine(...a),
-  api: { load: filamentLoad, save: (d) => Fil.save(d), claude: filamentClaude, fetch: filamentFetch, hasKey: async () => !!(await getApiKey()) },
+  api: { load: filamentLoad, save: (d) => Fil.save(d), claude: filamentClaude, fetch: filamentFetch, hasKey: async () => !!(await getApiKey()),
+    monitor: (r) => Monitor.handle(r) },
   conf: {
     get: () => phoneCfg,
     // paired devices and last-seen times: saved a moment later, so a busy phone doesn't rewrite config.json constantly
@@ -1360,6 +1364,228 @@ ipcMain.handle('phone-pair', () => {
   return Phone.newPairCode();
 });
 ipcMain.handle('phone-remove', (_e, id) => { if (typeof id === 'string') Phone.removeDevice(id); return phoneView(); });
+
+// ---------- Print Monitor: every printer's print, camera, time left and alerts (src/monitor) ----------
+// Built from U1 Studio and the Home Assistant dashboard's scripts, so nothing else has to run. Uses the printers and
+// API keys in Settings → Printers. Keeps watching from the tray when the window is closed (Settings).
+const { MonitorHub } = require('./src/monitor/hub');
+const { Notifier } = require('./src/monitor/notify');
+const MONITOR_EVENTS = ['start', 'paused', 'error', 'cancelled', 'snapshot', 'complete', 'ready'];
+const MONITOR_DEFAULTS = {
+  enabled: true, kpiBar: true, units: 'F', snapshot_progress: 99, safe_bed_c: 40, preview_minutes: 5, keepInTray: true, startWithWindows: false,
+  notifications: {
+    desktop: { enabled: true, events: { start: true, paused: true, error: true, cancelled: true, snapshot: false, complete: true, ready: true } },
+    ntfy: { enabled: false, server: 'https://ntfy.sh', topic: '', token: null, events: { start: false, paused: true, error: true, cancelled: true, snapshot: false, complete: true, ready: true } },
+    email: { enabled: false, host: '', port: 587, security: 'starttls', user: '', pass: null, from: '', to: '', milestones: [1, 25, 50, 75],
+      events: { start: false, paused: false, error: true, cancelled: false, snapshot: false, complete: false, ready: true } },
+  },
+};
+let monitorCfg = monitorConfigFrom({});
+function monitorConfigFrom(cfg) {
+  const m = (cfg && cfg.monitor) || {}, d = MONITOR_DEFAULTS, n = m.notifications || {};
+  const ch = (k) => ({ ...d.notifications[k], ...(n[k] || {}), events: { ...d.notifications[k].events, ...((n[k] || {}).events || {}) } });
+  return { ...d, ...m, notifications: { desktop: ch('desktop'), ntfy: ch('ntfy'), email: ch('email') } };
+}
+// the settings the monitor works with: secrets decrypted
+function monitorLive() {
+  const c = monitorCfg, n = c.notifications;
+  return { ...c, notifications: { desktop: n.desktop, ntfy: { ...n.ntfy, token: dec(n.ntfy.token) }, email: { ...n.email, pass: dec(n.email.pass) } } };
+}
+const printerKey = (url) => 'p' + crypto.createHash('sha1').update(String(url || '').trim().replace(/\/+$/, '').replace(/^https?:\/\//i, '').toLowerCase()).digest('hex').slice(0, 8);
+async function monitorPrinters() {
+  if (DEMO) return [];
+  const cfg = await readConfig();
+  return (cfg.printers || []).filter(p => p.url).map(p => ({ id: printerKey(p.url), name: p.name, url: p.url, apiKey: dec(p.apiKey),
+    enabled: p.monitor !== false, camera: { mode: 'u1', intervalMs: 1000, keepalive: true, url: '', ...(p.camera || {}) } }));
+}
+const appIconPath = path.join(__dirname, 'renderer', 'img', 'app-icon.png');
+const Notes = new Notifier({
+  getCfg: () => monitorLive().notifications, log: (...a) => logLine(...a),
+  desktop: async (title, body, image) => {
+    const { Notification, nativeImage } = require('electron');
+    if (!Notification.isSupported()) throw new Error('Windows notifications aren’t available.');
+    const icon = image ? nativeImage.createFromPath(image).resize({ width: 256 }) : nativeImage.createFromPath(appIconPath);
+    const n = new Notification({ title, body, icon });
+    n.on('click', () => openMonitorWindow());
+    n.show();
+  },
+});
+const Monitor = new MonitorHub({ dataDir: path.join(app.getPath('userData'), 'monitor'), getPrinters: monitorPrinters, getSettings: () => monitorLive(), notifier: Notes, log: (...a) => logLine(...a) });
+let monitorWin = null;
+const toAll = (channel, data) => { for (const w of [win, monitorWin]) if (w && !w.isDestroyed()) w.webContents.send(channel, data); };
+Monitor.on('printer', (p) => { toAll('monitor', { type: 'printer', printer: p }); Phone.broadcast('monitor', { type: 'printer', printer: p }, 'monitor'); updateTray(); });
+Monitor.on('notify', (item) => { toAll('monitor', { type: 'notify', item }); Phone.broadcast('monitor', { type: 'notify', item }, 'monitor'); });
+Monitor.on('state', () => { toAll('monitor', { type: 'state' }); Phone.broadcast('monitor', { type: 'state' }, 'monitor'); updateTray(); });
+async function applyMonitorConfig() {
+  monitorCfg = monitorConfigFrom(await readConfig());
+  await Monitor.reload();
+  applyLoginItem();
+  updateTray();
+}
+function applyLoginItem() {
+  if (!app.isPackaged || DEMO) return;
+  try { app.setLoginItemSettings({ openAtLogin: !!monitorCfg.startWithWindows, path: process.execPath, args: ['--hidden'] }); } catch (e) { logLine('start with Windows:', e.message); }
+}
+function openMonitorWindow(focusId) {
+  if (monitorWin && !monitorWin.isDestroyed()) {
+    if (monitorWin.isMinimized()) monitorWin.restore();
+    monitorWin.show(); monitorWin.focus();
+    if (focusId !== undefined) monitorWin.webContents.send('monitor-focus', focusId || '');
+    return;
+  }
+  monitorWin = new BrowserWindow({
+    width: 1440, height: 920, minWidth: 760, minHeight: 560, title: 'Print Monitor', backgroundColor: '#0b1120', autoHideMenuBar: true, icon: appIconPath,
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
+  });
+  monitorWin.setMenuBarVisibility(false);
+  monitorWin.loadURL(`app://bundle/renderer/monitor/index.html${focusId ? `#/p/${encodeURIComponent(focusId)}` : ''}`);
+  monitorWin.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/i.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+  // downloads (timelapses, photos): ask where to save
+  monitorWin.webContents.session.on('will-download', () => {});
+  monitorWin.on('closed', () => { monitorWin = null; });
+}
+ipcMain.handle('monitor-open', (_e, id) => { openMonitorWindow(typeof id === 'string' ? id : undefined); return true; });
+ipcMain.handle('monitor-settings', () => {
+  const c = monitorCfg, n = c.notifications;
+  return { ...c, notifications: { desktop: n.desktop, ntfy: { ...n.ntfy, token: undefined, tokenSet: !!n.ntfy.token }, email: { ...n.email, pass: undefined, passSet: !!n.email.pass } },
+    canStartWithWindows: app.isPackaged && !DEMO, tour: DEMO || undefined };
+});
+ipcMain.handle('monitor-set', async (_e, patch) => {
+  if (DEMO) throw new Error('not in the tour');
+  const p = patch && typeof patch === 'object' ? patch : {};
+  const cfg = await readConfig();
+  const cur = monitorConfigFrom(cfg);
+  const c = { ...cur, notifications: { desktop: { ...cur.notifications.desktop }, ntfy: { ...cur.notifications.ntfy }, email: { ...cur.notifications.email } } };
+  for (const k of ['enabled', 'kpiBar', 'keepInTray', 'startWithWindows']) if (typeof p[k] === 'boolean') c[k] = p[k];
+  if (p.units === 'F' || p.units === 'C') c.units = p.units;
+  const numIn = (v, lo, hi) => Number.isFinite(+v) && +v >= lo && +v <= hi ? +v : null;
+  if (numIn(p.snapshot_progress, 50, 100) != null) c.snapshot_progress = +p.snapshot_progress;
+  if (numIn(p.safe_bed_c, 20, 80) != null) c.safe_bed_c = +p.safe_bed_c;
+  if (numIn(p.preview_minutes, 1, 60) != null) c.preview_minutes = +p.preview_minutes;
+  const pn = p.notifications || {};
+  for (const ch of ['desktop', 'ntfy', 'email']) {
+    const src = pn[ch]; if (!src || typeof src !== 'object') continue;
+    const dst = c.notifications[ch];
+    if (typeof src.enabled === 'boolean') dst.enabled = src.enabled;
+    if (src.events && typeof src.events === 'object') for (const e of MONITOR_EVENTS) if (typeof src.events[e] === 'boolean') dst.events = { ...dst.events, [e]: src.events[e] };
+  }
+  const nt = pn.ntfy || {}, em = pn.email || {};
+  if (typeof nt.server === 'string' && (!nt.server.trim() || /^https?:\/\/[^\s]+$/i.test(nt.server.trim()))) c.notifications.ntfy.server = nt.server.trim() || 'https://ntfy.sh';
+  if (typeof nt.topic === 'string') c.notifications.ntfy.topic = nt.topic.trim().replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+  if (typeof nt.token === 'string') c.notifications.ntfy.token = nt.token.trim() ? enc(nt.token.trim()) : null;
+  for (const k of ['host', 'user', 'from', 'to']) if (typeof em[k] === 'string') c.notifications.email[k] = em[k].trim().slice(0, 300);
+  if (numIn(em.port, 1, 65535) != null) c.notifications.email.port = +em.port;
+  if (['tls', 'starttls', 'none'].includes(em.security)) c.notifications.email.security = em.security;
+  if (typeof em.pass === 'string') c.notifications.email.pass = em.pass ? enc(em.pass) : null;
+  if (Array.isArray(em.milestones)) c.notifications.email.milestones = em.milestones.map(Number).filter(v => Number.isInteger(v) && v >= 1 && v <= 99).slice(0, 10);
+  cfg.monitor = c;
+  await writeConfig(cfg);
+  await applyMonitorConfig();
+  return true;
+});
+ipcMain.handle('monitor-test', async () => Notes.send({ event: 'test', printer: '', title: 'Test from AI 3D Print Advisor Studio', message: 'Print Monitor alerts work.', force: true }));
+ipcMain.handle('monitor-keepalive', async (_e, url) => {
+  const w = Monitor.watches.get(printerKey(url));
+  if (!w) return { ok: false, status: 'Save the printer first.' };
+  const ok = await w.camera.sendKeepalive();
+  return { ok, status: w.camera.keepaliveStatus };
+});
+ipcMain.handle('open-settings-tab', (_e, tab) => {
+  if (!win || win.isDestroyed()) return false;
+  win.show(); if (win.isMinimized()) win.restore(); win.focus();
+  win.webContents.send('open-settings-tab', typeof tab === 'string' ? tab : 'general');
+  return true;
+});
+// One-time: bring over settings and final photos from U1 Studio (the separate Python dashboard this replaces).
+// Only its plain settings are read (no keys: the printers here have their own); photos are copied, not moved.
+ipcMain.handle('monitor-import-u1studio', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Find U1 Studio’s data folder (it holds settings.json and gallery)', properties: ['openDirectory'] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  const dir = r.filePaths[0];
+  let s;
+  try { s = JSON.parse(await fs.readFile(path.join(dir, 'settings.json'), 'utf8')); } catch { throw new Error('That folder has no U1 Studio settings.json. Pick U1 Studio’s “data” folder.'); }
+  const cfg = await readConfig();
+  const m = monitorConfigFrom(cfg);
+  if (s.units === 'F' || s.units === 'C') m.units = s.units;
+  for (const k of ['snapshot_progress', 'safe_bed_c', 'preview_minutes']) if (Number.isFinite(+s[k])) m[k] = +s[k];
+  const n = s.notifications || {}, ev = n.events || {};
+  if (typeof n.desktop === 'boolean') m.notifications.desktop.enabled = n.desktop;
+  for (const e of MONITOR_EVENTS) if (typeof ev[e] === 'boolean') { m.notifications.desktop.events[e] = ev[e]; m.notifications.ntfy.events[e] = ev[e]; }
+  if (n.ntfy && typeof n.ntfy.server === 'string') m.notifications.ntfy.server = n.ntfy.server;
+  if (n.ntfy && typeof n.ntfy.topic === 'string' && n.ntfy.topic) { m.notifications.ntfy.topic = n.ntfy.topic; m.notifications.ntfy.enabled = !!n.ntfy.enabled; }
+  cfg.monitor = m; await writeConfig(cfg);
+  // photos: U1 Studio keeps them per printer id (p1, p2...); match its printers to ours by address
+  let photos = 0;
+  const ours = await monitorPrinters();
+  for (const up of s.printers || []) {
+    const mine = ours.find(o => String(o.url).replace(/^https?:\/\//, '').split(/[:/]/)[0] === String(up.host || '').trim());
+    if (!mine) continue;
+    const from = path.join(dir, 'gallery', up.id), to = path.join(app.getPath('userData'), 'monitor', 'gallery', mine.id);
+    let files = [];
+    try { files = await fs.readdir(from); } catch { continue; }
+    await fs.mkdir(to, { recursive: true });
+    for (const f of files) {
+      if (!/\.(jpg|json)$/i.test(f)) continue;
+      try { await fs.copyFile(path.join(from, f), path.join(to, f), require('fs').constants.COPYFILE_EXCL); if (f.endsWith('.jpg')) photos++; } catch { /* already there */ }
+    }
+  }
+  await applyMonitorConfig();
+  return { photos };
+});
+
+// ---------- the tray: keeps watching printers when the window is closed ----------
+let tray = null, trayNoticeShown = false, trayTimer = null;
+function monitoringActive() { return !DEMO && monitorCfg.enabled !== false && Monitor.watches.size > 0; }
+function ensureTray() {
+  const { Tray, nativeImage } = require('electron');
+  if (tray || DEMO) return;
+  tray = new Tray(nativeImage.createFromPath(appIconPath).resize({ width: 16, height: 16 }));
+  tray.setToolTip('AI 3D Print Advisor Studio');
+  tray.on('click', () => showMainWindow());
+  updateTray();
+}
+function showMainWindow() { if (win && !win.isDestroyed()) { win.show(); if (win.isMinimized()) win.restore(); win.focus(); } }
+function updateTray() {
+  if (!tray) return;
+  if (trayTimer) return;
+  trayTimer = setTimeout(() => {
+    trayTimer = null;
+    if (!tray) return;
+    const { Menu } = require('electron');
+    const ps = Monitor.state().printers;
+    const line = (p) => {
+      const pct = Math.round((p.progress || 0) * 100);
+      const left = p.time && p.time.left != null ? ` · ${Math.floor(p.time.left / 3600)}:${String(Math.round((p.time.left % 3600) / 60)).padStart(2, '0')} left` : '';
+      const st = { printing: `printing ${pct}%${left}`, preparing: 'heating up', paused: `paused at ${pct}%`, cooling: 'done, bed cooling', ready: 'done, ready to remove', waiting: 'idle', idle: 'idle', error: 'error', cancelled: 'cancelled', offline: 'offline' }[p.stage] || p.stage;
+      return `${p.name}: ${st}`;
+    };
+    const s = Monitor.summary();
+    tray.setToolTip(['AI 3D Print Advisor Studio', ...ps.slice(0, 5).map(line)].join('\n').slice(0, 127));
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: 'Open AI 3D Print Advisor Studio', click: showMainWindow },
+      { label: 'Print Monitor', click: () => openMonitorWindow() },
+      { type: 'separator' },
+      ...(ps.length ? ps.map(p => ({ label: line(p), click: () => openMonitorWindow(p.id) })) : [{ label: 'No printers set up', enabled: false }]),
+      ...(s.nextDone ? [{ label: `Next done: ${new Date(s.nextDone * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, enabled: false }] : []),
+      { type: 'separator' },
+      { label: 'Quit (stops watching printers)', click: () => { app.isQuitting = true; app.quit(); } },
+    ]));
+  }, 1500);
+}
+// closing the main window: hide it to the tray while printers are being watched (Settings → Print monitor)
+function keepInTrayOnClose(w) {
+  w.on('close', (e) => {
+    if (app.isQuitting || !monitorCfg.keepInTray || !monitoringActive()) return;
+    e.preventDefault();
+    w.hide();
+    if (monitorWin && !monitorWin.isDestroyed()) monitorWin.close();
+    if (!trayNoticeShown) {
+      trayNoticeShown = true;
+      Notes.desktop('Still watching your printers', 'AI 3D Print Advisor Studio keeps running in the tray (by the clock) for print alerts and the 99% photo. Right-click it to quit; change this in Settings → Print monitor.').catch(() => {});
+    }
+  });
+}
+app.on('before-quit', () => { app.isQuitting = true; });
 
 // Color remix, step 1: cut the plate into patches along its grooves; the window shows them, the AI groups them
 // into named parts, the user checks and corrects them. Parts confirmed before for this shape come back as they were.
@@ -1980,7 +2206,7 @@ ipcMain.handle('get-config', async () => { await S.ready;
     model: cfg.model || DEFAULT_MODEL, hasKey: !!(await getApiKey()), keyNeedsReentry: !!cfg.apiKey && !(await getApiKey()), aiMode: cfg.aiMode || 'api',
     experience: Number.isInteger(cfg.experience) ? cfg.experience : null, guideDone: !!cfg.guideDone, explainWords: typeof cfg.explainWords === 'boolean' ? cfg.explainWords : null,
     slicerPath: cfg.slicerPath || '', detectedSlicer: candidateExecutables()[0] || '',
-    printers: (cfg.printers || []).map(p => ({ name: p.name, url: p.url, hasKey: !!p.apiKey })),
+    printers: (cfg.printers || []).map(p => ({ name: p.name, url: p.url, hasKey: !!p.apiKey, monitor: p.monitor !== false, camera: p.camera || null })),
     slicer: slicerInfo(),
     autoUpdate: cfg.autoUpdate !== false, updatesSupported: app.isPackaged,
     // the booklet is offered on a later launch, not on top of the first-launch questions
@@ -1990,6 +2216,14 @@ ipcMain.handle('get-config', async () => { await S.ready;
     version: require('./package.json').version, homepage: /YOUR-GITHUB-USERNAME/.test(require('./package.json').homepage || '') ? null : require('./package.json').homepage,
   };
 });
+// a printer's camera for the Print Monitor: the U1's own (default), a snapshot or MJPEG address, or none
+function printerCamera(c, old) {
+  if (!c || typeof c !== 'object') return old || undefined;
+  const mode = ['u1', 'snapshot', 'mjpeg', 'off'].includes(c.mode) ? c.mode : 'u1';
+  const url = typeof c.url === 'string' && /^https?:\/\/\S+$/i.test(c.url.trim()) ? c.url.trim().slice(0, 500) : '';
+  const iv = Number.isFinite(+c.intervalMs) ? Math.min(10000, Math.max(250, +c.intervalMs)) : 1000;
+  return { mode, url, intervalMs: iv, keepalive: c.keepalive !== false };
+}
 ipcMain.handle('set-config', async (_e, patch) => { await S.ready;
   const cfg = await readConfig();
   delete cfg.adminKey;   // removed feature (organization admin key): don't keep an old one around
@@ -2014,9 +2248,13 @@ ipcMain.handle('set-config', async (_e, patch) => { await S.ready;
     cfg.printers = patch.printers.filter(p => p.url).map((p, i) => ({
       name: p.name || `U1 ${i + 1}`, url: p.url.trim(),
       apiKey: p.apiKey ? enc(p.apiKey) : (old.find(o => o.url === p.url.trim()) || {}).apiKey || null,
+      // Print Monitor: whether to watch it, and its camera
+      monitor: typeof p.monitor === 'boolean' ? p.monitor : (old.find(o => o.url === p.url.trim()) || {}).monitor !== false,
+      camera: printerCamera(p.camera, (old.find(o => o.url === p.url.trim()) || {}).camera),
     }));
   }
   await writeConfig(cfg);
+  if (Array.isArray(patch.printers)) applyMonitorConfig().catch(e => logLine('print monitor:', e));
   if (typeof patch.slicerPath === 'string') await setupSlicer();
   return { model: cfg.model || DEFAULT_MODEL, hasKey: !!cfg.apiKey || !!process.env.ANTHROPIC_API_KEY, aiMode: cfg.aiMode || 'api', slicer: slicerInfo() };
 });
@@ -2043,12 +2281,14 @@ if (!gotLock) app.quit();
 else {
   app.on('second-instance', (_e, argv) => {
     const f = argv.find(a => /\.(3mf|aipsession)$/i.test(a));
-    if (win) { if (win.isMinimized()) win.restore(); win.focus(); if (f) win.webContents.send('open-from-os', f); }
+    if (win) { win.show(); if (win.isMinimized()) win.restore(); win.focus(); if (f) win.webContents.send('open-from-os', f); }
   });
   app.on('open-file', (e, f) => { e.preventDefault(); if (win) win.webContents.send('open-from-os', f); });
   app.whenReady().then(() => {
     protocol.handle('app', async (req) => {
       const u = new URL(req.url);
+      // the Print Monitor's data (src/monitor/hub.js): printers, camera frames, previews, timelapses, photos
+      if (u.host === 'bundle' && u.pathname.startsWith('/api/monitor/')) return Monitor.handle(req);
       const rel = decodeURIComponent(u.pathname).replace(/^\/+/, '');
       // app://filament/images/<name>: product photos of the filament inventory, from the data folder
       const root = u.host === 'filament' ? Fil.imagesDir : __dirname;
@@ -2064,6 +2304,7 @@ else {
     createWindow();
     applyNfcConfig().catch(e => logLine('spool tag reader:', e));
     applyPhoneConfig().catch(e => logLine('phone access:', e));
+    if (!DEMO) { ensureTray(); applyMonitorConfig().catch(e => logLine('print monitor:', e)); }
     buildMenu().catch(e => logLine('menu failed:', e));
     cleanUpAfterUpdate();
     scheduleUpdateChecks();
@@ -2088,5 +2329,5 @@ else {
     })();
   });
   app.on('window-all-closed', () => app.quit());
-  app.on('will-quit', () => { Nfc.stop(); Phone.stop(); });
+  app.on('will-quit', () => { Nfc.stop(); Phone.stop(); Monitor.stop(); if (tray) tray.destroy(); });
 }

@@ -29,6 +29,13 @@ The app does not include Snapmaker Orca itself. It uses the copy you install.
 
 The tag layouts and keys the app uses come from public community research: [Bambu-Research-Group/RFID-Tag-Guide](https://github.com/Bambu-Research-Group/RFID-Tag-Guide) (Bambu Lab), the Creality CFS research ([cfs-programmer](https://github.com/MakaiView/cfs-programmer)), OpenRFID (Snapmaker and others), [ELEGOO's published tag guide](https://github.com/ELEGOO-3D/ELEGOO-RFID-Tag-Guide), [OpenSpool](https://openspool.io) and [OpenTag3D](https://opentag3d.info). Brand tags are only read; the app never writes, copies or clones them. It writes only the open formats (OpenSpool, OpenTag3D), only to blank-style NFC stickers.
 
+## Print Monitor
+
+`src/monitor/` and `renderer/monitor/` are a port of **U1 Studio** and of the scripts and automations in the
+**Snapmaker U1 Home Assistant dashboard** (camera keep-alive, G-code preview, final snapshot, print-finished and
+progress emails), by the same author as this app. `renderer/monitor/derive.js`, `icons.js`, `comparisons.json` and
+`monitor.css` are copied from U1 Studio's web app.
+
 ## Trademarks
 
 Snapmaker, Snapmaker U1 and Snapmaker Orca are trademarks of Snapmaker. Bambu Lab, Creality, QIDI, Anycubic, ELEGOO and MIFARE are trademarks of their owners. Claude is a trademark of Anthropic. ChatGPT is a trademark of OpenAI. Gemini is a trademark of Google. This project is not affiliated with or endorsed by any of them.

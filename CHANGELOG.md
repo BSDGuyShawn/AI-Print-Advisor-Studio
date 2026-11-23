@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.32.0
+- **Print Monitor**: watch every printer from the app. A bar on the main screen shows what each printer is doing
+  (thumbnail, progress, time left, when it ends); **Print Monitor** opens a window with every printer side by side and
+  a full page per printer: live camera, the print's preview pictures, progress and layers, **elapsed time, time left,
+  estimated duration and end time**, toolhead temperatures with each filament's color, bed and enclosure, fans and
+  speed, lifetime totals, pause / resume / cancel (each confirmed), **timelapse videos** and **final photos**.
+- Built in from U1 Studio and the Home Assistant dashboard's scripts, so nothing else has to run: the Snapmaker U1
+  camera keep-alive, a photo at 99 % while the part is still on the bed, layer-by-layer preview pictures drawn from the
+  G-code, and the print stages (preparing, printing, cooling, ready to remove). Time left is worked out like Home
+  Assistant's and Mainsail's "Print ETA" (the slicer's plan scaled to the print's real pace).
+- **Alerts** (Settings → Print monitor): Windows notifications, phone push with **ntfy**, and **email** like the Home
+  Assistant automations (a camera photo and the printer's numbers at 1 / 25 / 50 / 75 %, and the final photo when it's
+  done and the bed has cooled). Choose per alert which ones you get.
+- Works with any Klipper / Moonraker printer, using the printers and API keys already in Settings; a Snapmaker U1 also
+  gets its built-in camera, four toolheads with filament colors and timelapses. Other cameras: a snapshot or MJPEG address.
+- Keeps watching from the **tray** when the window is closed (so alerts and the 99 % photo aren't missed), and can
+  **start with Windows**. Paired phones get the Print Monitor too (**🖨 Printers** on the phone page).
+- **Settings is now in tabs**: General, AI, Printers, Print monitor, Filament, Phone.
+- U1 Studio users: **Settings → Print monitor → Bring over settings and photos from U1 Studio**, then stop U1 Studio
+  from starting with Windows so alerts don't come twice.
+
 ## 2.31.0
 - **Filament prices.** Each filament's details now have a **Prices** section: the **average cost per roll** (total
   spent ÷ rolls), last and lowest price paid, and a **graph** of what you paid for each roll over time. **Check prices

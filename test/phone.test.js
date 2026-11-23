@@ -262,3 +262,17 @@ test('with the secure address on: the certificate is public, pairing goes throug
   assert.strictEqual(r.secure, 'https://127.0.0.1:8766');
   assert.strictEqual(env.cfg.devices.length, 0, 'opening the page paired nothing');
 });
+
+test('the Print Monitor on phones: paired phones only, ?k= for pictures, controls need the anti-forgery header', async (t) => {
+  const seen = [];
+  const env = await setup(t, { monitor: async (r) => { seen.push([r.method, new URL(r.url).pathname]); return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json' } }); } });
+  assert.strictEqual((await req(env.port, '/api/monitor/state')).status, 401, 'not paired');
+  assert.strictEqual((await req(env.port, '/monitor/index.html')).status, 200, 'the page itself is public (it holds no data)');
+  const cookie = await env.pair();
+  const key = cookie.split('=')[1];
+  assert.strictEqual((await req(env.port, '/api/monitor/state', { headers: { cookie } })).status, 200);
+  assert.strictEqual((await req(env.port, `/api/monitor/p/p1/thumbnail?k=${key}`)).status, 200, 'an <img> passes the key in the address');
+  assert.strictEqual((await req(env.port, '/api/monitor/p/p1/control', { method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: { action: 'pause', confirm: true } })).status, 403);
+  assert.strictEqual((await req(env.port, '/api/monitor/p/p1/control', { method: 'POST', headers: { cookie, ...JSONH }, body: { action: 'pause', confirm: true } })).status, 200);
+  assert.deepStrictEqual(seen.map(s => s.join(' ')), ['GET /api/monitor/state', 'GET /api/monitor/p/p1/thumbnail', 'POST /api/monitor/p/p1/control']);
+});

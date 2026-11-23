@@ -59,6 +59,13 @@ Everything AI 3D Print Advisor Studio can do, in one list. New to 3D printing? S
 - **Labels** for spools (Avery sheet or label printer), **CSV export**, **backups** (daily automatic copies too).
 - **What to buy**: when a model needs colors you don't own, the closest ones you have and shop links.
 
+## Print Monitor
+
+- **Every printer at a glance**: a bar on the main screen with each print's thumbnail, progress, time left and end time.
+- **Print Monitor window**: live cameras, preview pictures drawn from the G-code (whole model and layer by layer), progress and layers, started / elapsed / time left / estimated duration / end time, toolheads with filament colors, bed, enclosure, fans, lifetime totals; pause / resume / cancel (confirmed); timelapse videos; a final photo of every print taken at 99 %.
+- **Alerts**: Windows notifications, phone push (ntfy) and email (progress emails with a camera photo; a "ready to remove" email with the final photo once the bed has cooled).
+- Any Klipper / Moonraker printer; Snapmaker U1 extras (built-in camera keep-alive, four toolheads, timelapses). Keeps watching from the tray; can start with Windows. On paired phones too. Replaces U1 Studio and the Home Assistant dashboard scripts.
+
 ## Print history and troubleshooting
 
 - **Print history** from your printers; rate each print so future advice learns from it.
