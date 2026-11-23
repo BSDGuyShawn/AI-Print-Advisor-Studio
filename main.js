@@ -184,14 +184,44 @@ function slicerInfo() {
   };
 }
 
+// ---------- windows open where you left them: same monitor, place and size (window-state.json) ----------
+const WIN_STATE = () => path.join(app.getPath('userData'), 'window-state.json');
+function readWinState() { try { return JSON.parse(require('fs').readFileSync(WIN_STATE(), 'utf8')); } catch { return {}; } }
+// the saved place, if it's still on a connected screen (a monitor may have been unplugged since); otherwise just the size
+function savedBounds(name, width, height) {
+  const b = DEMO ? null : readWinState()[name];
+  if (!b || !Number.isFinite(b.width) || !Number.isFinite(b.height)) return { width, height };
+  const { screen } = require('electron');
+  const onScreen = screen.getAllDisplays().some(d => {
+    const a = d.workArea;
+    return b.x < a.x + a.width - 100 && b.x + b.width > a.x + 100 && b.y >= a.y - 40 && b.y < a.y + a.height - 100;
+  });
+  const size = { width: Math.max(600, b.width), height: Math.max(400, b.height) };
+  return onScreen ? { x: b.x, y: b.y, ...size, maximized: !!b.maximized } : size;
+}
+function rememberBounds(name, w) {
+  if (DEMO) return;
+  let t;
+  const save = () => {
+    if (w.isDestroyed() || w.isMinimized() || w.isFullScreen()) return;
+    const s = readWinState();
+    s[name] = { ...w.getNormalBounds(), maximized: w.isMaximized() };
+    try { require('fs').writeFileSync(WIN_STATE(), JSON.stringify(s)); } catch {}
+  };
+  const later = () => { clearTimeout(t); t = setTimeout(save, 400); };
+  w.on('move', later); w.on('resize', later); w.on('maximize', save); w.on('unmaximize', save); w.on('close', save);
+}
 // started by "Start with Windows": open in the tray, not on screen
 const START_HIDDEN = process.argv.includes('--hidden');
 function createWindow() {
+  const { maximized: mainMax, ...mainBounds } = savedBounds('main', 1500, 940);
   win = new BrowserWindow({
-    show: !START_HIDDEN, width: 1500, height: 940, minWidth: 1150, minHeight: 720, title: DEMO ? 'AI 3D Print Advisor Studio (guided tour)' : 'AI 3D Print Advisor Studio', backgroundColor: '#E9ECEE', autoHideMenuBar: false,
+    show: !START_HIDDEN, ...mainBounds, minWidth: 1150, minHeight: 720, title: DEMO ? 'AI 3D Print Advisor Studio (guided tour)' : 'AI 3D Print Advisor Studio', backgroundColor: '#E9ECEE', autoHideMenuBar: false,
     webPreferences: { preload: path.join(__dirname, DEMO ? 'preload-demo.js' : 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
   win.loadURL('app://bundle/renderer/index.html');
+  if (mainMax) { if (START_HIDDEN) win.once('show', () => win.maximize()); else win.maximize(); }
+  rememberBounds('main', win);
   keepInTrayOnClose(win);
   win.webContents.setWindowOpenHandler(({ url }) => {
     // the demo's stand-in shop links go nowhere: the window explains instead
@@ -1433,8 +1463,9 @@ function openMonitorWindow(focusId) {
     if (focusId !== undefined) monitorWin.webContents.send('monitor-focus', focusId || '');
     return;
   }
+  const { maximized: monMax, ...monBounds } = savedBounds('monitor', 1440, 920);
   monitorWin = new BrowserWindow({
-    width: 1440, height: 920, minWidth: 760, minHeight: 560, title: 'Print Monitor', backgroundColor: '#0b1120', autoHideMenuBar: true, icon: appIconPath,
+    ...monBounds, minWidth: 760, minHeight: 560, title: 'Print Monitor', backgroundColor: '#0b1120', autoHideMenuBar: true, icon: appIconPath,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
   monitorWin.setMenuBarVisibility(false);
@@ -1442,6 +1473,8 @@ function openMonitorWindow(focusId) {
   monitorWin.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/i.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   // downloads (timelapses, photos): ask where to save
   monitorWin.webContents.session.on('will-download', () => {});
+  if (monMax) monitorWin.maximize();
+  rememberBounds('monitor', monitorWin);   // reopens on the same monitor, place and size
   monitorWin.on('closed', () => { monitorWin = null; });
 }
 ipcMain.handle('monitor-open', (_e, id) => { openMonitorWindow(typeof id === 'string' ? id : undefined); return true; });

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.32.2
+- The Print Monitor window opens where you left it: the same monitor, place and size (and maximized if it was).
+  The main window does too. If that monitor isn't connected any more, it opens on the main screen.
+
 ## 2.32.1
 - Print Monitor hardening (found by the code scanner): pictures from a printer are only saved when they really are a
   PNG or JPEG of a sane size, never written over an existing file, and a printer's status messages can only fill in
