@@ -43,10 +43,10 @@
   const STATE = { waiting: ['', 'On the PC, waiting for the troubleshooter'], added: ['ok', 'In the troubleshooter'], sent: ['ok', 'Sent to Claude with a diagnosis'] };
   function render() {
     const rows = [
-      ...uploads.map(u => `<li><img src="${u.url}" alt=""><span class="st ${u.state}"><b>${u.state === 'up' ? 'Sending…' : 'Not sent'}</b>${u.error ? `<br>${esc(u.error)}` : ''}</span><button type="button" data-drop="${u.tmp}" aria-label="Remove" ${u.state === 'up' ? 'disabled' : ''}>✕</button></li>`),
+      ...uploads.map(u => `<li><img src="${esc(u.url)}" alt=""><span class="st ${esc(u.state)}"><b>${u.state === 'up' ? 'Sending…' : 'Not sent'}</b>${u.error ? `<br>${esc(u.error)}` : ''}</span><button type="button" data-drop="${esc(u.tmp)}" aria-label="Remove" ${u.state === 'up' ? 'disabled' : ''}>✕</button></li>`),
       ...photos.map(p => {
         const [cls, text] = STATE[p.state] || STATE.waiting;
-        return `<li><img src="/api/ts-photos/${p.id}?k=${encodeURIComponent(KEY || '')}" alt="" loading="lazy"><span class="st ${cls}"><b>${esc(text)}</b><br>${esc(new Date(p.at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }))} · ${esc(p.device)}</span><button type="button" data-del="${p.id}" aria-label="Delete this photo">✕</button></li>`;
+        return `<li><img src="/api/ts-photos/${esc(p.id)}?k=${esc(encodeURIComponent(KEY || ''))}" alt="" loading="lazy"><span class="st ${cls}"><b>${esc(text)}</b><br>${esc(new Date(p.at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }))} · ${esc(p.device)}</span><button type="button" data-del="${esc(p.id)}" aria-label="Delete this photo">✕</button></li>`;
       }),
     ];
     $('list').innerHTML = rows.join('');
