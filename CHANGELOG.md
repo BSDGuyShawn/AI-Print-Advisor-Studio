@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.37.0
+- **See it in place**: the 🏠 picker under the 3D view puts the model in a setting, at its true size, with real shadows
+  and the setting's own light: **Garden table, Bedroom wall shelf, Fireplace mantel, Front porch by the door,
+  Thanksgiving table, Christmas, Desk / home office, Kitchen counter, Halloween, Kids' room toy shelf**. The setting stays
+  put; drag to turn the model (up/down tilts the view a little), scroll to zoom, ⟳ Spin turns it on its spot.
+  **Day / Evening / Night**: lamps, candles, the fire, the Christmas tree and jack-o'-lanterns light up, and
+  glow-in-the-dark filament glows. **True size / Fill the view.** Every filament finish shows in the setting.
+- **Photo settings**: 8 sharp photos to stand the model in: **Christmas table, Christmas by the fireplace, Dining
+  table, Dining table by the window, Sunny wall shelf, Wall shelf with plant, Winter snow, Kitchen counter (marble)**.
+  The photo stays put and the model stands on its table or shelf with a soft shadow, lit to match the photo; drag to
+  turn it, scroll to zoom, ⇲ Adjust to change its size and place. Built into the app (no download).
+- **My photo**: use your own photo (your real shelf, desk or room) as the backdrop: the model stands in front of it with
+  a soft shadow, lit to match the photo; sliders set its size and position. Your last six photos are kept in the list.
+- **📷 Save picture**: saves what you see as a PNG.
+
+## 2.36.1
+- Fixed: setting one painted colour of a model to **Translucent** broke the other colours on the same object (the solid
+  colours showed through each other). Only the translucent parts are see-through now.
+
 ## 2.36.0
 - **Filament finishes in the 3D view**: the button next to each toolhead's color (the old ✦ galaxy button) now picks
   the finish: **Normal, Galaxy / glitter, Silk** (glossy, pearly sheen and fine layer lines), **Matte** (flat, no shine),

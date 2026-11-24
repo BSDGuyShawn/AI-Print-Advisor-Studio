@@ -147,6 +147,21 @@
             <button id="nightBtn" class="hidden" aria-pressed="false" title="Turn the lights off to see the glow-in-the-dark filament glow">☾ Lights off</button>
           </div>
         </div>
+        <div class="scene-bar hidden" id="sceneBar">
+          <label class="scene-pick" title="Show the model in a setting: a room, a shelf, a garden… (drag to turn the model; the setting stays put)">🏠 <select id="sceneSelect" aria-label="Setting"></select></label>
+          <div class="segmented scene-only hidden" id="sceneTime" role="radiogroup" aria-label="Time of day">
+            <button role="radio" aria-checked="true" data-time="day">Day</button><button role="radio" aria-checked="false" data-time="evening">Evening</button><button role="radio" aria-checked="false" data-time="night">Night</button>
+          </div>
+          <button class="scene-only hidden" id="sceneSize" aria-pressed="true" title="True size: the model at its real size in the setting. Click to fill the view instead.">True size</button>
+          <button class="hidden" id="sceneAdjust" aria-expanded="false" title="Change the model's size and where it stands in the photo">⇲ Adjust</button>
+          <button id="sceneShot" title="Save what you see as a picture (PNG)">📷 Save picture</button>
+          <span class="scene-note" id="sceneNote" role="status"></span>
+          <div class="scene-mine hidden" id="sceneMine">
+            <label>Size <input type="range" id="mineScale" min="-2" max="2.5" step="0.01" value="0"></label>
+            <label>Left / right <input type="range" id="mineX" min="-400" max="400" step="1" value="0"></label>
+            <label>Back / front <input type="range" id="mineY" min="-300" max="700" step="1" value="0"></label>
+          </div>
+        </div>
         <div class="legend hidden" id="legend">
           <span><i style="background:var(--danger)"></i>Steeper than 45°: needs support</span>
           <span><i style="background:var(--warn)"></i>45–55°: borderline</span>

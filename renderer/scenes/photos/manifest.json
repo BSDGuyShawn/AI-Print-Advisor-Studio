@@ -1,0 +1,90 @@
+[
+ {
+  "id": "christmas-tree",
+  "name": "Christmas table",
+  "file": "christmas-tree.jpg",
+  "at": [
+   0.5,
+   0.8
+  ],
+  "light": "front",
+  "scale": 1
+ },
+ {
+  "id": "christmas-fire",
+  "name": "Christmas by the fireplace",
+  "file": "christmas-fire.jpg",
+  "at": [
+   0.5,
+   0.82
+  ],
+  "light": "front",
+  "scale": 1
+ },
+ {
+  "id": "dining",
+  "name": "Dining table",
+  "file": "dining.jpg",
+  "at": [
+   0.5,
+   0.82
+  ],
+  "light": "front",
+  "scale": 1
+ },
+ {
+  "id": "dining-window",
+  "name": "Dining table by the window",
+  "file": "dining-window.jpg",
+  "at": [
+   0.5,
+   0.8
+  ],
+  "light": "right",
+  "scale": 1
+ },
+ {
+  "id": "shelf",
+  "name": "Sunny wall shelf",
+  "file": "shelf.jpg",
+  "at": [
+   0.45,
+   0.83
+  ],
+  "light": "left",
+  "scale": 1
+ },
+ {
+  "id": "shelf-plant",
+  "name": "Wall shelf with plant",
+  "file": "shelf-plant.jpg",
+  "at": [
+   0.5,
+   0.86
+  ],
+  "light": "left",
+  "scale": 1
+ },
+ {
+  "id": "winter",
+  "name": "Winter snow",
+  "file": "winter.jpg",
+  "at": [
+   0.55,
+   0.8
+  ],
+  "light": "front",
+  "scale": 1
+ },
+ {
+  "id": "kitchen",
+  "name": "Kitchen counter (marble)",
+  "file": "kitchen.jpg",
+  "at": [
+   0.55,
+   0.8
+  ],
+  "light": "left",
+  "scale": 1
+ }
+]

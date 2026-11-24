@@ -5,6 +5,8 @@ Everything AI 3D Print Advisor Studio can do, in one list. New to 3D printing? S
 ## Check a model before printing
 
 - **3D preview**: turn and zoom the model, see it in its filament colors.
+- **Filament finishes**: silk, matte, translucent, glow in the dark, chrome and galaxy looks, with ⟳ Spin and ☾ Lights off.
+- **See it in place**: the model at true size in 10 built settings (garden, shelf, mantel, porch, Thanksgiving, Christmas, desk, kitchen, Halloween, kids' room) with day / evening / night lighting, 8 real photo settings, or your own photo; 📷 save a picture.
 - **Overhang view**: red where the model would print over thin air, orange where it's borderline.
 - **Measurements**: size in mm and inches, volume, overhang area, how much touches the bed, how stable it is, number of colors, flat tops.
 - **Orientation finder**: scores every way to place the model and marks the **lowest risk** one. Click to try each.

@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three.module.js';
 import { OrbitControls } from './vendor/OrbitControls.js';
+import { BUILT } from './scenes/built.js';
 
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
@@ -45,11 +46,13 @@ function glowColor(hex) {
   return '#' + new THREE.Color().setHSL(hsl.h, 0.95, 0.6).getHexString();
 }
 const SPARKLE_TIME = { value: 0 };
-const NIGHT = { value: 0 };
+const NIGHT = { value: 0 };   // glow-in-the-dark filament glows
+const DARK = { value: 0 };    // the plate view's "lights off": everything else is darkened
 function addSparkle(mat) {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uSparkleTime = SPARKLE_TIME;
     shader.uniforms.uNight = NIGHT;
+    shader.uniforms.uDark = DARK;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 attribute float sparkle;
@@ -65,6 +68,7 @@ vObjPos = position;`);
       .replace('#include <common>', `#include <common>
 uniform float uSparkleTime;
 uniform float uNight;
+uniform float uDark;
 varying float vSparkle;
 varying float vFinish;
 varying vec3 vObjPos;
@@ -111,7 +115,7 @@ else if (vFinish < 1.5) reflectedLight.indirectSpecular *= 0.35;`)
   if (vFinish > 5.5) {
     // chrome: a mirror of the room, tinted by the filament colour (silver = classic chrome), a crisp rim
     outgoingLight = outgoingLight * 1.15 + vec3(1.0) * pow(nh, 400.0) * 2.0 + mix(diffuseColor.rgb, vec3(1.0), 0.5) * fres * 0.35;
-    if (uNight > 0.0) outgoingLight *= 1.0 - 0.82 * uNight;
+    if (uDark > 0.0) outgoingLight *= 1.0 - 0.82 * uDark;
   } else if (vFinish > 4.5) {
     // the colour it glows: a pale/white filament glows the classic aqua-green, a coloured one a saturated version of
     // its own colour (the same rule as glowColor() below)
@@ -134,7 +138,7 @@ else if (vFinish < 1.5) reflectedLight.indirectSpecular *= 0.35;`)
     }
   } else if (uNight > 0.0) {
     // everything else goes dark (the glow's own light still reaches it: see the glow lights)
-    outgoingLight *= 1.0 - 0.82 * uNight;
+    outgoingLight *= 1.0 - 0.82 * uDark;
   }
 }
 if (vSparkle > 0.0) {
@@ -160,7 +164,7 @@ if (vSparkle > 0.0) {
 }
 #include <opaque_fragment>`);
   };
-  mat.customProgramCacheKey = () => 'finish6';
+  mat.customProgramCacheKey = () => 'finish7';
 }
 
 export class ModelViewer {
@@ -188,6 +192,7 @@ export class ModelViewer {
     this.scene.environment = studioEnvironment(this.renderer);
     this.night = false; this.spin = false; this.onSpinStop = null;
     // turning the view yourself stops the spin
+    this.controls.addEventListener('change', () => { if (this.scn && this.scn.spec.kind === 'still') this.placeOnPhoto(); });
     this.controls.addEventListener('start', () => { if (this.spin) { this.setSpin(false); if (this.onSpinStop) this.onSpinStop(); } });
 
     this.modelGroup = new THREE.Group();
@@ -205,6 +210,15 @@ export class ModelViewer {
     const el = this.renderer.domElement;
     // capture phase runs before OrbitControls: left button paints in paint/erase mode, other buttons still orbit
     el.addEventListener('pointerdown', (e) => {
+      if (this.scn && e.button === 0) {
+        e.preventDefault(); el.setPointerCapture(e.pointerId);
+        if (this.spin) { this.setSpin(false); if (this.onSpinStop) this.onSpinStop(); }
+        let x0 = e.clientX, y0 = e.clientY;
+        const move = (ev) => { this.pivot.rotation.z += (ev.clientX - x0) * 0.01; if (this.scn && this.scn.spec.kind !== 'still') this.tiltScene((ev.clientY - y0) * 0.004); x0 = ev.clientX; y0 = ev.clientY; };
+        const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); };
+        el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+        return;
+      }
       if (this.tool === 'rotate') { this.controls.enabled = true; return; }
       if (e.button !== 0) { this.controls.enabled = true; return; }
       this.controls.enabled = false;
@@ -226,10 +240,10 @@ export class ModelViewer {
     this.resize();
     let last = null;
     const loop = (t) => {
-      SPARKLE_TIME.value = (t || 0) / 1000; this.spinStep(t || 0);
       // the spin goes by the clock, not by frames, so it's the same speed on any screen
       const dt = last == null ? 1 / 60 : Math.min(0.1, ((t || 0) - last) / 1000); last = t || 0;
-      this.controls.update(this.spin ? dt : null); this.renderer.render(this.scene, this.camera); requestAnimationFrame(loop);
+      SPARKLE_TIME.value = (t || 0) / 1000; this.spinStep(t || 0, dt);
+      this.controls.update(this.spin && !this.scn ? dt : null); this.renderer.render(this.scene, this.camera); requestAnimationFrame(loop);
     };
     loop();
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.applyTheme());
@@ -240,12 +254,14 @@ export class ModelViewer {
   // 55° above the bed, so the light sweeps across the surfaces from different angles
   setSpin(on) {
     this.spin = !!on;
-    this.controls.autoRotate = this.spin;
+    this.controls.autoRotate = this.spin && !this.scn;
     this.controls.autoRotateSpeed = 2.4;   // 25 s per turn
     this.spinT0 = null;
   }
-  spinStep(t) {
+  spinStep(t, dt = 1 / 60) {
+    if (this.scn && this.scn.animate) this.scn.animate(t / 1000);
     if (!this.spin) return;
+    if (this.scn) { this.pivot.rotation.z += dt * Math.PI * 2 / 25; return; }
     if (this.spinT0 == null) {
       this.spinT0 = t;
       const off = this.camera.position.clone().sub(this.controls.target);
@@ -257,10 +273,189 @@ export class ModelViewer {
     const az = Math.atan2(off.y, off.x), r = this.spinR;
     this.camera.position.set(this.controls.target.x + r * Math.cos(el) * Math.cos(az), this.controls.target.y + r * Math.cos(el) * Math.sin(az), this.controls.target.z + r * Math.sin(el));
   }
+  // ---------- "See it in place": the model in a setting ----------
+  // spec: null (the build plate) | { kind: 'built', id } | { kind: 'still', image: URL or data URL, light?: 'left'|'right'|'front' }
+  //       (a sharp still photo as a fixed backdrop: one of the app's photo settings, or your own)
+  // opts: { time: 'day'|'evening'|'night', trueSize: true|false, mine: { scale, x, y } }
+  setScene(spec, opts = {}) {
+    this.leaveScene(false);
+    if (!spec) { this.fit('iso'); return; }
+    const time = opts.time || 'day';
+    const scn = { spec, opts: { ...opts, time, dayTime: time === 'night' ? (opts.dayTime || 'day') : time }, group: new THREE.Group(), disposables: [] };
+    this.scn = scn;
+    this.controls.autoRotate = false;
+    // the plate view's own things step aside
+    if (this.bed) this.bed.visible = false;
+    for (const [l] of this.lights) l.visible = false;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    for (const c of this.chunks) { c.mesh.castShadow = c.kind !== 'modifier'; c.mesh.receiveShadow = c.kind !== 'modifier'; if (c.kind === 'modifier') c.mesh.visible = false; }
+    // the model stands on the spot: its base centre at the pivot
+    if (!this.pivot) this.pivot = new THREE.Group();
+    this.pivot.rotation.set(0, 0, 0); this.pivot.scale.setScalar(1);
+    this.modelGroup.position.set(0, 0, 0);
+    const box = new THREE.Box3().setFromObject(this.modelGroup);
+    const c = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
+    this.modelGroup.position.set(-c.x, -c.y, box.isEmpty() ? 0 : -box.min.z);
+    this.pivot.add(this.modelGroup); this.scene.add(this.pivot);
+    scn.modelSize = box.isEmpty() ? new THREE.Vector3(50, 50, 50) : box.getSize(new THREE.Vector3());
+    let frame;
+    if (spec.kind === 'built') {
+      const def = BUILT.find(b => b.id === spec.id) || BUILT[0];
+      const r = def.build(time);
+      scn.group.add(r.group); scn.animate = r.animate; scn.spot = r.spot; frame = r.frame;
+      this.scene.background = r.background;
+      this.scene.add(scn.group);
+      this.pivot.position.copy(r.spot);
+      // the setting's own reflections: its surroundings seen from the spot (the model hidden)
+      this.pivot.visible = false;
+      scn.group.position.sub(r.spot);
+      const pm = new THREE.PMREMGenerator(this.renderer);
+      const env = pm.fromScene(this.scene, 0.02, 10, 40000);
+      pm.dispose();
+      scn.group.position.add(r.spot);
+      this.pivot.visible = true;
+      this.scene.environment = env.texture; scn.disposables.push(env);
+      // the room's reflections follow its light: dimmer in the evening, faint at night
+      this.scene.environmentIntensity = time === 'night' ? 0.18 : time === 'evening' ? 0.55 : 1;
+    } else {
+      // a still photo: a fixed backdrop filling the view (the model turns in front of it), an invisible floor that only
+      // shows the model's shadow, and light matched to the photo (its colour, and the side it comes from)
+      scn.spot = new THREE.Vector3(0, 0, 0);
+      this.pivot.position.set(0, 0, 0);
+      const shadowFloor = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.ShadowMaterial({ opacity: 0.38 }));
+      shadowFloor.receiveShadow = true; scn.group.add(shadowFloor);
+      const key = new THREE.DirectionalLight(0xffffff, 0.9);
+      const side = { left: [-900, -500, 1400], right: [900, -500, 1400], front: [150, -1100, 1300], back: [300, 900, 1500] }[spec.light] || [600, -900, 1600];
+      key.position.set(...side); key.castShadow = true; key.shadow.mapSize.set(2048, 2048);
+      const sc = key.shadow.camera; sc.left = -600; sc.right = 600; sc.top = 600; sc.bottom = -600; sc.near = 100; sc.far = 5000;
+      key.shadow.radius = 5; key.shadow.bias = -0.0004; key.shadow.normalBias = 0.6;
+      scn.group.add(key);
+      this.scene.add(scn.group);
+      const dim = time === 'night' ? 0.12 : time === 'evening' ? 0.45 : 1;
+      const fill = new THREE.HemisphereLight(0xffffff, 0x777068, 0.9);
+      scn.group.add(fill);
+      const tex = new THREE.TextureLoader().load(spec.image, (t) => {
+        t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; this.fitBackdrop(); this.placeOnPhoto();
+        // the photo's overall colour tints the fill light, so the model sits in the same light as the room
+        try {
+          const c = document.createElement('canvas'); c.width = c.height = 16;
+          const x = c.getContext('2d'); x.drawImage(t.image, 0, 0, 16, 16);
+          const d = x.getImageData(0, 0, 16, 16).data; let r = 0, gg = 0, b = 0;
+          for (let i = 0; i < d.length; i += 4) { r += d[i]; gg += d[i + 1]; b += d[i + 2]; }
+          const n = d.length / 4, avg = new THREE.Color(r / n / 255, gg / n / 255, b / n / 255);
+          fill.color.copy(new THREE.Color(1, 1, 1).lerp(avg.clone().multiplyScalar(1 / Math.max(0.2, Math.max(avg.r, avg.g, avg.b))), 0.45));
+          key.color.lerp(fill.color, 0.3);
+        } catch {}
+      });
+      tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+      scn.disposables.push(tex); scn.backdrop = tex;
+      this.scene.background = tex;
+      this.scene.environment = studioEnvironment(this.renderer);
+      this.scene.backgroundIntensity = dim; this.scene.environmentIntensity = dim * 0.8;
+      key.intensity = 1.1 * dim; fill.intensity = 0.9 * dim;
+      if (time === 'evening') key.color.set(0xffc490); else if (time === 'night') key.color.set(0x8090c0);
+      const m = opts.mine || {};
+      this.pivot.scale.setScalar(m.scale || 1);
+      this.pivot.position.set(m.x || 0, m.y || 0, 0);
+      frame = { width: 520, dir: new THREE.Vector3(0, -1, spec.pitch ?? 0.18) };
+    }
+    NIGHT.value = time === 'night' ? 1 : time === 'evening' ? 0.25 : 0; DARK.value = 0;
+    scn.frame = frame;
+    this.frameScene();
+    this.updateGlowFx();
+  }
+  // the camera on the setting: true size shows the setting's own width around the spot; "fill" fits the model
+  frameScene() {
+    const scn = this.scn; if (!scn) return;
+    const f = scn.frame, size = scn.modelSize.clone().multiplyScalar(this.pivot.scale.x);
+    const target = scn.spot.clone().add(this.pivot.position.clone().sub(scn.spot).setZ(0));
+    target.z = this.pivot.position.z + size.z * 0.5;
+    const tanH = Math.tan((this.camera.fov * Math.PI) / 360) * Math.max(0.5, this.camera.aspect);
+    // in a photo the size is set with the Size slider (a photo has no scale), so the framing stays put
+    const base = scn.spec.kind === 'still' ? scn.modelSize : size;
+    const width = scn.opts.trueSize === false && scn.spec.kind !== 'still' ? Math.max(size.x, size.y, size.z) * 2.2 : Math.max(f.width, Math.max(base.x, base.z) * 1.6);
+    const dist = width / 2 / tanH;
+    const dir = f.dir.clone().normalize();
+    this.camera.position.copy(target).addScaledVector(dir, dist);
+    this.camera.near = Math.max(1, dist / 200); this.camera.far = dist * 60 + 60000; this.camera.updateProjectionMatrix();
+    this.controls.target.copy(target);
+    this.controls.enableRotate = false; this.controls.enablePan = false; this.controls.enableZoom = true;
+    this.controls.minDistance = Math.max(30, Math.max(size.x, size.y, size.z) * 0.9);
+    this.controls.maxDistance = dist * 1.8;
+    this.controls.update();
+    this.fitBackdrop();
+    this.placeOnPhoto();
+  }
+  // In a still photo the model's feet go on the photo's table / shelf: the photo says where that surface is (fractions
+  // of the photo's width and height); the view is shifted so the model stands there, wherever the photo is cropped
+  placeOnPhoto() {
+    const scn = this.scn, t = scn && scn.backdrop;
+    if (!scn || scn.spec.kind !== 'still') { this.camera.clearViewOffset(); return; }
+    const W = Math.max(1, this.renderer.domElement.clientWidth), H = Math.max(1, this.renderer.domElement.clientHeight);
+    let fx = scn.spec.at ? scn.spec.at[0] : 0.5, fy = scn.spec.at ? scn.spec.at[1] : 0.62;
+    if (t && t.image && t.image.width) {
+      // the photo is cropped to fill the view (fitBackdrop): photo fractions -> view fractions (texture v runs upward)
+      fx = (fx - t.offset.x) / t.repeat.x;
+      fy = 1 - ((1 - fy) - t.offset.y) / t.repeat.y;
+    }
+    fx = Math.min(0.92, Math.max(0.08, fx)); fy = Math.min(0.95, Math.max(0.3, fy));
+    // the camera aims at the model's middle; its feet are below that by half its height on screen
+    const dist = this.camera.position.distanceTo(this.controls.target);
+    const visH = 2 * dist * Math.tan((this.camera.fov * Math.PI) / 360);
+    const halfZ = (scn.modelSize.z * this.pivot.scale.x) / 2;
+    const feet = 0.5 + halfZ / visH;          // where the feet are now, as a fraction of the view's height
+    this.camera.setViewOffset(W, H, (0.5 - fx) * W, (feet - fy) * H, W, H);
+  }
+  // dragging up/down tilts the view a little (the setting stays where it is)
+  tiltScene(d) {
+    const off = this.camera.position.clone().sub(this.controls.target);
+    const r = off.length(), flat = Math.hypot(off.x, off.y);
+    const el = Math.min(1.1, Math.max(0.02, Math.atan2(off.z, flat) + d));
+    const az = Math.atan2(off.y, off.x);
+    this.camera.position.set(this.controls.target.x + r * Math.cos(el) * Math.cos(az), this.controls.target.y + r * Math.cos(el) * Math.sin(az), this.controls.target.z + r * Math.sin(el));
+  }
+  // your own photo fills the view without stretching (cropped like a cover photo)
+  fitBackdrop() {
+    const t = this.scn && this.scn.backdrop;
+    if (!t || !t.image || !t.image.width) return;
+    const ca = this.camera.aspect, ia = t.image.width / t.image.height;
+    t.matrixAutoUpdate = true;
+    if (ca > ia) { t.repeat.set(1, ia / ca); t.offset.set(0, (1 - ia / ca) / 2); } else { t.repeat.set(ca / ia, 1); t.offset.set((1 - ca / ia) / 2, 0); }
+  }
+  setSceneOptions(o) { if (!this.scn) return; Object.assign(this.scn.opts, o);
+    if (o.mine) { this.pivot.scale.setScalar(o.mine.scale || 1); this.pivot.position.set(o.mine.x || 0, o.mine.y || 0, 0); }
+    if ('trueSize' in o || o.mine) this.frameScene(); }
+  leaveScene(refit = true) {
+    const scn = this.scn;
+    if (!scn) return;
+    this.scene.remove(scn.group);
+    scn.group.traverse(o => { o.geometry?.dispose(); if (o.material) { o.material.map?.dispose(); o.material.dispose(); } });
+    for (const d of scn.disposables) d.dispose?.();
+    this.scn = null;
+    // back to the build plate exactly as it was
+    this.pivot.remove(this.modelGroup); this.scene.remove(this.pivot);
+    this.modelGroup.position.set(0, 0, 0); this.scene.add(this.modelGroup);
+    for (const c of this.chunks) { c.mesh.castShadow = false; c.mesh.receiveShadow = false; c.mesh.visible = true; }
+    for (const [l] of this.lights) l.visible = true;
+    if (this.bed) this.bed.visible = true;
+    this.renderer.shadowMap.enabled = false;
+    this.camera.clearViewOffset();
+    this.scene.backgroundRotation.set(0, 0, 0); this.scene.environmentRotation.set(0, 0, 0);
+    this.scene.backgroundIntensity = 1; this.scene.environmentIntensity = 1;
+    this.controls.enableRotate = true; this.controls.enablePan = true; this.controls.minDistance = 0; this.controls.maxDistance = Infinity;
+    this.controls.autoRotate = this.spin;
+    this.setNight(this.night);
+    if (refit) this.fit('iso');
+  }
+  // the view as it is now, as a picture (for "Save picture")
+  snapshot() { this.renderer.render(this.scene, this.camera); return this.renderer.domElement.toDataURL('image/png'); }
+
   // Lights off: the room goes dark so glow-in-the-dark filament shows
   setNight(on) {
     this.night = !!on;
-    NIGHT.value = this.night ? 1 : 0;
+    if (this.scn) { this.setScene(this.scn.spec, { ...this.scn.opts, time: this.night ? 'night' : (this.scn.opts.dayTime || 'day') }); return; }
+    NIGHT.value = this.night ? 1 : 0; DARK.value = NIGHT.value;
     for (const [l, i] of this.lights) l.intensity = this.night ? i * 0.06 : i;
     this.scene.environment = this.night ? null : studioEnvironment(this.renderer);
     this.scene.background = this.night ? new THREE.Color('#030405') : new THREE.Color(css('--viewer-bg') || '#DDE2E6');
@@ -269,8 +464,8 @@ export class ModelViewer {
   // In the dark a glow-in-the-dark print lights what's around it: a light at each glowing object's centre (the bed and
   // neighbouring parts take its colour) and a soft halo (like the bloom in a photo of one)
   updateGlowFx() {
-    if (this.glowFx) { this.scene.remove(this.glowFx); this.glowFx.traverse(o => { o.geometry?.dispose(); o.material?.map?.dispose(); o.material?.dispose(); }); this.glowFx = null; }
-    if (!this.night) return;
+    if (this.glowFx) { this.glowFx.parent?.remove(this.glowFx); this.glowFx.traverse(o => { o.geometry?.dispose(); o.material?.map?.dispose(); o.material?.dispose(); }); this.glowFx = null; }
+    if (!this.night && !(this.scn && this.scn.opts.time === 'night')) return;
     const g = new THREE.Group();
     const glows = this.chunks.filter(c => c.glow).sort((a, b) => b.glow.radius - a.glow.radius).slice(0, 8);
     if (!glows.length) return;
@@ -293,7 +488,7 @@ export class ModelViewer {
       g.add(halo);
     }
     this.glowFx = g;
-    this.scene.add(g);
+    this.modelGroup.add(g);
   }
 
   applyTheme() {
@@ -307,6 +502,7 @@ export class ModelViewer {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    if (this.scn) { this.fitBackdrop(); this.placeOnPhoto(); }
   }
 
   buildBed() {
@@ -356,7 +552,8 @@ export class ModelViewer {
       maxZ = Math.max(maxZ, geo.boundingBox.max.z);
     }
     this.recolor();
-    this.fit('iso');
+    // in a setting: the new model goes onto the setting's surface
+    if (this.scn) this.setScene(this.scn.spec, this.scn.opts); else this.fit('iso');
   }
 
   setMode(mode) { this.mode = mode; this.recolor(); }
@@ -420,10 +617,14 @@ export class ModelViewer {
           const glowFil = Object.keys(fns).find(k => fns[k] === 5 && (Number(k) === c.extruder || (tf && tf.includes(Number(k))))) || c.extruder;
           c.glow = { color: glowColor(this.colors[glowFil] || '#cfe9d8'), center: bb.getCenter(new THREE.Vector3()), radius: Math.max(5, bb.getSize(new THREE.Vector3()).length() / 2) };
         } else c.glow = null;
-        let clear = false;
-        for (let k = 0; k < fn.length; k += 3) if (fn[k] > 3.5 && fn[k] < 4.5) { clear = true; break; }
+        let clearN = 0;
+        for (let k = 0; k < fn.length; k += 3) if (fn[k] > 3.5 && fn[k] < 4.5) clearN++;
+        const clear = clearN > 0;
+        // a whole object in translucent filament shows its own inside; an object with translucent parts painted on it
+        // keeps writing depth, so its solid colours stay solid (only the translucent parts let things through)
+        const allClear = clearN === fn.length / 3;
         const m = c.mesh.material;
-        if (m.transparent !== clear) { m.transparent = clear; m.depthWrite = !clear; m.needsUpdate = true; }
+        if (m.transparent !== clear || m.depthWrite !== !allClear) { m.transparent = clear; m.depthWrite = !allClear; m.needsUpdate = true; }
         // drawn after the (slightly see-through) bed, so the bed never paints over them
         c.mesh.renderOrder = clear ? 2 : 0;
       }
@@ -431,6 +632,7 @@ export class ModelViewer {
   }
 
   fit(view = 'iso') {
+    if (this.scn) { this.frameScene(); return; }   // in a setting the camera stays on the setting
     const box = new THREE.Box3().setFromObject(this.modelGroup);
     if (box.isEmpty()) box.set(new THREE.Vector3(-50, -50, 0), new THREE.Vector3(50, 50, 50));
     const center = box.getCenter(new THREE.Vector3());
@@ -841,4 +1043,19 @@ export class ModelViewer {
     c.getContext('2d').drawImage(canvas, 0, 0, c.width, c.height);
     return c.toDataURL('image/jpeg', 0.85);
   }
+}
+
+// Pictures for the AI, file thumbnails and colour-scheme cards are always of the model on the plain build plate: a
+// setting is set aside while they're taken, then put back
+for (const name of ['capture', 'thumbnails', 'filamentPreview', 'regionPreview']) {
+  const orig = ModelViewer.prototype[name];
+  if (!orig) continue;
+  ModelViewer.prototype[name] = function (...args) {
+    const back = this.scn ? { spec: this.scn.spec, opts: this.scn.opts, rot: this.pivot.rotation.z, cam: this.camera.position.clone(), target: this.controls.target.clone() } : null;
+    if (back) this.leaveScene(false);
+    try { return orig.apply(this, args); }
+    finally {
+      if (back) { this.setScene(back.spec, back.opts); this.pivot.rotation.z = back.rot; this.camera.position.copy(back.cam); this.controls.target.copy(back.target); this.controls.update(); }
+    }
+  };
 }

@@ -1,5 +1,6 @@
 import { ModelViewer, FINISH_CODES } from './viewer.js';
 import { GcodePreview } from './gcode-preview.js';
+import { BUILT } from './scenes/built.js';
 import { createGlossary } from './glossary.js';
 
 const api = window.advisor;
@@ -1139,7 +1140,7 @@ function renderFileInfo() {
   $('fileTitle').innerHTML = `<strong>${esc(f.fileName)}</strong>${f.printer ? ` <span>made for ${esc(f.printer)}</span>` : ''}`;
   drop.classList.add('compact');
   drop.querySelector('.drop-title').textContent = 'Drop another .3mf here to replace it';
-  ['thumbBlock', 'plateBlock', 'materialBlock', 'prefBlock', 'viewerTools'].forEach(id => $(id).classList.remove('hidden'));
+  ['thumbBlock', 'plateBlock', 'materialBlock', 'prefBlock', 'viewerTools', 'sceneBar'].forEach(id => $(id).classList.remove('hidden'));
   $('viewerEmpty').classList.add('hidden');
   const imgs = f.images.filter(i => !/pick|small/i.test(i.label));
   $('thumbBlock').classList.toggle('hidden', !imgs.length);
@@ -1422,6 +1423,84 @@ function filamentLooks(slots = state.slots) {
   return { colors, sparkle, finish };
 }
 function pushColors(v = viewer) { const L = filamentLooks(); v.setFilamentColors(L.colors, L.sparkle, L.finish); updateNightBtn(); }
+// ---------- "See it in place": the model in a setting (renderer/viewer.js setScene, renderer/scenes/) ----------
+// 3D-built settings (every theme, day / evening / night, true size), the app's photo settings (sharp still photos in
+// renderer/scenes/photos/, listed in its manifest.json with where the model stands in each) and your own photos.
+// Dragging turns the model; the setting stays put. The app always starts on the build plate.
+let SCENE_STILLS = [];
+fetch('scenes/photos/manifest.json').then(r => (r.ok ? r.json() : [])).then(l => { SCENE_STILLS = Array.isArray(l) ? l : []; renderSceneSelect(); }).catch(() => {});
+const SC = { sel: '', time: 'day', trueSize: true, mine: { scale: 1, x: 0, y: 0 }, myPhotos: [], busy: false };
+async function renderSceneSelect() {
+  try { SC.myPhotos = await api.sceneMyPhotos(); } catch { SC.myPhotos = []; }
+  const o = (v, label) => `<option value="${esc(v)}" ${SC.sel === v ? 'selected' : ''}>${esc(label)}</option>`;
+  $('sceneSelect').innerHTML = o('', 'Build plate (no setting)')
+    + `<optgroup label="Settings">${BUILT.map(b => o(`built:${b.id}`, b.name)).join('')}</optgroup>`
+    + (SCENE_STILLS.length ? `<optgroup label="Photos">${SCENE_STILLS.map(p => o(`still:${p.id}`, p.name)).join('')}</optgroup>` : '')
+    + `<optgroup label="My photos">${SC.myPhotos.map(p => o(`mine:${p.id}`, p.name)).join('')}<option value="mine:+">Add a photo…</option></optgroup>`;
+}
+async function applyScene() {
+  if (SC.busy) return;
+  const sel = SC.sel;
+  const inScene = !!sel;
+  document.querySelectorAll('#sceneBar .scene-only').forEach(e => e.classList.toggle('hidden', !inScene));
+  const photo = sel.startsWith('mine:') || sel.startsWith('still:');
+  $('sceneAdjust').classList.toggle('hidden', !photo);
+  if (!photo) { $('sceneMine').classList.add('hidden'); $('sceneAdjust').setAttribute('aria-expanded', 'false'); }
+  $('sceneSize').classList.toggle('hidden', !inScene || photo);
+  document.querySelectorAll('#sceneTime [data-time]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.time === SC.time)));
+  if (!inScene) { viewer.setScene(null); $('sceneNote').textContent = ''; return; }
+  SC.busy = true;
+  try {
+    let spec;
+    if (sel.startsWith('built:')) spec = { kind: 'built', id: sel.slice(6) };
+    else if (sel.startsWith('still:')) {
+      // an app photo: where the model stands in it is preset (the sliders still adjust it)
+      const p = SCENE_STILLS.find(x => x.id === sel.slice(6));
+      if (!p) throw new Error('That photo setting isn’t available.');
+      if (SC.lastStill !== p.id) { SC.mine = { scale: p.scale || 1, x: p.x || 0, y: p.y || 0 }; SC.lastStill = p.id; syncMineSliders(); }
+      spec = { kind: 'still', image: `scenes/photos/${p.file}`, light: p.light, pitch: p.pitch, at: p.at };
+    } else if (sel.startsWith('mine:')) { SC.lastStill = null; spec = { kind: 'still', image: await api.sceneMyPhoto(sel.slice(5)), light: 'front' }; }
+    $('sceneNote').textContent = '';
+    viewer.setScene(spec, { time: SC.time, trueSize: SC.trueSize, mine: SC.mine });
+    localStorage.setItem('aipa.scene', JSON.stringify({ sel, time: SC.time, trueSize: SC.trueSize }));
+  } catch (e) {
+    $('sceneNote').textContent = ''; toast(cleanErr(e), 7000);
+    SC.sel = ''; $('sceneSelect').value = ''; viewer.setScene(null);
+    document.querySelectorAll('#sceneBar .scene-only').forEach(x => x.classList.add('hidden'));
+  } finally { SC.busy = false; }
+}
+$('sceneSelect').onchange = async (e) => {
+  let v = e.target.value;
+  if (v === 'mine:+') {
+    try { const p = await api.sceneAddPhoto(); if (!p) { e.target.value = SC.sel; return; } v = `mine:${p.id}`; SC.mine = { scale: 1, x: 0, y: 0 }; $('mineScale').value = 0; $('mineX').value = 0; $('mineY').value = 0; }
+    catch (err) { toast(cleanErr(err), 6000); e.target.value = SC.sel; return; }
+  }
+  SC.sel = v; await renderSceneSelect(); await applyScene();
+};
+document.querySelectorAll('#sceneTime [data-time]').forEach(b => b.onclick = () => { SC.time = b.dataset.time; applyScene(); });
+$('sceneSize').onclick = () => {
+  SC.trueSize = !SC.trueSize;
+  $('sceneSize').setAttribute('aria-pressed', String(SC.trueSize));
+  $('sceneSize').textContent = SC.trueSize ? 'True size' : 'Fill the view';
+  $('sceneSize').title = SC.trueSize ? 'True size: the model at its real size in the setting. Click to fill the view instead.' : 'Fill the view: the model shown big. Click for its true size in the setting.';
+  viewer.setSceneOptions({ trueSize: SC.trueSize });
+};
+function syncMineSliders() { $('mineScale').value = Math.log2(SC.mine.scale || 1); $('mineX').value = SC.mine.x || 0; $('mineY').value = SC.mine.y || 0; }
+$('sceneAdjust').onclick = () => {
+  const open = $('sceneMine').classList.toggle('hidden') === false;
+  $('sceneAdjust').setAttribute('aria-expanded', String(open));
+};
+const mineChange = () => { SC.mine = { scale: Math.pow(2, Number($('mineScale').value)), x: Number($('mineX').value), y: Number($('mineY').value) }; viewer.setSceneOptions({ mine: SC.mine }); };
+for (const id of ['mineScale', 'mineX', 'mineY']) $(id).oninput = mineChange;
+$('sceneShot').onclick = async () => {
+  try {
+    const where = SC.sel ? $('sceneSelect').selectedOptions[0].textContent : '';
+    const p = await api.saveImage({ dataUrl: viewer.snapshot(), name: `${(state.file && (state.printName || state.file.fileName.replace(/\.3mf$/i, ''))) || 'Print'}${where ? ` - ${where}` : ''}` });
+    if (p) toast('Picture saved.', 5000, () => api.showInFolder(p));
+  } catch (e) { toast(cleanErr(e), 6000); }
+};
+renderSceneSelect();
+
 // the 3D view's Spin and Lights off buttons
 $('spinBtn').onclick = () => { const on = !viewer.spin; viewer.setSpin(on); $('spinBtn').setAttribute('aria-pressed', String(on)); };
 viewer.onSpinStop = () => $('spinBtn').setAttribute('aria-pressed', 'false');

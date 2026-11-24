@@ -115,6 +115,19 @@ textarea { resize: vertical; font-size: 14px; }
 .fil-cautions .fc { padding: 7px 9px; border-radius: var(--radius-s); border-left: 3px solid var(--warn); background: rgb(224 163 58 / .12); }
 .fil-cautions .fc.abrasive { border-left-color: var(--danger); background: rgb(224 106 85 / .13); }
 .fil-cautions .fc b { display: block; margin-bottom: 2px; }
+/* "See it in place": the setting picker and its options, along the bottom of the 3D view */
+.scene-bar { position: absolute; left: 12px; bottom: 12px; z-index: 4; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: calc(100% - 24px); }
+.scene-bar > button, .scene-bar .scene-pick { font: inherit; font-size: 12.5px; background: var(--panel); color: inherit; border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; cursor: pointer; }
+.scene-bar .scene-pick { display: inline-flex; align-items: center; gap: 4px; padding-top: 3px; padding-bottom: 3px; }
+.scene-bar .scene-pick select { font: inherit; background: transparent; color: inherit; border: 0; max-width: 220px; padding: 0; }
+.scene-bar .scene-pick select option, .scene-bar .scene-pick select optgroup { background: var(--panel); color: var(--text); }
+.scene-bar .segmented button { font-size: 12.5px; }
+.scene-bar #sceneSize[aria-pressed="false"] { opacity: .85; }
+.scene-bar #sceneAdjust[aria-expanded="true"] { background: var(--accent); color: var(--accent-ink, #fff); }
+.scene-note { font-size: 12px; color: var(--muted); background: var(--panel); border-radius: 999px; padding: 3px 9px; }
+.scene-note:empty { display: none; }
+.scene-mine { flex-basis: 100%; display: flex; gap: 12px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 6px 10px; font-size: 12px; }
+.scene-mine label { display: flex; align-items: center; gap: 6px; }
 .finish-menu { position: fixed; z-index: 1000; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-s); box-shadow: 0 6px 24px rgb(0 0 0 / .35); padding: 4px; display: flex; flex-direction: column; min-width: 190px; }
 .finish-menu button { font: inherit; font-size: 13px; text-align: left; background: none; border: 0; color: inherit; padding: 6px 10px; border-radius: 4px; cursor: pointer; display: flex; gap: 8px; align-items: center; }
 .finish-menu button:hover, .finish-menu button[aria-checked="true"] { background: var(--line); }

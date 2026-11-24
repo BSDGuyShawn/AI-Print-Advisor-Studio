@@ -2431,6 +2431,42 @@ ipcMain.handle('history-list', async () => { await S.ready;
 ipcMain.handle('history-rate', async (_e, { jobId, rating, note }) => { await S.ready; await S.printLog.rate(jobId, rating, note); return true; });
 
 ipcMain.handle('show-in-folder', (_e, p) => shell.showItemInFolder(p));
+
+// ---------- "See it in place": photo panoramas, your own photos, saving a picture ----------
+const scenesDir = () => path.join(app.getPath('userData'), 'scenes');
+// your own photos as backdrops: copied into the app's data folder (the last 6), offered again next time
+const mineDir = () => path.join(scenesDir(), 'mine');
+async function myPhotos() {
+  try { return (await fs.readdir(mineDir())).filter(n => /\.(jpe?g|png|webp)$/i.test(n)).sort().reverse(); } catch { return []; }
+}
+ipcMain.handle('scene-my-photos', async () => (await myPhotos()).map(n => ({ id: n, name: n.replace(/^\d+-/, '').replace(/\.\w+$/, '') })));
+ipcMain.handle('scene-my-photo', async (_e, id) => {
+  if (typeof id !== 'string' || !/^[\w .()-]+\.(jpe?g|png|webp)$/i.test(id)) throw new Error('Unknown photo.');
+  const buf = await fs.readFile(path.join(mineDir(), id));
+  const mime = /png$/i.test(id) ? 'image/png' : /webp$/i.test(id) ? 'image/webp' : 'image/jpeg';
+  return `data:${mime};base64,${buf.toString('base64')}`;
+});
+ipcMain.handle('scene-add-photo', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Choose a photo to show the print in', filters: [{ name: 'Photos', extensions: ['jpg', 'jpeg', 'png', 'webp'] }], properties: ['openFile'] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  const src = r.filePaths[0], st = await fs.stat(src);
+  if (st.size > 40 * 1024 * 1024) throw new Error('That photo is very large (over 40 MB). Pick a smaller one.');
+  await fs.mkdir(mineDir(), { recursive: true });
+  const name = `${Date.now()}-${path.basename(src).replace(/[^\w .()-]/g, '_').slice(-60)}`;
+  await fs.copyFile(src, path.join(mineDir(), name));
+  for (const old of (await myPhotos()).slice(6)) await fs.unlink(path.join(mineDir(), old)).catch(() => {});
+  return { id: name, name: name.replace(/^\d+-/, '').replace(/\.\w+$/, '') };
+});
+// "Save picture": the 3D view as a PNG
+ipcMain.handle('save-image', async (_e, { dataUrl, name }) => {
+  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
+  if (!m) throw new Error('No picture to save.');
+  const safe = String(name || 'Print').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 120) || 'Print';
+  const r = await dialog.showSaveDialog(win, { title: 'Save the picture', defaultPath: path.join(app.getPath('pictures'), `${safe}.png`), filters: [{ name: 'PNG picture', extensions: ['png'] }] });
+  if (r.canceled || !r.filePath) return null;
+  await fs.writeFile(r.filePath, Buffer.from(m[1], 'base64'));
+  return r.filePath;
+});
 ipcMain.handle('browse-slicer', async () => {
   const r = await dialog.showOpenDialog(win, { title: 'Find Snapmaker Orca', properties: ['openFile'], filters: process.platform === 'win32' ? [{ name: 'Program', extensions: ['exe'] }] : [] });
   return r.canceled ? null : r.filePaths[0];
