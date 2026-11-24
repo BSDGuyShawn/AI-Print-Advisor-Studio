@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.37.4
+- **Accent lights in the photo settings** too (under **⇲ Adjust**): the lights in the photo (Christmas tree lights,
+  candle flames, the fire, lamps) are picked out and keep shining when you switch to **Evening** or **Night**, while
+  the room around them goes dark; the slider dims them, turns them off (0) or makes them brighter (2).
+
 ## 2.37.3
 - **⇲ Adjust in the built settings** (garden, shelf, mantel, porch, Thanksgiving, Christmas, desk, kitchen, Halloween,
   kids' room), with:

@@ -368,7 +368,34 @@ export class ModelViewer {
       });
       tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
       scn.disposables.push(tex); scn.backdrop = tex;
-      this.scene.background = tex;
+      // the photo is drawn by its own full-view shader (not a plain background) so the lights in it (Christmas lights,
+      // the fire, candle flames, lamps) can be told apart from the rest: they keep shining at night and the Accent
+      // lights slider dims, brightens or turns them off. A "light" is a spot much brighter than what's around it (the
+      // photo's own blurred mipmap), or a bright, strongly coloured (warm) spot.
+      const bg = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+        uniforms: { map: { value: tex }, rep: { value: tex.repeat }, off: { value: tex.offset }, uRoom: { value: 1 }, uLights: { value: 1 } },
+        vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 1.0, 1.0); }',
+        fragmentShader: `uniform sampler2D map; uniform vec2 rep; uniform vec2 off; uniform float uRoom; uniform float uLights; varying vec2 vUv;
+void main() {
+  vec2 uv = off + vUv * rep;
+  vec3 c = texture2D(map, uv).rgb;
+  vec3 s = texture2D(map, uv, 1.5).rgb;     // slightly soft: the mask's edges blend
+  vec3 blur = texture2D(map, uv, 7.0).rgb;   // the wider surroundings (so a whole out-of-focus light counts, not just its rim)
+  float mx = max(s.r, max(s.g, s.b)), mn = min(s.r, min(s.g, s.b));
+  float lum = dot(s, vec3(0.2126, 0.7152, 0.0722)), lumB = dot(blur, vec3(0.2126, 0.7152, 0.0722));
+  // lights are warm (more red than blue): sky, snow and cool daylight never count
+  float warmth = smoothstep(0.0, 0.12, s.r - s.b);
+  float spot = smoothstep(0.18, 0.45, lum - lumB) * smoothstep(0.5, 0.85, lum) * warmth;
+  float fire = smoothstep(0.82, 0.97, mx) * smoothstep(0.55, 0.8, (mx - mn) / max(mx, 0.001)) * smoothstep(0.25, 0.5, s.r - s.b);
+  float light = clamp(max(spot, fire), 0.0, 1.0);
+  gl_FragColor = vec4(c * mix(uRoom, uLights, light), 1.0);
+  #include <colorspace_fragment>
+}`,
+        depthTest: false, depthWrite: false, toneMapped: false,
+      }));
+      bg.frustumCulled = false; bg.renderOrder = -1e6; bg.raycast = () => {};
+      scn.group.add(bg); scn.bgMat = bg.material;
+      this.scene.background = new THREE.Color(0x000000);
       this.scene.environment = studioEnvironment(this.renderer);
       if (time === 'evening') key.color.set(0xffc490); else if (time === 'night') key.color.set(0x8090c0);
       this.applyStill();
@@ -415,7 +442,11 @@ export class ModelViewer {
     // brightness as the eye sees it (each slider step of 1 doubles or halves it), turned into light (^2.2)
     const photoSeen = (time === 'night' ? 0.2 : time === 'evening' ? 0.55 : 1) * Math.pow(2, m.photo || 0);
     const modelSeen = (time === 'night' ? 0.22 : time === 'evening' ? 0.6 : 1) * Math.pow(2, m.light || 0);
-    this.scene.backgroundIntensity = Math.pow(photoSeen, 2.2);
+    // the photo's own lights: as photographed at Accent 1 whatever the time (so at night they shine in the dark room),
+    // 0 = off (about as dark as the room around them), 2 = twice as bright
+    const room = Math.pow(photoSeen, 2.2), a = scn.opts.accent ?? 1;
+    const lights = a <= 1 ? room * 0.6 + (Math.max(room, Math.pow(Math.pow(2, m.photo || 0), 2.2)) - room * 0.6) * a : Math.max(room, Math.pow(Math.pow(2, m.photo || 0), 2.2)) * a;
+    if (scn.bgMat) { scn.bgMat.uniforms.uRoom.value = room; scn.bgMat.uniforms.uLights.value = lights; }
     this.scene.environmentIntensity = 0.8;
     scn.key.intensity = 1.1; scn.fill.intensity = 0.9;
     LEVEL.value = Math.pow(modelSeen, 2.2);
@@ -466,7 +497,7 @@ export class ModelViewer {
   // Glow intensity (0.25..3): how brightly glow-in-the-dark filament glows at night, its halo and the light it throws
   setGlowGain(v) { this.glowGain = Math.max(0.1, Math.min(4, Number(v) || 1)); GLOW.value = this.glowGain; this.updateGlowFx(); }
   setSceneOptions(o) { if (!this.scn) return; Object.assign(this.scn.opts, o);
-    if (o.mine && this.scn.spec.kind === 'still') this.applyStill();
+    if ((o.mine || 'accent' in o) && this.scn.spec.kind === 'still') this.applyStill();
     if ('trueSize' in o || o.mine) this.frameScene(); }
   leaveScene(refit = true) {
     const scn = this.scn;

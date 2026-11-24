@@ -1448,7 +1448,6 @@ async function applyScene() {
   $('sceneAdjust').classList.toggle('hidden', !inScene);
   if (!inScene) { $('sceneMine').classList.add('hidden'); $('sceneAdjust').setAttribute('aria-expanded', 'false'); }
   document.querySelectorAll('#sceneMine .still-only').forEach(e => e.classList.toggle('hidden', !photo));
-  document.querySelectorAll('#sceneMine .built-only').forEach(e => e.classList.toggle('hidden', photo));
   $('sceneSize').classList.toggle('hidden', !inScene || photo);
   document.querySelectorAll('#sceneTime [data-time]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.time === SC.time)));
   if (!inScene) { viewer.setScene(null); $('sceneNote').textContent = ''; return; }
