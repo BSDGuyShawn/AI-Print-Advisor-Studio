@@ -1,4 +1,4 @@
-import { ModelViewer } from './viewer.js';
+import { ModelViewer, FINISH_CODES } from './viewer.js';
 import { GcodePreview } from './gcode-preview.js';
 import { createGlossary } from './glossary.js';
 
@@ -718,7 +718,7 @@ function swRender() {
     sel.value = SW.picks[slot] || '';
     sel.onchange = () => { if (sel.value) SW.picks[slot] = sel.value; else delete SW.picks[slot]; SW.sel = -1; swRender(); };
   });
-  if (SW.viewer) { const L = filamentLooks(swSlotsWith()); SW.viewer.setFilamentColors(L.colors, L.sparkle); }
+  if (SW.viewer) { const L = filamentLooks(swSlotsWith()); SW.viewer.setFilamentColors(L.colors, L.sparkle, L.finish); }
   $('rxSwApply').disabled = $('rxSwApply2').disabled = !swSlots().some(s => SW.picks[s.slot]);
   swCost(); swRenderSchemes();
 }
@@ -1227,7 +1227,7 @@ function renderMaterials() {
       <label class="swatch" style="background:${esc(s.color)}" title="Filament color"><input type="color" value="${esc(s.color)}"></label>
       <span class="tool">T${s.slot}</span>
       <select aria-label="Filament for toolhead ${s.slot}">${usePresets ? presetOptions(s.preset) : TYPES.map(m => `<option ${m === s.type ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>
-      <button type="button" class="sparkle-btn ${sparkles(s) ? 'on' : ''}" title="Galaxy, glitter or sparkle filament: sparkles in the 3D view (click to switch)" aria-label="Sparkly filament on toolhead ${s.slot}" aria-pressed="${sparkles(s)}">✦</button>
+      ${(() => { const f = finishOf(s), F = FINISHES.find(x => x[0] === f); return `<button type="button" class="sparkle-btn ${f === 'normal' ? '' : `on f-${f}`}" title="Finish: ${esc(F[1])} (how it looks in the 3D view; click to change: galaxy, silk, matte, translucent, glow in the dark)" aria-label="Filament finish on toolhead ${s.slot}: ${esc(F[1])}" aria-haspopup="menu">${f === 'normal' ? '✦' : F[2]}</button>`; })()}
       ${used.has(s.slot) ? '<span></span>' : `<button class="remove" title="Remove T${s.slot}" aria-label="Remove toolhead ${s.slot}">×</button>`}
     </div>`).join('') + mixRowsHtml();
   $('materials').querySelectorAll('.mat-row[data-slot]').forEach(row => {
@@ -1241,8 +1241,9 @@ function renderMaterials() {
     row.querySelector('input[type=color]').onchange = () => reprepare();
     const rm = row.querySelector('.remove');
     if (rm) rm.onclick = () => { state.slots = state.slots.filter(s => s !== slot); renderMaterials(); reprepare(); };
-    row.querySelector('.sparkle-btn').onclick = () => { slot.sparkle = !sparkles(slot); saveSession(); renderMaterials(); };
+    row.querySelector('.sparkle-btn').onclick = (e) => openFinishMenu(e.currentTarget, slot);
   });
+  renderCautions();
   $('addSlotBtn').classList.toggle('hidden', state.slots.length >= MAX_FILAMENTS);
   $('addSlotBtn').textContent = state.slots.length >= toolheadCount() ? 'Add a filament' : 'Add a toolhead';
   // more solid filaments than toolheads: allowed, with a warning
@@ -1316,10 +1317,82 @@ async function renderShopping() {
     catch (e) { toast(cleanErr(e), 7000); b.disabled = false; b.textContent = 'Find exact products with AI'; }
   };
 }
-// ---------- filament looks in the 3D views: toolhead colors, Snapmaker Orca color mixes, sparkly filament ----------
-// galaxy / glitter / sparkle filament: tiny flakes that catch the light (the toolhead's ✦ button overrides the guess)
+// ---------- filament looks in the 3D views: toolhead colors, Snapmaker Orca color mixes, filament finishes ----------
+// Each toolhead's finish (the button next to its color): guessed from the filament's name, or picked by hand
+const FINISHES = [['normal', 'Normal', '○', 'plain filament'], ['galaxy', 'Galaxy / glitter', '✦', 'sparkly flakes'], ['silk', 'Silk', '◈', 'glossy, pearly sheen'],
+  ['matte', 'Matte', '■', 'flat, no shine'], ['translucent', 'Translucent', '◇', 'light shines through'], ['glow', 'Glow in the dark', '☾', 'glows with the lights off'],
+  ['chrome', 'Chrome', '◉', 'mirror finish, most reflective']];
 const SPARKLE_WORDS = /galaxy|glitter|sparkl|starry|star ?dust|twinkl|cosmic|nebula|shimmer|metal ?flake|flake/i;
-const sparkles = (s) => (s.sparkle != null ? !!s.sparkle : SPARKLE_WORDS.test(`${s.preset || ''} ${s.name || ''}`));
+function finishOf(s) {
+  if (s.finish && FINISH_CODES[s.finish] != null) return s.finish;
+  if (s.sparkle != null) return s.sparkle ? 'galaxy' : 'normal';   // chosen with the old ✦ button
+  const t = `${s.preset || ''} ${s.name || ''}`;
+  if (SPARKLE_WORDS.test(t)) return 'galaxy';
+  if (/chrome|mirror/i.test(t)) return 'chrome';
+  if (/glow|luminous|gitd|phosphor/i.test(t)) return 'glow';
+  if (/silk|satin|shiny|lustre|luster/i.test(t)) return 'silk';
+  if (/matte?\b|\bmatt\b/i.test(t)) return 'matte';
+  if (/translucent|transparent|clear|crystal|glass|frost/i.test(t)) return 'translucent';
+  return 'normal';
+}
+const sparkles = (s) => finishOf(s) === 'galaxy';
+
+// ---------- filaments that are hard on nozzles or need special handling ----------
+// From the filament's type, preset and name (and the Glow in the dark finish). New users rarely know that fiber-filled
+// and glow-in-the-dark filament wear out a standard nozzle, so these are shown under the toolheads and before printing.
+const ABRASIVE = [
+  [/(^|[^a-z])(cf|carbon)([^a-z]|$)|carbon ?fib/i, 'carbon fiber', true],
+  [/(^|[^a-z])gf([^a-z]|$)|glass ?fib/i, 'glass fiber', true],
+  [/kevlar|aramid/i, 'aramid (Kevlar) fiber', true],
+  [/glow|gitd|luminous|phosphor/i, 'glow-in-the-dark', false],
+  [/metal ?fill|copper|bronze|brass ?fill|steel ?fill|iron ?fill|magnetic|tungsten/i, 'metal-filled', false],
+  [/marble|stone ?fill|ceramic|granite|concrete/i, 'stone- or ceramic-filled', false],
+];
+function filamentCautions(slots) {
+  const out = [];
+  for (const s of slots) {
+    const text = `${s.type || ''} ${s.preset || ''} ${s.name || ''}`;
+    const tool = `T${s.slot}`;
+    const hits = ABRASIVE.filter(([re]) => re.test(text)).map(([, name, fiber]) => ({ name, fiber }));
+    if (finishOf(s) === 'glow' && !hits.some(h => h.name === 'glow-in-the-dark')) hits.push({ name: 'glow-in-the-dark', fiber: false });
+    if (hits.length) {
+      const what = hits.map(h => h.name).join(' and ');
+      out.push({ kind: 'abrasive', slot: s.slot, title: `${tool}: ${what} filament is abrasive`,
+        detail: `It wears out a standard brass or stainless steel nozzle (what most printers come with) quickly, sometimes within a few hundred grams. A worn nozzle under-extrudes and ruins prints. Fit a hardened steel (or other wear-resistant) nozzle on ${tool} before printing it.${hits.some(h => h.fiber) ? ' A 0.6 mm nozzle also clogs less with fiber-filled filament.' : ''}` });
+      continue;
+    }
+    if (/wood|bamboo|cork/i.test(text)) out.push({ kind: 'special', slot: s.slot, title: `${tool}: wood-filled filament`, detail: 'The wood particles can clog a 0.4 mm nozzle: a 0.6 mm nozzle is safer. Don’t leave it sitting hot in the nozzle.' });
+    else if (/tpu|tpe|flex|95a|85a/i.test(text)) out.push({ kind: 'special', slot: s.slot, title: `${tool}: flexible filament (TPU)`, detail: 'Print it slowly (about 20–40 mm/s) and keep retraction short, or it buckles and jams.' });
+    else if (/(^|[^a-z])(pa|pa6|pa12|paht|nylon|pc)([^a-z]|$)|polycarbonate/i.test(text)) out.push({ kind: 'special', slot: s.slot, title: `${tool}: nylon or polycarbonate`, detail: 'It soaks up moisture from the air within hours: dry it first (e.g. 70–80 °C for 6 hours or more) and keep it dry while printing. It needs high temperatures; an enclosure helps.' });
+    else if (/(^|[^a-z])(abs|asa)([^a-z]|$)/i.test(text)) out.push({ kind: 'special', slot: s.slot, title: `${tool}: ABS / ASA`, detail: 'It gives off fumes and warps in drafts: print in an enclosure, with the room ventilated.' });
+  }
+  return out;
+}
+function cautionsHtml(list) {
+  return list.map(c => `<div class="fc ${c.kind}"><b>${c.kind === 'abrasive' ? '⚠ ' : ''}${esc(c.title)}</b>${esc(c.detail)}</div>`).join('');
+}
+function renderCautions() {
+  const used = new Set(state.analysis?.totals.extrudersUsed || state.slots.map(s => s.slot));
+  const list = filamentCautions(state.slots.filter(s => used.has(s.slot)));
+  $('matCautions').innerHTML = cautionsHtml(list);
+  $('matCautions').classList.toggle('hidden', !list.length);
+}
+function openFinishMenu(btn, slot) {
+  document.querySelector('.finish-menu')?.remove();
+  const cur = finishOf(slot);
+  const m = document.createElement('div');
+  m.className = 'finish-menu'; m.setAttribute('role', 'menu');
+  m.innerHTML = FINISHES.map(([id, name, icon, hint]) => `<button role="menuitemradio" aria-checked="${id === cur}" data-finish="${id}"><i>${icon}</i>${esc(name)}<small>${esc(hint)}</small></button>`).join('');
+  document.body.appendChild(m);
+  const r = btn.getBoundingClientRect();
+  m.style.left = `${Math.min(r.left, innerWidth - m.offsetWidth - 8)}px`;
+  m.style.top = `${r.bottom + 4 + m.offsetHeight > innerHeight ? r.top - m.offsetHeight - 4 : r.bottom + 4}px`;
+  m.querySelectorAll('[data-finish]').forEach(b => b.onclick = () => {
+    slot.finish = b.dataset.finish; delete slot.sparkle;
+    m.remove(); saveSession(); renderMaterials(); pushColors(); updateNightBtn();
+  });
+  setTimeout(() => document.addEventListener('pointerdown', function off(e) { if (!m.contains(e.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
+}
 function slotColor(n) {
   const s = state.slots.find(x => x.slot === n);
   return s ? s.color : String((state.file && state.file.fileColors || [])[n - 1] || '#888888').slice(0, 7);
@@ -1337,14 +1410,27 @@ function mixColor(m, slots = state.slots) {
 function filamentLooks(slots = state.slots) {
   const colors = Object.fromEntries(slots.map(s => [s.slot, s.color]));
   const sparkle = Object.fromEntries(slots.filter(sparkles).map(s => [s.slot, 1]));
+  const finish = Object.fromEntries(slots.map(s => [s.slot, FINISH_CODES[finishOf(s)] || 0]));
   for (const m of state.mixes || []) {
     colors[m.id] = mixColor(m, slots);
     const share = m.parts.reduce((t, p) => t + (sparkle[p.slot] ? p.pct / 100 : 0), 0);
     if (share > 0) sparkle[m.id] = share;
+    // a mix looks like the finish of its biggest share
+    const main = [...m.parts].sort((a, b) => b.pct - a.pct)[0];
+    if (main && finish[main.slot]) finish[m.id] = finish[main.slot];
   }
-  return { colors, sparkle };
+  return { colors, sparkle, finish };
 }
-function pushColors(v = viewer) { const L = filamentLooks(); v.setFilamentColors(L.colors, L.sparkle); }
+function pushColors(v = viewer) { const L = filamentLooks(); v.setFilamentColors(L.colors, L.sparkle, L.finish); updateNightBtn(); }
+// the 3D view's Spin and Lights off buttons
+$('spinBtn').onclick = () => { const on = !viewer.spin; viewer.setSpin(on); $('spinBtn').setAttribute('aria-pressed', String(on)); };
+viewer.onSpinStop = () => $('spinBtn').setAttribute('aria-pressed', 'false');
+$('nightBtn').onclick = () => { const on = !viewer.night; viewer.setNight(on); $('nightBtn').setAttribute('aria-pressed', String(on)); };
+function updateNightBtn() {
+  const any = (state.slots || []).some(s => finishOf(s) === 'glow');
+  $('nightBtn').classList.toggle('hidden', !any);
+  if (!any && viewer.night) { viewer.setNight(false); $('nightBtn').setAttribute('aria-pressed', 'false'); }
+}
 
 // ---------- orientation ----------
 function renderOrientation() {
@@ -2014,7 +2100,7 @@ function renderSendVerify(v) {
   const fmt = (n) => (Math.round(n * 10) / 10).toString();
   const bedHtml = !b ? '<p class="hint">Couldn’t check the print against the bed size.</p>'
     : !b.ok ? `<p class="vsum bad bed">⛔ This print would move outside the bed: the ${esc((b.worst && b.worst.type || 'print').toLowerCase())} reaches ${b.worst ? `${b.worst.axis} ${fmt(b.worst.value)} mm` : 'past the edge'}, and the bed is X ${fmt(b.rect.x0)}–${fmt(b.rect.x1)}, Y ${fmt(b.rect.y0)}–${fmt(b.rect.y1)} mm. The printer would stop with “movement exceeded travel limit”. <b>Printing is blocked.</b> Move the model away from the edge in Orca, or untick the brim/skirt changes.</p>`
-      : `<p class="vsum ok bed">✓ Fits on the bed: every move of the print is inside the printable area (X ${fmt(b.extent.x0)}–${fmt(b.extent.x1)}, Y ${fmt(b.extent.y0)}–${fmt(b.extent.y1)} mm).${v.moved ? ` It was moved ${[v.moved.dy ? `${fmt(Math.abs(v.moved.dy))} mm ${v.moved.dy > 0 ? 'toward the back' : 'toward the front'}` : '', v.moved.dx ? `${fmt(Math.abs(v.moved.dx))} mm ${v.moved.dx > 0 ? 'to the right' : 'to the left'}` : ''].filter(Boolean).join(' and ')} first: its ${esc((v.moved.was && v.moved.was.type || 'edge').toLowerCase())} went ${fmt(v.moved.over)} mm past the bed edge.` : ''}</p>`;
+      : `<p class="vsum ok bed">✓ Fits on the bed: the print uses X ${fmt(b.extent.x0)}–${fmt(b.extent.x1)}, Y ${fmt(b.extent.y0)}–${fmt(b.extent.y1)} mm of the ${fmt(b.rect.x1 - b.rect.x0)} × ${fmt(b.rect.y1 - b.rect.y0)} mm bed (every move checked).${v.moved ? ` It was moved ${[v.moved.dy ? `${fmt(Math.abs(v.moved.dy))} mm ${v.moved.dy > 0 ? 'toward the back' : 'toward the front'}` : '', v.moved.dx ? `${fmt(Math.abs(v.moved.dx))} mm ${v.moved.dx > 0 ? 'to the right' : 'to the left'}` : ''].filter(Boolean).join(' and ')} first: its ${esc((v.moved.was && v.moved.was.type || 'edge').toLowerCase())} went ${fmt(v.moved.over)} mm past the bed edge.` : ''}</p>`;
   box.innerHTML = bedHtml + probHtml + head + (rows ? `<table>${rows}</table>` : '') + summary;
   if (SEND.blocked) $('sdStart').disabled = true;
 }
@@ -2046,6 +2132,7 @@ async function openSend(variantId) {
   const dlg = $('sendDialog');
   SEND.job = null; SEND.map = {}; SEND.blocked = false;
   $('sdFilaments').innerHTML = ''; $('sdPrinters').innerHTML = '<p class="hint">Checking your printers…</p>'; $('sdFilNote').textContent = '';
+  $('sdCautions').innerHTML = ''; $('sdCautions').classList.add('hidden');
   $('sdVerify').innerHTML = '<p class="hint">Slicing, then reading the settings back from the sliced print…</p>';
   if (SEND_PV) SEND_PV.clear();
   if (!$('sdPreview').querySelector('.sd-pv-wait')) $('sdPreview').insertAdjacentHTML('beforeend', '<p class="hint sd-pv-wait">Drawing the sliced print…</p>');
@@ -2066,6 +2153,12 @@ async function openSend(variantId) {
   if (job.error) { sdStatus(job.error, null, 'error'); $('sdVerify').innerHTML = ''; return; }
   SEND.job = job; SEND.printers = printers;
   renderSendVerify(job.verify);
+  {
+    const slots = job.filaments.map(f => { const s = state.slots.find(x => x.slot === f.index + 1) || {}; return { ...s, slot: f.index + 1, type: f.type || s.type, preset: f.preset || s.preset }; });
+    const list = filamentCautions(slots);
+    $('sdCautions').innerHTML = list.length ? `${cautionsHtml(list)}${list.some(c => c.kind === 'abrasive') ? '<small class="hint">Check the nozzle on the toolhead you map it to before you press Print.</small>' : ''}` : '';
+    $('sdCautions').classList.toggle('hidden', !list.length);
+  }
   showSendPreview(job);
   $('sdName').value = job.remoteName;
   $('sdTime').textContent = hm(job.timeSeconds);

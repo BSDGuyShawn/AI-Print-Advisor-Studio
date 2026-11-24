@@ -105,6 +105,22 @@ textarea { resize: vertical; font-size: 14px; }
 .mat-row .sparkle-btn { border: 1px solid transparent; background: none; color: var(--muted); opacity: .45; cursor: pointer; font-size: 15px; line-height: 1; padding: 2px; border-radius: 4px; }
 .mat-row .sparkle-btn:hover { opacity: 1; border-color: var(--line); }
 .mat-row .sparkle-btn.on { opacity: 1; color: #B98AF0; text-shadow: 0 0 6px #C9A7FF; }
+.mat-row .sparkle-btn.f-silk { color: #E7C873; text-shadow: 0 0 6px #F4DE9C; }
+.mat-row .sparkle-btn.f-matte { color: var(--text); }
+.mat-row .sparkle-btn.f-translucent { color: #8FD3F4; text-shadow: 0 0 6px #BDE8FF; }
+.mat-row .sparkle-btn.f-glow { color: #8CFF9E; text-shadow: 0 0 8px #8CFF9E; }
+.mat-row .sparkle-btn.f-chrome { color: #E8EEF4; text-shadow: 0 0 4px #fff, 0 0 9px #9fb4c8; }
+/* warnings for filaments that are hard on nozzles or need special handling (toolheads and the Send dialog) */
+.fil-cautions { margin: 8px 0; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; line-height: 1.45; }
+.fil-cautions .fc { padding: 7px 9px; border-radius: var(--radius-s); border-left: 3px solid var(--warn); background: rgb(224 163 58 / .12); }
+.fil-cautions .fc.abrasive { border-left-color: var(--danger); background: rgb(224 106 85 / .13); }
+.fil-cautions .fc b { display: block; margin-bottom: 2px; }
+.finish-menu { position: fixed; z-index: 1000; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-s); box-shadow: 0 6px 24px rgb(0 0 0 / .35); padding: 4px; display: flex; flex-direction: column; min-width: 190px; }
+.finish-menu button { font: inherit; font-size: 13px; text-align: left; background: none; border: 0; color: inherit; padding: 6px 10px; border-radius: 4px; cursor: pointer; display: flex; gap: 8px; align-items: center; }
+.finish-menu button:hover, .finish-menu button[aria-checked="true"] { background: var(--line); }
+.finish-menu button i { font-style: normal; width: 1.2em; text-align: center; }
+.finish-menu small { color: var(--muted); margin-left: auto; }
+#spinBtn[aria-pressed="true"], #nightBtn[aria-pressed="true"] { background: var(--accent); color: #fff; }
 .mix-head { margin: 10px 0 6px; font-size: 13px; line-height: 1.35; }
 .mix-head .muted { color: var(--muted); font-size: 12px; }
 .mix-row .mix-swatch { cursor: default; }

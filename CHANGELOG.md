@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.36.0
+- **Filament finishes in the 3D view**: the button next to each toolhead's color (the old ✦ galaxy button) now picks
+  the finish: **Normal, Galaxy / glitter, Silk** (glossy, pearly sheen and fine layer lines), **Matte** (flat, no shine),
+  **Translucent** (see-through, light at the edges), **Glow in the dark** or **Chrome** (mirror). It's guessed from the filament's name
+  ("PLA Silk", "Matte PLA", "Glow…", "Chrome") and can be changed. Silk is very shiny and reflects a studio around it;
+  **Chrome** is a mirror finish, the most reflective of all (tinted by the filament colour); matte has no reflection.
+- **Warnings for filaments that are hard on nozzles** (carbon fiber, glass fiber, glow in the dark, metal-, stone- or
+  ceramic-filled): under the toolheads and in Send to printer, so you fit a hardened steel nozzle first (a standard brass
+  or stainless nozzle wears out quickly). Shorter notes for wood-filled, flexible (TPU), nylon/PC and ABS/ASA filament.
+- **⟳ Spin** above the 3D view: the model turns slowly under the lights while the view rises and dips, so you see how
+  each finish catches the light from different angles (drag the view to stop).
+- **☾ Lights off** (with a glow-in-the-dark toolhead): the room goes dark and the filament glows like a real
+  glow-in-the-dark print: its glow colour (white/pale filament the classic aqua-green, coloured filament its own colour),
+  brightest where it faces you, with glowing thin edges and its layer lines and shape still readable, lighting the bed
+  and the parts around it, with a soft halo.
+
+## 2.35.1
+- Send to printer: the bed check now reads “the print uses X 57–200, Y 2–197 mm of the 270 × 270 mm bed”, so it’s
+  clear which numbers are the print and which are the bed.
+
 ## 2.35.0
 - **Safety: a print that would leave the bed is never sent.** A wider brim or skirt next to the bed edge pushed a
   print's first layer past the front of the U1's bed (the printer stopped with "Axis movement anomaly … Y-axis movement

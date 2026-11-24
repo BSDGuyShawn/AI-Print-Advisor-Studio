@@ -75,6 +75,10 @@ The model appears in the middle. **Drag** to turn it, **scroll** to zoom. Under 
 
 On the left, **Toolheads and materials** lists T1 to T4: each toolhead prints one filament. Set each one to the **material** you'll load (PLA is the most common and easiest) and click the **color dot** to match your spool.
 
+**See how the filament will look:** the button next to each toolhead's color picks its **finish** for the 3D view: Normal, Galaxy / glitter (sparkly flakes), Silk (glossy, pearly sheen), Matte (flat, no shine), Translucent (see-through), Glow in the dark or Chrome (a mirror finish, the most reflective). It's guessed from the filament's name (e.g. "PLA Silk"), and you can change it. Click **⟳ Spin** above the 3D view to turn the model slowly under the lights, from different angles, so you see how each finish catches the light (drag the view to stop). With a glow-in-the-dark toolhead, **☾ Lights off** darkens the room so you can see it glow.
+
+**Abrasive filament:** carbon fiber (CF), glass fiber (GF), glow in the dark and metal- or stone-filled filament wear out a standard brass or stainless nozzle quickly. The app warns you under the toolheads and before printing: fit a **hardened steel nozzle** on that toolhead first. It also notes special handling for wood-filled, flexible (TPU), nylon/PC and ABS/ASA filament.
+
 If the model needs colors you don't own, a **"What to buy"** box appears with the closest colors you do have, and shop links.
 
 ---

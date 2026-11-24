@@ -72,6 +72,7 @@
       <section class="block hidden" id="materialBlock">
         <h2>Toolheads and materials <button class="tip-btn" data-tip="toolheads" aria-label="What is this?">?</button></h2>
         <div id="materials"></div>
+        <div class="fil-cautions hidden" id="matCautions" role="note"></div>
         <p class="slot-warn hidden" id="slotWarn" role="status"></p>
         <button class="link small" id="addSlotBtn">Add a toolhead</button>
         <button class="btn wide remix-btn" id="remixBtn">Color remix…</button>
@@ -140,6 +141,10 @@
             <button data-view="front">Front</button>
             <button data-view="top">Top</button>
             <button data-view="bottom">Underside</button>
+          </div>
+          <div class="segmented" aria-label="Look">
+            <button id="spinBtn" aria-pressed="false" title="Turn the model slowly under the lights, from different angles, to see how the filament finishes catch the light (drag the view to stop)">⟳ Spin</button>
+            <button id="nightBtn" class="hidden" aria-pressed="false" title="Turn the lights off to see the glow-in-the-dark filament glow">☾ Lights off</button>
           </div>
         </div>
         <div class="legend hidden" id="legend">
@@ -489,6 +494,7 @@
       <div>
         <div class="sd-fils" id="sdFilaments"></div>
         <p class="sd-note" id="sdFilNote"></p>
+        <div class="fil-cautions hidden" id="sdCautions" role="note"></div>
       </div>
     </section>
     <section class="sd-row">

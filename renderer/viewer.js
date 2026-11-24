@@ -3,27 +3,141 @@ import { OrbitControls } from './vendor/OrbitControls.js';
 
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-// Galaxy / glitter filament: tiny flakes fixed in the model that glint as the view or the light moves.
-// Each triangle carries a 'sparkle' amount (0 = plain filament); the flakes are added on top of the normal lighting.
+// Filament finishes in the 3D view. Each triangle carries a 'finish' code and a 'sparkle' amount:
+//   0 normal · 1 galaxy / glitter (flakes that glint as the view or the light moves) · 2 silk (glossy, pearly sheen and
+//   faint layer lines) · 3 matte (no shine) · 4 translucent (lighter, light through the edges) · 5 glow in the dark
+//   (pale in the light; glows when the lights are off) · 6 chrome (a mirror: fully metallic, almost perfectly smooth)
+// The lights stay put while you turn the view (or the Spin button turns it), so highlights move across each finish.
+export const FINISH_CODES = { normal: 0, galaxy: 1, silk: 2, matte: 3, translucent: 4, glow: 5, chrome: 6 };
+// A soft studio for shiny filament to reflect: a light-to-dark room with three softboxes (above, left, right), made
+// once and blurred by roughness (PMREM), so silk shows bright, sharp reflections and matte shows none
+let STUDIO = null;
+function studioEnvironment(renderer) {
+  if (STUDIO) return STUDIO;
+  const room = new THREE.Scene();
+  const sky = new THREE.SphereGeometry(100, 32, 16);
+  const cols = [], pos = sky.attributes.position;
+  // a darkish room (so reflections have contrast) with a bright light strip around the horizon
+  for (let i = 0; i < pos.count; i++) {
+    const z = pos.getZ(i), t = (z / 100 + 1) / 2, strip = Math.exp(-(((z - 8) / 9) ** 2)) * 2.6;
+    const k = 0.03 + 0.16 * t + strip;
+    cols.push(k, k * 1.02, k * 1.06);
+  }
+  sky.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  room.add(new THREE.Mesh(sky, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+  const box = (w, h, x, y, z, k) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(k, k, k), side: THREE.DoubleSide })); m.position.set(x, y, z); m.lookAt(0, 0, 0); room.add(m); };
+  box(60, 35, 0, -25, 85, 7.0);    // big softbox above
+  box(30, 70, -80, -35, 25, 5.0);  // tall strip on the left
+  box(20, 60, 75, 45, 30, 3.5);    // strip on the right, behind
+  const pm = new THREE.PMREMGenerator(renderer);
+  STUDIO = pm.fromScene(room, 0.02).texture;
+  pm.dispose();
+  return STUDIO;
+}
+// the colour a glow-in-the-dark filament glows: pale/white ones the classic aqua-green, coloured ones a saturated
+// version of their colour (matches the shader)
+function glowColor(hex) {
+  const c = new THREE.Color(hex);
+  const mx = Math.max(c.r, c.g, c.b), mn = Math.min(c.r, c.g, c.b);
+  if (mx - mn < 0.15) return '#6BFFC7';
+  const h = new THREE.Color((c.r - mn) / (mx - mn), (c.g - mn) / (mx - mn), (c.b - mn) / (mx - mn));
+  const hsl = {}; h.getHSL(hsl);
+  return '#' + new THREE.Color().setHSL(hsl.h, 0.95, 0.6).getHexString();
+}
 const SPARKLE_TIME = { value: 0 };
+const NIGHT = { value: 0 };
 function addSparkle(mat) {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uSparkleTime = SPARKLE_TIME;
+    shader.uniforms.uNight = NIGHT;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 attribute float sparkle;
+attribute float finish;
 varying float vSparkle;
+varying float vFinish;
 varying vec3 vObjPos;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 vSparkle = sparkle;
+vFinish = finish;
 vObjPos = position;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform float uSparkleTime;
+uniform float uNight;
 varying float vSparkle;
+varying float vFinish;
 varying vec3 vObjPos;
 float spHash(vec3 p) { p = fract(p * vec3(443.897, 441.423, 437.195)); p += dot(p, p.yzx + 19.19); return fract((p.x + p.y) * p.z); }`)
-      .replace('#include <opaque_fragment>', `if (vSparkle > 0.0) {
+      // how shiny each finish is
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+if (vFinish < 0.5) roughnessFactor = 0.45;
+else if (vFinish > 1.5 && vFinish < 2.5) roughnessFactor = 0.07;
+else if (vFinish > 2.5 && vFinish < 3.5) roughnessFactor = 1.0;
+else if (vFinish > 3.5 && vFinish < 4.5) roughnessFactor = 0.2;
+else if (vFinish > 5.5) roughnessFactor = 0.015;`)
+      .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
+if (vFinish > 1.5 && vFinish < 2.5) metalnessFactor = 0.6;
+else if (vFinish > 2.5 && vFinish < 3.5) metalnessFactor = 0.0;
+else if (vFinish > 5.5) metalnessFactor = 1.0;`)
+      .replace('#include <aomap_fragment>', `#include <aomap_fragment>
+reflectedLight.indirectDiffuse *= 0.35;
+if (vFinish > 5.5) { reflectedLight.indirectSpecular *= 3.2; reflectedLight.directSpecular *= 2.5; }
+else if (vFinish > 1.5 && vFinish < 2.5) { reflectedLight.indirectSpecular *= 2.2; reflectedLight.directSpecular *= 2.0; }
+else if (vFinish > 2.5 && vFinish < 3.5) { reflectedLight.indirectSpecular = vec3(0.0); reflectedLight.directSpecular = vec3(0.0); }
+else if (vFinish < 1.5) reflectedLight.indirectSpecular *= 0.35;`)
+      .replace('#include <opaque_fragment>', `{
+  vec3 vdir = normalize(vViewPosition);
+  float fres = pow(1.0 - clamp(abs(dot(normal, vdir)), 0.0, 1.0), 3.0);
+  vec3 keyDir = normalize((viewMatrix * vec4(0.35, -0.55, 0.75, 0.0)).xyz);
+  vec3 halfV = normalize(keyDir + vdir);
+  float nh = max(dot(normal, halfV), 0.0);
+  if (vFinish > 1.5 && vFinish < 2.5) {
+    // silk: bright and glossy, a soft pearly sheen that slides across the surface as it turns, and the fine layer
+    // lines (0.2 mm) catching the light
+    float band = 0.5 + 0.5 * sin(vObjPos.z * 31.4159);
+    float sheen = pow(nh, 6.0);
+    outgoingLight = outgoingLight * (1.05 + 0.08 * band) + diffuseColor.rgb * 0.18 + (diffuseColor.rgb * 0.6 + vec3(0.4)) * (sheen * 0.8 + fres * 0.5) + vec3(1.0) * pow(nh, 120.0) * 1.2;
+  } else if (vFinish > 2.5 && vFinish < 3.5) {
+    // matte: flat and slightly chalky, no highlights
+    float l = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
+    outgoingLight = mix(outgoingLight, vec3(l), 0.18) * 0.92 + diffuseColor.rgb * 0.08;
+  } else if (vFinish > 3.5 && vFinish < 4.5) {
+    // translucent: see-through, lighter, light glowing at the thin edges
+    outgoingLight = mix(outgoingLight, diffuseColor.rgb, 0.3) + diffuseColor.rgb * fres * 1.2 + vec3(1.0) * pow(nh, 40.0) * 0.5;
+    diffuseColor.a = 0.72 + 0.25 * fres;
+  }
+  // lights off: only glow-in-the-dark filament shows
+  if (vFinish > 5.5) {
+    // chrome: a mirror of the room, tinted by the filament colour (silver = classic chrome), a crisp rim
+    outgoingLight = outgoingLight * 1.15 + vec3(1.0) * pow(nh, 400.0) * 2.0 + mix(diffuseColor.rgb, vec3(1.0), 0.5) * fres * 0.35;
+    if (uNight > 0.0) outgoingLight *= 1.0 - 0.82 * uNight;
+  } else if (vFinish > 4.5) {
+    // the colour it glows: a pale/white filament glows the classic aqua-green, a coloured one a saturated version of
+    // its own colour (the same rule as glowColor() below)
+    vec3 c = diffuseColor.rgb;
+    float mx = max(c.r, max(c.g, c.b)), mn = min(c.r, min(c.g, c.b));
+    vec3 hue = mx - mn < 0.15 ? vec3(0.42, 1.0, 0.78) : (c - mn) / max(mx - mn, 0.001);
+    vec3 gcol = normalize(hue + 0.05) * 1.25;
+    if (uNight > 0.0) {
+      // in the dark it is the light: brightest where it faces you, a near-white core, glowing thin edges, layer lines
+      float facing = clamp(dot(normal, vdir), 0.0, 1.0);
+      float band = 0.5 + 0.5 * sin(vObjPos.z * 31.4159);
+      float lum = (0.42 + 0.58 * pow(facing, 0.7)) * (0.92 + 0.08 * band) + fres * 0.45;
+      vec3 glowLight = gcol * lum;
+      glowLight += (vec3(1.0) - glowLight) * clamp(lum - 0.75, 0.0, 1.0) * 0.55;
+      glowLight *= 0.94 + 0.06 * sin(uSparkleTime * 0.7);
+      outgoingLight = mix(outgoingLight, glowLight, uNight);
+    } else {
+      // in the light: pale, with a faint glow
+      outgoingLight = mix(outgoingLight, vec3(dot(outgoingLight, vec3(0.333))), 0.15) + gcol * 0.05;
+    }
+  } else if (uNight > 0.0) {
+    // everything else goes dark (the glow's own light still reaches it: see the glow lights)
+    outgoingLight *= 1.0 - 0.82 * uNight;
+  }
+}
+if (vSparkle > 0.0) {
   // flakes about 0.35 mm apart, each tilted its own way: bright when it reflects the light toward the eye
   vec3 cell = floor(vObjPos * 2.8);
   float glints = 0.0;
@@ -46,7 +160,7 @@ float spHash(vec3 p) { p = fract(p * vec3(443.897, 441.423, 437.195)); p += dot(
 }
 #include <opaque_fragment>`);
   };
-  mat.customProgramCacheKey = () => 'sparkle1';
+  mat.customProgramCacheKey = () => 'finish6';
 }
 
 export class ModelViewer {
@@ -62,13 +176,19 @@ export class ModelViewer {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
 
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.6));
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.6);
+    this.scene.add(hemi);
     const key = new THREE.DirectionalLight(0xffffff, 1.6);
     key.position.set(200, -300, 400);
     this.scene.add(key);
     const rim = new THREE.DirectionalLight(0xffffff, 0.6);
     rim.position.set(-300, 200, -100);
     this.scene.add(rim);
+    this.lights = [[hemi, 1.6], [key, 1.6], [rim, 0.6]];
+    this.scene.environment = studioEnvironment(this.renderer);
+    this.night = false; this.spin = false; this.onSpinStop = null;
+    // turning the view yourself stops the spin
+    this.controls.addEventListener('start', () => { if (this.spin) { this.setSpin(false); if (this.onSpinStop) this.onSpinStop(); } });
 
     this.modelGroup = new THREE.Group();
     this.scene.add(this.modelGroup);
@@ -104,10 +224,76 @@ export class ModelViewer {
 
     new ResizeObserver(() => this.resize()).observe(container);
     this.resize();
-    const loop = (t) => { SPARKLE_TIME.value = (t || 0) / 1000; this.controls.update(); this.renderer.render(this.scene, this.camera); requestAnimationFrame(loop); };
+    let last = null;
+    const loop = (t) => {
+      SPARKLE_TIME.value = (t || 0) / 1000; this.spinStep(t || 0);
+      // the spin goes by the clock, not by frames, so it's the same speed on any screen
+      const dt = last == null ? 1 / 60 : Math.min(0.1, ((t || 0) - last) / 1000); last = t || 0;
+      this.controls.update(this.spin ? dt : null); this.renderer.render(this.scene, this.camera); requestAnimationFrame(loop);
+    };
     loop();
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.applyTheme());
     this.applyTheme();
+  }
+
+  // Spin: a slow turntable (the model turns under the fixed lights) while the view rises and dips between about 12° and
+  // 55° above the bed, so the light sweeps across the surfaces from different angles
+  setSpin(on) {
+    this.spin = !!on;
+    this.controls.autoRotate = this.spin;
+    this.controls.autoRotateSpeed = 2.4;   // 25 s per turn
+    this.spinT0 = null;
+  }
+  spinStep(t) {
+    if (!this.spin) return;
+    if (this.spinT0 == null) {
+      this.spinT0 = t;
+      const off = this.camera.position.clone().sub(this.controls.target);
+      this.spinR = off.length();
+    }
+    const s = (t - this.spinT0) / 1000;
+    const el = (33 + 21 * Math.sin(s * 0.21)) * Math.PI / 180;
+    const off = this.camera.position.clone().sub(this.controls.target);
+    const az = Math.atan2(off.y, off.x), r = this.spinR;
+    this.camera.position.set(this.controls.target.x + r * Math.cos(el) * Math.cos(az), this.controls.target.y + r * Math.cos(el) * Math.sin(az), this.controls.target.z + r * Math.sin(el));
+  }
+  // Lights off: the room goes dark so glow-in-the-dark filament shows
+  setNight(on) {
+    this.night = !!on;
+    NIGHT.value = this.night ? 1 : 0;
+    for (const [l, i] of this.lights) l.intensity = this.night ? i * 0.06 : i;
+    this.scene.environment = this.night ? null : studioEnvironment(this.renderer);
+    this.scene.background = this.night ? new THREE.Color('#030405') : new THREE.Color(css('--viewer-bg') || '#DDE2E6');
+    this.updateGlowFx();
+  }
+  // In the dark a glow-in-the-dark print lights what's around it: a light at each glowing object's centre (the bed and
+  // neighbouring parts take its colour) and a soft halo (like the bloom in a photo of one)
+  updateGlowFx() {
+    if (this.glowFx) { this.scene.remove(this.glowFx); this.glowFx.traverse(o => { o.geometry?.dispose(); o.material?.map?.dispose(); o.material?.dispose(); }); this.glowFx = null; }
+    if (!this.night) return;
+    const g = new THREE.Group();
+    const glows = this.chunks.filter(c => c.glow).sort((a, b) => b.glow.radius - a.glow.radius).slice(0, 8);
+    if (!glows.length) return;
+    if (!this.haloTex) {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+      const x = cv.getContext('2d'), gr = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+      gr.addColorStop(0, 'rgba(255,255,255,0.55)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.22)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
+      this.haloTex = new THREE.CanvasTexture(cv);
+    }
+    for (const c of glows) {
+      const col = new THREE.Color(c.glow.color);
+      const light = new THREE.PointLight(col, 7, c.glow.radius * 9, 1.1);
+      light.position.copy(c.glow.center);
+      g.add(light);
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.haloTex, color: col, transparent: true, opacity: 0.4, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending }));
+      halo.position.copy(c.glow.center);
+      halo.scale.setScalar(c.glow.radius * 3);
+      halo.renderOrder = 10;
+      g.add(halo);
+    }
+    this.glowFx = g;
+    this.scene.add(g);
   }
 
   applyTheme() {
@@ -129,7 +315,7 @@ export class ModelViewer {
     const dark = matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.dataset.theme !== 'light';
     const plate = new THREE.Mesh(
       new THREE.PlaneGeometry(270, 270),
-      new THREE.MeshStandardMaterial({ color: dark ? 0x2a3138 : 0xb9a37a, roughness: 0.95, metalness: 0.05, transparent: true, opacity: 0.85 })
+      new THREE.MeshStandardMaterial({ color: dark ? 0x2a3138 : 0xb9a37a, roughness: 0.95, metalness: 0.05, transparent: true, opacity: 0.85, envMapIntensity: 0.15 })
     );
     plate.position.z = -0.05;
     g.add(plate);
@@ -140,8 +326,9 @@ export class ModelViewer {
     this.scene.add(g);
   }
 
-  // map: filament number → color; sparkle (optional): filament number → 0..1 for galaxy / glitter filament
-  setFilamentColors(map, sparkle = {}) { this.colors = map; this.sparkle = sparkle || {}; this.recolor(); }
+  // map: filament number → color; sparkle (optional): filament number → 0..1 for galaxy / glitter filament;
+  // finish (optional): filament number → FINISH_CODES value
+  setFilamentColors(map, sparkle = {}, finish = {}) { this.colors = map; this.sparkle = sparkle || {}; this.finish = finish || {}; this.recolor(); }
 
   load(preview) {
     for (const c of this.chunks) { c.mesh.geometry.dispose(); c.mesh.material.dispose(); this.modelGroup.remove(c.mesh); }
@@ -153,6 +340,7 @@ export class ModelViewer {
       geo.computeVertexNormals();
       geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(p.positions.length), 3));
       geo.setAttribute('sparkle', new THREE.BufferAttribute(new Float32Array(p.positions.length / 3), 1));
+      geo.setAttribute('finish', new THREE.BufferAttribute(new Float32Array(p.positions.length / 3), 1));
       const isMod = p.kind === 'modifier';
       const mat = new THREE.MeshStandardMaterial({
         vertexColors: true, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide,
@@ -174,6 +362,10 @@ export class ModelViewer {
   setMode(mode) { this.mode = mode; this.recolor(); }
 
   recolor() {
+    this._recolor();
+    if (this.night) this.updateGlowFx();
+  }
+  _recolor() {
     const tmp = new THREE.Color();
     const red = new THREE.Color(css('--danger') || '#C2412D');
     const amber = new THREE.Color(css('--warn') || '#C98A16');
@@ -191,6 +383,7 @@ export class ModelViewer {
       const col = c.mesh.geometry.attributes.color;
       const out = col.array;
       const spA = c.mesh.geometry.attributes.sparkle, sp = spA ? spA.array : null, spk = this.sparkle || {};
+      const fnA = c.mesh.geometry.attributes.finish, fn = fnA ? fnA.array : null, fns = this.finish || {};
       const sparkleOn = this.mode === 'colors' && c.kind !== 'modifier' && Object.keys(spk).length > 0;
       const base = tmp.set(this.colors[c.extruder] || '#9aa5ae').clone();
       if (c.kind === 'modifier') base.set('#7fb2ff');
@@ -214,9 +407,26 @@ export class ModelViewer {
         if (c.painted && c.painted[i / 9]) color = this.paintColor;
         for (let v = 0; v < 3; v++) { out[i + v * 3] = color.r; out[i + v * 3 + 1] = color.g; out[i + v * 3 + 2] = color.b; }
         if (sp) { const s = sparkleOn && !(c.painted && c.painted[i / 9]) ? (spk[tf && tf[i / 9] ? tf[i / 9] : c.extruder] || 0) : 0; sp[i / 3] = s; sp[i / 3 + 1] = s; sp[i / 3 + 2] = s; }
+        if (fn) { const f = this.mode === 'colors' && c.kind !== 'modifier' && !(c.painted && c.painted[i / 9]) ? (fns[tf && tf[i / 9] ? tf[i / 9] : c.extruder] || 0) : 0; fn[i / 3] = f; fn[i / 3 + 1] = f; fn[i / 3 + 2] = f; }
       }
       col.needsUpdate = true;
       if (spA) spA.needsUpdate = true;
+      if (fnA) fnA.needsUpdate = true;
+      if (fn && c.kind !== 'modifier') {
+        let glowN = 0;
+        for (let k = 0; k < fn.length; k += 3) if (fn[k] > 4.5 && fn[k] < 5.5) glowN++;
+        if (glowN > fn.length / 3 * 0.2) {
+          const bb = c.mesh.geometry.boundingBox || (c.mesh.geometry.computeBoundingBox(), c.mesh.geometry.boundingBox);
+          const glowFil = Object.keys(fns).find(k => fns[k] === 5 && (Number(k) === c.extruder || (tf && tf.includes(Number(k))))) || c.extruder;
+          c.glow = { color: glowColor(this.colors[glowFil] || '#cfe9d8'), center: bb.getCenter(new THREE.Vector3()), radius: Math.max(5, bb.getSize(new THREE.Vector3()).length() / 2) };
+        } else c.glow = null;
+        let clear = false;
+        for (let k = 0; k < fn.length; k += 3) if (fn[k] > 3.5 && fn[k] < 4.5) { clear = true; break; }
+        const m = c.mesh.material;
+        if (m.transparent !== clear) { m.transparent = clear; m.depthWrite = !clear; m.needsUpdate = true; }
+        // drawn after the (slightly see-through) bed, so the bed never paints over them
+        c.mesh.renderOrder = clear ? 2 : 0;
+      }
     }
   }
 
@@ -418,8 +628,8 @@ export class ModelViewer {
   }
   // a square picture of the model in the given filament colours ({ colors, sparkle }), for a scheme card
   filamentPreview(looks, size = 200, view = 'iso') {
-    const prev = { mode: this.mode, colors: this.colors, sparkle: this.sparkle, pos: this.camera.position.clone(), target: this.controls.target.clone(), bg: this.scene.background };
-    this.mode = 'colors'; this.colors = looks.colors; this.sparkle = looks.sparkle || {}; this.recolor(); this.fit(view);
+    const prev = { mode: this.mode, colors: this.colors, sparkle: this.sparkle, finish: this.finish, pos: this.camera.position.clone(), target: this.controls.target.clone(), bg: this.scene.background };
+    this.mode = 'colors'; this.colors = looks.colors; this.sparkle = looks.sparkle || {}; this.finish = looks.finish || {}; this.recolor(); this.fit(view);
     if (this.bed) this.bed.visible = false;
     this.scene.background = null; this.renderer.setClearColor(0x000000, 0);
     this.renderer.render(this.scene, this.camera);
@@ -427,7 +637,7 @@ export class ModelViewer {
     const c = document.createElement('canvas'); c.width = size; c.height = size;
     c.getContext('2d').drawImage(src, (src.width - side) / 2, (src.height - side) / 2, side, side, 0, 0, size, size);
     this.scene.background = prev.bg; if (this.bed) this.bed.visible = true;
-    this.mode = prev.mode; this.colors = prev.colors; this.sparkle = prev.sparkle; this.recolor();
+    this.mode = prev.mode; this.colors = prev.colors; this.sparkle = prev.sparkle; this.finish = prev.finish; this.recolor();
     this.camera.position.copy(prev.pos); this.controls.target.copy(prev.target); this.controls.update();
     return c.toDataURL('image/png');
   }
