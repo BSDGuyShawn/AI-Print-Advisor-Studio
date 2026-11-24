@@ -29,7 +29,7 @@ function measureLayers(text) {
   return { count: z.length, first: round(z[0]), step: sorted.length ? sorted[0][0] : round(z[0]), steps: sorted.map(([h, n]) => ({ h, n })), top: round(z[z.length - 1]) };
 }
 
-// The sliced project's per-object settings: { objectId: { key: value } }
+// A project's objects: { objectId: { key: value } } (their own metadata, name included)
 async function objectSettings(zipBuffer) {
   const out = {};
   if (!zipBuffer) return out;
@@ -46,7 +46,9 @@ async function objectSettings(zipBuffer) {
 
 // changes: [{key, value, slot}] for the whole print; objectChanges: { objectId: [{key, value}] }; names: { objectId: name };
 // usedSlots: toolheads the print uses. Returns { checks: [{label, where, wanted, actual, ok, note}], summary: [...], layers, allOk }
-async function verifyPrint({ gcodeText, slicedProject, changes = [], objectChanges = null, names = {}, usedSlots = [1] }) {
+// inputProject: the file given to the slicer; Orca renumbers objects in the project it exports (and keeps only the
+// plate's objects), so objects are matched by name (names are made unique before slicing)
+async function verifyPrint({ gcodeText, slicedProject, inputProject = null, changes = [], objectChanges = null, names = {}, usedSlots = [1] }) {
   const cfg = parseConfigBlock(gcodeText || '') || {};
   const L = gcodeText ? measureLayers(gcodeText) : null;
   const value = (key, slot) => { const v = cfg[key]; return Array.isArray(v) ? v[isFilament(key) ? Math.max(0, (slot || 1) - 1) : 0] : v; };
@@ -59,10 +61,20 @@ async function verifyPrint({ gcodeText, slicedProject, changes = [], objectChang
     checks.push({ key: c.key, label: label(c.key), slot: c.slot || 0, where: 'whole print', wanted: String(wanted), actual: actual === undefined ? 'not in the print' : String(actual), ok, note });
   }
   if (objectChanges && Object.keys(objectChanges).length) {
-    const sliced = await objectSettings(slicedProject);
-    // one row per setting and value, listing the objects that get it
+    const slicedById = await objectSettings(slicedProject);
+    const input = inputProject ? await objectSettings(inputProject) : null;
+    const byName = new Map(Object.values(slicedById).filter(o => o.name).map(o => [o.name, o]));
+    // the input's id -> the same object in the sliced project (by its unique name); without the input, by id
+    const sliced = {};
+    for (const id of Object.keys(objectChanges)) {
+      const nm = input && input[id] && input[id].name;
+      if (input) { if (nm && byName.has(nm)) sliced[id] = byName.get(nm); } else if (slicedById[id]) sliced[id] = slicedById[id];
+      if (nm) names[id] = nm;
+    }
+    // one row per setting and value, listing the objects in this print that get it (objects on other plates aren't)
     const rows = new Map();
     for (const [id, list] of Object.entries(objectChanges)) for (const c of list) {
+      if (input && !sliced[id]) continue;
       const wanted = normalize(c.key, c.value), k = `${c.key}=${wanted}`;
       const r = rows.get(k) || { key: c.key, wanted, ids: [] };
       r.ids.push(id); rows.set(k, r);

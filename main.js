@@ -982,6 +982,7 @@ ipcMain.handle('send-prepare', async (_e, { plateIndex, variant }) => { await S.
     const names = Object.fromEntries(S.base.project.items.map(it => [String(it.objectId), String(it.name || '').replace(/_id_\d+_copy_\d+$/, '')]));
     const usedSlots = filaments.length ? filaments.map(f => f.index + 1) : [1];
     verify = await verifyPrint({ gcodeText: await fs.readFile(r.gcodePath, 'utf8'), slicedProject: await fs.readFile(r.slicedProjectPath).catch(() => null),
+      inputProject: await fs.readFile(path.join(path.dirname(r.gcodePath), 'input.3mf')).catch(() => null),
       changes: fin.changes, objectChanges: fin.objectChanges, names, usedSlots });
   } catch (e) { logLine('verify failed:', e.message); verify = { error: e.message }; }
   return { variantId: variant.id, remoteName: safeRemoteName(`${printName()}${vword}`),
@@ -2232,7 +2233,32 @@ ipcMain.handle('ts-pick-model', async () => {
   const r = await dialog.showOpenDialog(win, { title: 'Open the model you printed', filters: [{ name: '3MF project', extensions: ['3mf'] }], properties: ['openFile'] });
   return r.canceled ? null : r.filePaths[0];
 });
-ipcMain.handle('ts-load', async (_e, { jobId, modelPath }) => { await S.ready;
+// Which plate of a model a print was: the plate chosen in the troubleshooter, else "_plate_N" in the print's file name,
+// else the plate whose objects match the objects in the printed G-code (by name), else the first plate with objects
+const normName = (n) => String(n || '').toLowerCase().replace(/_id_\d+_copy_\d+$/, '').replace(/\.(stl|obj|3mf|step)$/i, '').replace(/[\s_-]+\d+$/, '').replace(/[^a-z0-9]+/g, '');
+function printedPlate(proj, job, gcodeObjects, chosen) {
+  const mem = plateMembership(proj);
+  const plates = (proj.plates.length ? proj.plates : [{ index: 1, name: '', objectIds: [] }]).map(p => {
+    const items = proj.items.filter(it => it.printable !== false && ((mem.get(it.index) || {}).plate === p.index && (mem.get(it.index) || {}).where !== 'outside'));
+    const list = items.length ? items : proj.items.filter(it => (p.objectIds || []).includes(it.objectId));
+    return { index: p.index, name: p.name || '', items: list };
+  });
+  const printed = (gcodeObjects || []).map(o => normName(o.name)).filter(Boolean);
+  for (const p of plates) {
+    const names = p.items.map(it => normName(it.name));
+    p.match = printed.length ? printed.filter(n => names.some(m => m === n || (m && n && (m.startsWith(n) || n.startsWith(m))))).length : 0;
+  }
+  const info = plates.filter(p => p.items.length).map(p => ({ index: p.index, name: p.name, objects: p.items.length, match: p.match }));
+  if (chosen && plates.some(p => p.index === chosen)) return { plate: chosen, how: 'chosen', plates: info };
+  const fromName = Number((/_plate_(\d+)/i.exec(job.filename) || [])[1]);
+  if (fromName && plates.some(p => p.index === fromName)) return { plate: fromName, how: 'file name', plates: info };
+  const best = [...plates].sort((a, b) => b.match - a.match)[0];
+  if (best && best.match > 0) return { plate: best.index, how: 'objects', plates: info };
+  const first = plates.find(p => p.items.length) || plates[0];
+  return { plate: first.index, how: 'first', plates: info };
+}
+
+ipcMain.handle('ts-load', async (_e, { jobId, modelPath, plateIndex }) => { await S.ready;
   const job = (S.lastJobs || []).find(j => j.id === jobId);
   if (!job) throw new Error('Refresh the print history and try again.');
   S.ts = { job, gcode: null, gcodeError: null, project: null, analysis: null, modelPath };
@@ -2258,10 +2284,12 @@ ipcMain.handle('ts-load', async (_e, { jobId, modelPath }) => { await S.ready;
   if (modelPath) {
     progress('Loading the model…');
     const proj = await load3mf(await fs.readFile(modelPath));
-    const plate = Number((/_plate_(\d+)/i.exec(job.filename) || [])[1]) || (proj.plates[0] && proj.plates[0].index) || 1;
+    const pp = printedPlate(proj, job, S.ts.objects, Number(plateIndex) || null);
+    const plate = pp.plate;
     const a = analyzePlate(proj, plate, {}, { orient: false });
     S.ts.project = proj; S.ts.analysis = a;
-    model = { preview: a.preview, offset: a.offset, totals: a.totals, names: a.objects.map(o => o.name), fileName: path.basename(modelPath), assemblyGuess: projectLooksLikeAssembly(proj) };
+    model = { preview: a.preview, offset: a.offset, totals: a.totals, names: a.objects.map(o => o.name), fileName: path.basename(modelPath), assemblyGuess: projectLooksLikeAssembly(proj),
+      plate, plateHow: pp.how, plates: pp.plates };
     if (!S.ts.settings) S.ts.settings = proj.projectSettings || null;
   }
   // the supports that were printed, for drawing and painting in the 3D view

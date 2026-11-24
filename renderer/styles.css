@@ -874,6 +874,8 @@ body.kpi-resizing { cursor: ns-resize; user-select: none; }
 .sd-verify tr.ok td.st { color: var(--ok); } .sd-verify tr.bad td.st { color: var(--danger); } .sd-verify tr.bad td { background: rgb(224 106 85 / .08); }
 .sd-verify small { color: var(--muted); }
 .sd-verify details { margin-top: 6px; }
+.ts-plate { display: inline-block; margin-left: 6px; }
+.ts-plate select { font: inherit; font-size: 12.5px; }
 .ts-saved { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--radius-s); padding: 8px 12px; margin: 0 0 10px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
 .ts-saved select { font: inherit; font-size: 12.5px; margin-left: 4px; }
 .callout.ts-carry { margin-bottom: 10px; }

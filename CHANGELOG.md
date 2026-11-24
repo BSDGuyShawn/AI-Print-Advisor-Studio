@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.34.2
+- **The troubleshooter opens the plate that was printed.** For prints whose file name doesn't say the plate, it matches
+  the objects in the printed G-code to the model's plates (e.g. "Wings Redo" → the plate with the two wings). A
+  **Plate** chooser shows every plate and how many printed objects it matches; your choice is remembered for that print.
+  Print fixed version, Save fixed 3MF and Use these settings use that plate.
+- Fixed: **Settings in this print** reported per-object settings as missing. Orca renumbers objects in the sliced
+  project it exports, so they're now matched by name (they were in the print; the check looked in the wrong place).
+
 ## 2.34.1
 - **Send to printer shows the settings the print will really use**, read back from the sliced file that is about to be
   sent (not from what the app meant to change): every changed setting with ✓, or ⚠ when it isn't in the print, the layer

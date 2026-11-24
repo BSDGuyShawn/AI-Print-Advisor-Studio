@@ -2156,10 +2156,12 @@ function showTsDiagnosis(d) {
 }
 const tsEditsKey = () => `aipa.tsEdits.${TS.job && TS.job.id}.${TS.diagAt || ''}`;
 
-async function tsLoad(modelPath) {
+async function tsLoad(modelPath, plateIndex = null) {
   TS.modelPath = modelPath || null;
-  const res = await withBusy('ts', modelPath ? 'Loading the printed G-code and the model…' : 'Loading the printed G-code…', () => api.tsLoad({ jobId: TS.job.id, modelPath }));
+  if (plateIndex == null) { try { plateIndex = Number(localStorage.getItem(`aipa.tsPlate.${TS.job.id}`)) || null; } catch {} }
+  const res = await withBusy('ts', modelPath ? 'Loading the printed G-code and the model…' : 'Loading the printed G-code…', () => api.tsLoad({ jobId: TS.job.id, modelPath, plateIndex }));
   TS.gcode = res.gcode; TS.model = res.model;
+  TS.plate = res.model ? res.model.plate : null;
   const gNames = new Set((res.gcode.objects || []).map(o => o.name.replace(/_id_\d+_copy_\d+$/, '')));
   const tsMulti = (res.model && (res.model.names.length > 1 || res.model.assemblyGuess)) || gNames.size > 1;
   $('tsFitRow').classList.remove('hidden');
@@ -2169,6 +2171,12 @@ async function tsLoad(modelPath) {
   $('tsLeftHint').textContent = res.gcode.ok
     ? `Using the G-code that was printed (${res.gcode.header.slicer || 'Snapmaker Orca'}, ${res.gcode.header.layers || '?'} layers${res.printed && res.printed.layer ? `, ${res.printed.layer} mm` : ''}). ${res.model ? 'Rotate with the left button; in Paint mode, right-drag rotates.' : ''}`
     : `Couldn’t read the G-code from the printer (${res.gcode.error}).${res.model ? ' Claude will use the model’s saved settings instead.' : ''}`;
+  if (res.model && res.model.plates && res.model.plates.length > 1) {
+    // the plate that was printed (found from the printed objects); pick another if it's wrong
+    const how = { chosen: 'your choice', 'file name': 'from the print’s file name', objects: 'its objects match the print', first: 'couldn’t tell: check it' }[res.model.plateHow] || '';
+    $('tsLeftHint').insertAdjacentHTML('beforeend', ` <label class="ts-plate">Plate: <select id="tsPlatePick">${res.model.plates.map(p => `<option value="${p.index}" ${p.index === res.model.plate ? 'selected' : ''}>${p.index}${p.name ? `: ${esc(p.name)}` : ''} (${p.objects} object${p.objects === 1 ? '' : 's'}${p.match ? `, ${p.match} printed` : ''})</option>`).join('')}</select> <small>${esc(how)}</small></label>`);
+    $('tsPlatePick').onchange = (e) => { try { localStorage.setItem(`aipa.tsPlate.${TS.job.id}`, e.target.value); } catch {} tsLoad(TS.modelPath, Number(e.target.value)); };
+  }
   if (res.model) {
     $('tsEmpty').classList.add('hidden'); $('tsMap').classList.add('hidden'); $('tsViewer').classList.remove('hidden'); $('tsTools').classList.remove('hidden');
     if (!TS.viewer) {
@@ -2444,7 +2452,7 @@ function renderTsResult() {
     await openFile(api.openPath(pathToModel));
     if (!state.file || state.file.filePath !== pathToModel) throw new Error('The model didn’t open.');
     // the plate that was printed ("…_plate_2.gcode")
-    const plate = Number((/_plate_(\d+)/i.exec(TS.job.filename) || [])[1]);
+    const plate = TS.plate || Number((/_plate_(\d+)/i.exec(TS.job.filename) || [])[1]);
     if (plate && plate !== state.plateIndex && [...$('plateSelect').options].some(o => Number(o.value) === plate)) {
       $('plateSelect').value = String(plate); state.plateIndex = plate; state.compare = null; await loadPlate();
     }
@@ -2507,7 +2515,7 @@ function renderTsResult() {
       const what = issues.slice(0, 2).map(i => i.split(/\s*(?:\/| or )\s*/)[0].toLowerCase()).join(' and ');
       note.textContent = 'Choose where to save it…';
       const out = await save3mf(null, { quiet: true, name: what ? `Fixed ${what}` : 'Fixed' });
-      const plate = Number((/_plate_(\d+)/i.exec(TS.job.filename) || [])[1]) || null;
+      const plate = TS.plate || Number((/_plate_(\d+)/i.exec(TS.job.filename) || [])[1]) || null;
       if (!out) { note.textContent = 'Not saved.'; return; }
       const auto = [...out.fixes.map(f => `${f.key.replace(/_/g, ' ')} → ${f.value}: ${f.reason}`), ...out.corrections];
       const file = out.path.split(/[\\/]/).pop();
