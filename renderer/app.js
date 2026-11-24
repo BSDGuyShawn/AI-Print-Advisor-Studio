@@ -120,6 +120,7 @@ async function openFile(promise, restore = null, opts = {}) {
     setBusy('file', restore ? 'Restoring your session…' : 'Reading the 3MF…');
     const info = await promise;
     if (!info) { clearBusy('file'); return; }
+    if (state.tsCarry && state.tsCarry.filePath !== info.filePath) state.tsCarry = null;
     Object.assign(state, { file: info, result: null, objects: null, objPlan: null, compare: null, rotations: {}, checks: [], orientObj: null, assemblyChoice: null, blockersOn: false, remixApplied: false, swapUndo: null });
     resetRemix(); swReset();
     state.slots = initialSlots(info.filaments);
@@ -1435,6 +1436,16 @@ $('analyzeBtn').onclick = async () => {
       res = await askChatbot(res);
       if (!res) { state.result ? renderResults() : (body.classList.add('hidden'), $('resultsEmpty').classList.remove('hidden')); return; }
     }
+    // troubleshooter fixes loaded for this model stay: the new advice is added around them
+    const carry = state.tsCarry && state.file && state.tsCarry.filePath === state.file.filePath ? state.tsCarry : null;
+    if (carry && res && res.rows) {
+      for (const r of carry.rows) {
+        const i = res.rows.findIndex(x => x.id === r.id);
+        const row = { ...r, reason: `From the troubleshooter: ${r.reason || ''}` };
+        if (i >= 0) res.rows[i] = row; else res.rows.push(row);
+      }
+      res.fromTs = carry.job;
+    }
     state.result = res;
     state.objects = null;
     state.compare = null;
@@ -1453,6 +1464,8 @@ $('analyzeBtn').onclick = async () => {
 function renderResults() {
   const body = $('resultsBody');
   if (!state.result) { body.classList.add('hidden'); $('resultsEmpty').classList.remove('hidden'); return; }
+  // shown whichever way the results came (the AI, the troubleshooter's fixes, an earlier analysis, a restored session)
+  body.classList.remove('hidden'); $('resultsEmpty').classList.add('hidden');
   const { plan, rows, recipe, orientationChoices, sliceError, usedHistory } = state.result;
   const order = ['Quality', 'Strength', 'Speed', 'Support', 'Adhesion', 'Multi-color', 'Filament', 'Other'];
   const claudeRows = rows.filter(r => r.source === 'claude');
@@ -1464,7 +1477,8 @@ function renderResults() {
     return `<div class="callout"><b>Reorient ${esc(c.objectName)}: ${esc(c.option.label)}.</b> ${esc(c.reason)}
       <div class="row">${applied ? '<span class="ok-line">Applied</span>' : `<button class="btn primary" data-orient="${i}">Apply this orientation</button>`}</div></div>`;
   }).join('');
-  body.innerHTML = `${state.objects ? objectsHeader() : ''}
+  const tsBanner = state.result.fromTs ? `<div class="callout ts-carry"><b>Includes the troubleshooter’s fixes for ${esc(state.result.fromTs)}.</b> They’re ticked below (marked “From the troubleshooter” after new recommendations). <b>Send to printer…</b> prints with all of them; <b>Save as 3MF</b> keeps them in the file.</div>` : '';
+  body.innerHTML = `${tsBanner}${state.objects ? objectsHeader() : ''}
     <div class="actions">
       <span class="count" id="selCount"></span>
       <button class="btn" id="copyBtn" title="Copy a to-do list of these changes, to make them by hand in your slicer">Copy checklist</button>
@@ -1976,6 +1990,22 @@ function sdStatus(text, pct = null, kind = '') {
 }
 api.onSendProgress(p => sdStatus(p.label, p.pct));
 
+// The Send dialog's "Settings in this print": every intended change, read back from the sliced print (✓ / ⚠), and the
+// main settings it will print with, so nothing is printed on trust
+function renderSendVerify(v) {
+  const box = $('sdVerify');
+  if (!v || v.error) { box.innerHTML = `<p class="error">Couldn’t read the settings back from the sliced print${v && v.error ? `: ${esc(v.error)}` : ''}.</p>`; return; }
+  const bad = v.checks.filter(c => !c.ok);
+  const head = !v.checks.length ? '<p class="vsum">No settings changed: it prints with the model’s own settings.</p>'
+    : bad.length ? `<p class="vsum bad">⚠ ${bad.length} of ${v.checks.length} changed setting${v.checks.length === 1 ? '' : 's'} ${bad.length === 1 ? 'is' : 'are'} not in the sliced print. Check before printing.</p>`
+      : `<p class="vsum ok">✓ All ${v.checks.length} changed setting${v.checks.length === 1 ? ' is' : 's are'} in the sliced print (read back from the file that will be sent).</p>`;
+  const rows = v.checks.map(c => `<tr class="${c.ok ? 'ok' : 'bad'}"><td class="st">${c.ok ? '✓' : '⚠'}</td><td><b>${esc(c.label)}</b>${c.slot ? ` T${c.slot}` : ''}<br><small>${esc(c.where)}</small></td>
+    <td>${esc(c.wanted)}${c.ok ? '' : ` <small>(print has: ${esc(c.actual)})</small>`}${c.note ? `<br><small>${esc(c.note)}</small>` : ''}</td></tr>`).join('');
+  const perObj = v.checks.some(c => / \(per object\)$/.test(c.where));
+  const summary = v.summary.length ? `<details ${v.checks.length ? '' : 'open'}><summary>Main settings of this print</summary><table>${v.summary.map(s => `<tr><td>${esc(s.label)}</td><td>${esc(s.value)}</td></tr>`).join('')}</table>
+    ${perObj ? '<small>These are the print’s general values; objects with their own settings (above) use those instead.</small>' : ''}</details>` : '';
+  box.innerHTML = head + (rows ? `<table>${rows}</table>` : '') + summary;
+}
 async function openSend(variantId) {
   if (!state.file) return;
   { const d = variantDef(variantId); if (!(await fitConfirm([...d.changes, ...Object.values(d.objectChanges || {}).flat()]))) return; }
@@ -1983,6 +2013,7 @@ async function openSend(variantId) {
   const dlg = $('sendDialog');
   SEND.job = null; SEND.map = {};
   $('sdFilaments').innerHTML = ''; $('sdPrinters').innerHTML = '<p class="hint">Checking your printers…</p>'; $('sdFilNote').textContent = '';
+  $('sdVerify').innerHTML = '<p class="hint">Slicing, then reading the settings back from the sliced print…</p>';
   $('sdStart').disabled = true;
   const thumbs = viewer.thumbnails([48, 300, 512]);
   SEND.thumbs = thumbs.filter(t => t.w !== 512);
@@ -1996,8 +2027,9 @@ async function openSend(variantId) {
     withBusy('send', `Slicing ${def.name} for the printer…`, () => api.sendPrepare({ plateIndex: state.plateIndex, variant: def })).catch(e => ({ error: cleanErr(e) })),
     api.printersStatus().catch(() => []),
   ]);
-  if (job.error) { sdStatus(job.error, null, 'error'); return; }
+  if (job.error) { sdStatus(job.error, null, 'error'); $('sdVerify').innerHTML = ''; return; }
   SEND.job = job; SEND.printers = printers;
+  renderSendVerify(job.verify);
   $('sdName').value = job.remoteName;
   $('sdTime').textContent = hm(job.timeSeconds);
   $('sdGrams').textContent = `${fmt(job.grams || 0)} g`;
@@ -2091,11 +2123,9 @@ async function openTroubleshooter(job) {
   $('tsDesc').value = job.rating && job.rating.note ? job.rating.note : '';
   $('tsZmin').value = ''; $('tsZmax').value = '';
   $('tsResult').innerHTML = ''; renderTsPhotos();
-  const prev = (job.diagnoses || []).find(d => d.full);
-  if (prev) {
-    $('tsResult').innerHTML = `<p class="hint">This print was diagnosed on ${esc(new Date(prev.at).toLocaleString())}. <button class="link" id="tsShowPrev">Show that diagnosis</button> (no new AI request), or describe the problem again below.</p>`;
-    $('tsShowPrev').onclick = () => { TS.result = prev.full; renderTsResult(); };
-  }
+  TS.diags = (job.diagnoses || []).filter(d => d.full);
+  TS.diagAt = null;
+  $('tsRun').textContent = TS.diags.length ? 'Run a new diagnosis with Claude' : 'Troubleshoot with Claude';
   $('tsJob').innerHTML = `<h3>${esc(job.filename)}</h3><dl class="ts-job"><dt>Printer</dt><dd>${esc(job.printer)}</dd><dt>When</dt><dd>${job.start ? new Date(job.start).toLocaleString() : '—'}</dd><dt>Result</dt><dd>${esc(job.status)} after ${hm(job.printSeconds)}${job.rating ? `, rated “${esc({ good: 'Good', issues: 'Had issues', failed: 'Failed' }[job.rating.rating])}”` : ''}</dd><dt>Material</dt><dd>${esc(job.filamentType || '—')}</dd></dl>`;
   $('tsEmpty').innerHTML = '<p>Loading the print…</p>'; $('tsEmpty').classList.remove('hidden');
   $('tsTools').classList.add('hidden'); $('tsMap').classList.add('hidden'); $('tsViewer').classList.remove('hidden');
@@ -2106,9 +2136,25 @@ async function openTroubleshooter(job) {
     $('tsIssues').innerHTML = info.issues.map(x => `<button class="chip" aria-pressed="false" data-issue="${esc(x)}">${esc(x)}</button>`).join('');
     $('tsIssues').querySelectorAll('.chip').forEach(c => c.onclick = () => { const on = c.getAttribute('aria-pressed') !== 'true'; c.setAttribute('aria-pressed', String(on)); on ? TS.issues.add(c.dataset.issue) : TS.issues.delete(c.dataset.issue); });
     if (job.rating && job.rating.rating === 'failed' && job.status === 'cancelled') { /* no preselection: let the user say what happened */ }
-    await tsLoad(info.modelPath);
+    // the model picked for this print last time (saving a fixed file asked for it) is used again
+    let modelPath = info.modelPath;
+    if (!modelPath) { try { modelPath = localStorage.getItem(`aipa.tsModel.${job.id}`) || null; } catch {} }
+    try { await tsLoad(modelPath); }
+    catch (e) { if (modelPath && modelPath !== info.modelPath) { try { localStorage.removeItem(`aipa.tsModel.${job.id}`); } catch {} await tsLoad(info.modelPath); } else throw e; }
+    if (TS.diags.length) showTsDiagnosis(TS.diags[0]);
   } catch (e) { $('tsEmpty').innerHTML = `<p class="error">${esc(cleanErr(e))}</p>`; }
 }
+// a saved diagnosis: shown as it was (with the ticks and values you chose), no new AI request
+function showTsDiagnosis(d) {
+  TS.result = d.full; TS.diagAt = d.at;
+  if (d.issueTypes) {
+    TS.issues = new Set(d.issueTypes);
+    $('tsIssues').querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', String(TS.issues.has(c.dataset.issue))));
+  }
+  if (d.description && !$('tsDesc').value.trim()) $('tsDesc').value = d.description;
+  renderTsResult();
+}
+const tsEditsKey = () => `aipa.tsEdits.${TS.job && TS.job.id}.${TS.diagAt || ''}`;
 
 async function tsLoad(modelPath) {
   TS.modelPath = modelPath || null;
@@ -2343,7 +2389,11 @@ $('tsRun').onclick = async () => {
       out = await askChatbot(out);
       if (!out) { $('tsResult').innerHTML = ''; return; }
     }
-    TS.result = out; renderTsResult(); guideEvent('troubleshot');
+    const fresh = { at: new Date().toISOString(), full: out, issueTypes: [...TS.issues], description: $('tsDesc').value.trim(), summary: out.result && out.result.summary };
+    TS.job.diagnoses = [fresh, ...(TS.job.diagnoses || [])];
+    TS.diags = [fresh, ...(TS.diags || [])];
+    TS.result = out; TS.diagAt = fresh.at; renderTsResult(); guideEvent('troubleshot');
+    $('tsRun').textContent = 'Run a new diagnosis with Claude';
     const fromPhone = TS.photos.filter(p => p.phoneId).map(p => p.phoneId);
     if (fromPhone.length && api.tsPhotosState) api.tsPhotosState(fromPhone, 'sent').catch(() => {});
     $('tsResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2355,7 +2405,11 @@ $('tsRun').onclick = async () => {
 function renderTsResult() {
   const { result: r, rows, regionGcode } = TS.result;
   const fixes = rows.filter(x => !x.invalid);
-  $('tsResult').innerHTML = `
+  const diags = TS.diags || [];
+  const savedNote = TS.diagAt ? `<div class="ts-saved"><b>Saved diagnosis</b> from ${esc(new Date(TS.diagAt).toLocaleString())}: no new AI request.
+      ${diags.length > 1 ? `<label>Other diagnoses of this print: <select id="tsDiagPick">${diags.map((d, i) => `<option value="${i}" ${d.at === TS.diagAt ? 'selected' : ''}>${esc(new Date(d.at).toLocaleString())}${d.full.rows.some(x => x.key === 'layer_height') ? ' · layer height' : ''}</option>`).join('')}</select></label>` : ''}
+      <small>Want a fresh one? Click <b>Run a new diagnosis with Claude</b> above.</small></div>` : '';
+  $('tsResult').innerHTML = `${savedNote}
     <h3 class="group-title">Diagnosis</h3>
     <p class="summary">${esc(r.summary)}</p>
     ${r.causes.map(c => `<div class="cause ${esc(c.likelihood)}"><span class="k">${esc(c.likelihood)} likelihood · ${esc(c.kind)}</span><b>${esc(c.cause)}</b><span class="e">${esc(c.evidence)}</span></div>`).join('')}
@@ -2370,6 +2424,7 @@ function renderTsResult() {
     ${r.questions.length ? `<h3 class="group-title">To narrow it down</h3><ul class="fix-list">${r.questions.map(x => `<li>${esc(x)}</li>`).join('')}</ul><p class="hint">Add the answers to the description and troubleshoot again.</p>` : ''}
     ${caveatHtml()}
     <div class="ts-actions">
+      <button class="btn primary" id="tsPrintFixed" title="Print the model on one of your printers with the ticked fixes (sliced here, with every fix included)">🖨 Print fixed version…</button>
       <button class="btn primary" id="tsSaveFixed" title="Save a copy of the model (.3mf) with the ticked fixes built in, to open in Snapmaker Orca and print">💾 Save fixed 3MF…</button>
       ${TS.modelPath ? '<button class="btn" id="tsUse">Use these settings</button>' : '<button class="btn" id="tsUseOpen">Open the model and use these settings</button>'}
       <button class="btn" id="tsCopy">Copy checklist</button>
@@ -2398,11 +2453,34 @@ function renderTsResult() {
     state.result = { plan: { summary: `From the troubleshooter (${TS.job.filename}): ${r.summary}`, risks: r.causes.slice(0, 3).map(c => ({ severity: c.likelihood === 'high' ? 'warn' : 'info', title: c.cause, detail: c.evidence })),
         manual_steps: r.physical_checks, orientation: r.orientation, estimated_effect: '', material_notes: '', multicolor_notes: '', history_notes: '' },
       rows: newRows, recipe: { name: 'None', about: 'Settings from the troubleshooter, on top of the project as saved.' }, orientationChoices: [], originalSlice: null, usedHistory: false };
+    state.result.fromTs = TS.job.filename;
+    state.tsCarry = { filePath: pathToModel, job: TS.job.filename, rows: newRows };
     renderResults(); showTab('recs');
     return picked.length;
   };
   const use = async (pathToModel) => {
-    try { await load(pathToModel, false); toast('Troubleshooter settings loaded. Compare slices, save, or send the fixed print.', 7000); }
+    try { await load(pathToModel, false); toast('Troubleshooter fixes loaded. Send to printer…, Save as 3MF or Compare slices; Get new recommendations adds to them.', 8000); }
+    catch (e) { toast(cleanErr(e), 8000); }
+  };
+  // your ticks and edited values stay with this diagnosis
+  const saved = (() => { try { return JSON.parse(localStorage.getItem(tsEditsKey()) || 'null'); } catch { return null; } })();
+  document.querySelectorAll('#tsResult .setting').forEach(el => {
+    const e = saved && saved[el.dataset.id];
+    if (e) { el.querySelector('input[type=checkbox]').checked = e.checked; el.querySelector('input[type=text]').value = e.value; }
+    el.addEventListener('input', () => {
+      const all = {};
+      document.querySelectorAll('#tsResult .setting').forEach(x => { all[x.dataset.id] = { checked: x.querySelector('input[type=checkbox]').checked, value: x.querySelector('input[type=text]').value }; });
+      try { localStorage.setItem(tsEditsKey(), JSON.stringify(all)); } catch {}
+    });
+  });
+  const dp = $('tsDiagPick'); if (dp) dp.onchange = () => showTsDiagnosis(TS.diags[Number(dp.value)]);
+  const rememberModel = (pth) => { TS.modelPath = pth; try { localStorage.setItem(`aipa.tsModel.${TS.job.id}`, pth); } catch {} };
+  // 🖨 Print fixed version: the model in the main window with these fixes, then straight to the printer dialog
+  $('tsPrintFixed').onclick = async () => {
+    if (!tsSelected().length) { toast('Tick at least one fix under “Settings for the next print”.', 5000); return; }
+    let pth = TS.modelPath;
+    if (!pth) { pth = await api.tsPickModel(); if (!pth) return; rememberModel(pth); }
+    try { await load(pth, false); await openSend('recommended'); }
     catch (e) { toast(cleanErr(e), 8000); }
   };
   const u = $('tsUse'); if (u) u.onclick = () => use(TS.modelPath);
@@ -2415,7 +2493,7 @@ function renderTsResult() {
     if (!pth) {
       pth = await api.tsPickModel();
       if (!pth) return;
-      TS.modelPath = pth;   // remembered for this troubleshooter (Use these settings, saving again)
+      rememberModel(pth);   // remembered for this print (Use these settings, printing, saving again, next time)
     }
     btn.disabled = true;
     note.textContent = 'Opening the model and applying the fixes…';

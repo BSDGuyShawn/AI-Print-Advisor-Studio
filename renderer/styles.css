@@ -863,3 +863,17 @@ body.kpi-resizing { cursor: ns-resize; user-select: none; }
 .kp-head.on { border-color: #ef4444; }
 .kp-head i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, .25); }
 .kp-hint { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+/* the troubleshooter: which saved diagnosis is shown */
+/* Send dialog: the settings read back from the sliced print */
+.sd-verify { font-size: 13px; }
+.sd-verify .vsum { margin: 0 0 6px; font-weight: 600; }
+.sd-verify .vsum.ok { color: var(--ok); } .sd-verify .vsum.bad { color: var(--danger); }
+.sd-verify table { border-collapse: collapse; width: 100%; }
+.sd-verify td { padding: 3px 6px; border-top: 1px solid var(--line); vertical-align: top; }
+.sd-verify td.st { width: 1.5em; font-weight: 700; }
+.sd-verify tr.ok td.st { color: var(--ok); } .sd-verify tr.bad td.st { color: var(--danger); } .sd-verify tr.bad td { background: rgb(224 106 85 / .08); }
+.sd-verify small { color: var(--muted); }
+.sd-verify details { margin-top: 6px; }
+.ts-saved { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--radius-s); padding: 8px 12px; margin: 0 0 10px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.ts-saved select { font: inherit; font-size: 12.5px; margin-left: 4px; }
+.callout.ts-carry { margin-bottom: 10px; }

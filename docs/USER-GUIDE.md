@@ -134,7 +134,7 @@ You'll see each version's **look** (smooth or visible lines), **strength**, **pr
 With a version picked:
 
 - **Save as 3MF**: saves the model with these settings built in. Double-click the file to open it in Snapmaker Orca, check the preview, and print from there.
-- **Send to printer…**: uploads straight to one of your printers. Pick the printer, check which spool goes in which toolhead, and click **Print**.
+- **Send to printer…**: uploads straight to one of your printers. **Settings in this print** lists every changed setting, read back from the sliced file that will be sent (✓ when it's really in the print; the layer height is also measured from the toolpaths), plus the print's main settings. Pick the printer, check which spool goes in which toolhead, and click **Print**.
 - **Open in slicer**: opens it in Snapmaker Orca right away.
 
 ![Send to printer](images/05-send-to-printer.jpg)
@@ -248,7 +248,8 @@ Open a filament: **Prices** shows the **average per roll** (everything you paid 
 2. Next to the failed print, click **Troubleshoot…**.
 3. **Paint where it failed** on the model, pick what went wrong (spaghetti, warping, stringing…), and add a sentence if you like. A photo helps too (up to 4).
 4. Run it. You get the likely causes, most likely first, and the settings to change.
-5. Tick the fixes you want (you can edit the new values) and click **💾 Save fixed 3MF…**. If the app doesn't have the model for that print, it asks for the project file (.3mf) you sliced in Orca. It saves a copy with the fixes built in (the original stays as it was); double-click it to open it in Snapmaker Orca, check the preview, and print. (**Use these settings** instead opens the model in the main window with the fixes, to compare slices or send it to a printer.)
+5. Tick the fixes you want (you can edit the new values) and click **🖨 Print fixed version…** to print it right away with every fix, or **💾 Save fixed 3MF…** to keep a file.
+   Reopening the print later shows the same diagnosis (no new AI cost); click **Run a new diagnosis with Claude** only if you want a fresh one. If you click **Use these settings** and then Get new recommendations, the troubleshooter's fixes are kept and the new advice is added. For the file: If the app doesn't have the model for that print, it asks for the project file (.3mf) you sliced in Orca. It saves a copy with the fixes built in (the original stays as it was); double-click it to open it in Snapmaker Orca, check the preview, and print. (**Use these settings** instead opens the model in the main window with the fixes, to compare slices or send it to a printer.)
 
 **Photos from your phone.** Click **📱 Take photos with your phone** under Photos and scan the QR code with your phone's camera (phone access must be on: **Settings → Phone access**). The phone opens a page with a big **📷 Take a photo** button; each photo you take shows up in the troubleshooter a moment later. Photos you already took: **🖼 Choose from your photos** (the gallery) or **📁 Browse the phone's files** (Downloads and other folders); pick several at once. (HEIC photos can't be opened in the browser: use the 📷 button, or set the camera to JPEG.) The first time, the phone asks to pair with your PC: tap **Pair this phone**. You can also take the photos first, at the printer: on a paired phone, tap **📷** on the Filament page. Photos from the last 2 hours go into the troubleshooter by themselves when you open it; older ones wait under **Photos**, one click away. Remove a photo with its **✕**, on the phone or the PC.
 

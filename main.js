@@ -28,6 +28,7 @@ const { troubleshoot, ISSUES, systemPrompt: tsSystemPrompt, buildContent: tsBuil
 const { CATALOG, CONTEXT_KEYS, BY_KEY } = require('./src/orca-settings');
 const { canBePerObject } = require('./src/perobject');
 const { uniqueObjects } = require('./src/objects');
+const { verifyPrint } = require('./src/verify');
 const crypto = require('crypto');
 const JSZip = require('jszip');
 const fss = require('fs');
@@ -960,12 +961,11 @@ ipcMain.handle('printers-status', async () => { await S.ready;
 ipcMain.handle('send-prepare', async (_e, { plateIndex, variant }) => { await S.ready;
   if (S.base) assertRightPrinter();
   if (!S.slicer || !S.slicer.available) throw new Error('Set the Snapmaker Orca location in Settings first: sending needs a real slice.');
-  let r = S.lastSlices[variant.id];
-  if (!r) {
-    progress(`Slicing ${variant.name || 'the print'} in Snapmaker Orca…`);
-    r = await sliceVariant(plateIndex, variant);
-    S.lastSlices[variant.id] = r;
-  }
+  // always the version exactly as it is now (ticks and values may have changed since an earlier slice); an unchanged
+  // version comes straight from the slice cache
+  progress(`Slicing ${variant.name || 'the print'} in Snapmaker Orca…`);
+  const r = await sliceVariant(plateIndex, variant);
+  S.lastSlices[variant.id] = r;
   const ps = S.base.settings || {};
   const types = ps.filament_type || [], colors = ps.filament_colour || [], presets = ps.filament_settings_id || [];
   const fromSlice = (r.filaments || []).map(f => ({ index: Number(f.id) - 1, grams: f.usedGrams || 0, type: f.type }));
@@ -974,8 +974,18 @@ ipcMain.handle('send-prepare', async (_e, { plateIndex, variant }) => { await S.
     .map(f => ({ ...f, type: f.type || types[f.index] || 'PLA', color: colors[f.index] || '#888888', preset: presets[f.index] || '' }));
   // the name a voice assistant will read out: "White Voronoi Cat", or "White Voronoi Cat Fast" for a version
   const vword = /^(original|recommended)$/.test(variant.id) ? '' : ` ${String(variant.name || variant.id).replace(/\s*(\+.*|recipe)$/i, '').replace(/^Reoriented:\s*/i, '').trim()}`;
+  // what the print will really use, read back from this slice (G-code settings, measured layer heights, per-object
+  // settings in the sliced project), checked against every intended change
+  let verify = null;
+  try {
+    const fin = finalize(variant.changes || [], plateIndex, variant.rotations, variant.objectChanges);
+    const names = Object.fromEntries(S.base.project.items.map(it => [String(it.objectId), String(it.name || '').replace(/_id_\d+_copy_\d+$/, '')]));
+    const usedSlots = filaments.length ? filaments.map(f => f.index + 1) : [1];
+    verify = await verifyPrint({ gcodeText: await fs.readFile(r.gcodePath, 'utf8'), slicedProject: await fs.readFile(r.slicedProjectPath).catch(() => null),
+      changes: fin.changes, objectChanges: fin.objectChanges, names, usedSlots });
+  } catch (e) { logLine('verify failed:', e.message); verify = { error: e.message }; }
   return { variantId: variant.id, remoteName: safeRemoteName(`${printName()}${vword}`),
-    timeSeconds: r.timeSeconds, grams: r.grams, filaments, warnings: r.warnings || [], corrections: r.corrections || [] };
+    timeSeconds: r.timeSeconds, grams: r.grams, filaments, warnings: r.warnings || [], corrections: r.corrections || [], verify };
 });
 
 ipcMain.handle('send-print', async (_e, { variantId, printerIndex, remoteName, mapTable, prefs, thumbs }) => { await S.ready;

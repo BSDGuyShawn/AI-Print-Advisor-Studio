@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.34.1
+- **Send to printer shows the settings the print will really use**, read back from the sliced file that is about to be
+  sent (not from what the app meant to change): every changed setting with ✓, or ⚠ when it isn't in the print, the layer
+  height measured from the toolpaths themselves, settings on single objects checked in the sliced project, and the
+  print's main settings (layer height, walls, infill, supports, temperatures).
+- Send to printer always slices the version exactly as it's ticked now (it could reuse an earlier slice of it).
+- Fixed: after **Use these settings** in the troubleshooter, the fixes and the Send to printer / Save buttons stayed
+  hidden behind the empty Recommendations page.
+- **🖨 Print fixed version…** in the troubleshooter: prints the model with every fix you ticked (the layer height
+  included), straight from the app: it opens the printer dialog with the fixed version sliced and ready.
+- **The troubleshooter keeps its diagnosis.** Reopening a print shows its last diagnosis right away, with no new AI
+  request (before, a print just diagnosed still looked undiagnosed until the history was reloaded, which invited
+  paying for the same diagnosis again). Earlier diagnoses of that print are in a list (the ones that change the layer
+  height are marked); **Run a new diagnosis with Claude** asks again only when you want. Your ticks and edited values
+  are kept, and the model you picked for that print is remembered.
+- **Troubleshooter fixes stay** when you then click Get new recommendations: the new advice is added, the fixes are
+  kept (marked “From the troubleshooter”), and Send to printer / Save as 3MF use all of them.
+
 ## 2.34.0
 - **Settings per object, in one file.** Files with several plates, or several different objects on a plate, can now
   get different settings for different objects, saved on the objects themselves (the same as right-click → Add settings
