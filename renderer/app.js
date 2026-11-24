@@ -1497,7 +1497,9 @@ const mineChange = () => {
   viewer.setSceneOptions({ mine: SC.mine });
 };
 for (const id of ['mineScale', 'mineX', 'mineY', 'minePhoto', 'mineLight']) $(id).oninput = mineChange;
-$('mineReset').onclick = () => { SC.mine = stillDefaults(SCENE_STILLS.find(x => x.id === SC.lastStill)); syncMineSliders(); viewer.setSceneOptions({ mine: SC.mine }); };
+$('mineReset').onclick = () => { SC.mine = stillDefaults(SCENE_STILLS.find(x => x.id === SC.lastStill)); syncMineSliders(); viewer.setSceneOptions({ mine: SC.mine }); $('mineGlow').value = 0; viewer.setGlowGain(1); };
+// Glow intensity: 2^n, kept across settings (also used by Lights off on the plate)
+$('mineGlow').oninput = () => viewer.setGlowGain(Math.pow(2, Number($('mineGlow').value)));
 $('sceneShot').onclick = async () => {
   try {
     const where = SC.sel ? $('sceneSelect').selectedOptions[0].textContent : '';
@@ -1514,6 +1516,7 @@ $('nightBtn').onclick = () => { const on = !viewer.night; viewer.setNight(on); $
 function updateNightBtn() {
   const any = (state.slots || []).some(s => finishOf(s) === 'glow');
   $('nightBtn').classList.toggle('hidden', !any);
+  $('mineGlowRow').classList.toggle('hidden', !any);
   if (!any && viewer.night) { viewer.setNight(false); $('nightBtn').setAttribute('aria-pressed', 'false'); }
 }
 

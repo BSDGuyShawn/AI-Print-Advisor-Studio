@@ -48,6 +48,7 @@ function glowColor(hex) {
 const SPARKLE_TIME = { value: 0 };
 const NIGHT = { value: 0 };   // glow-in-the-dark filament glows
 const DARK = { value: 0 };    // the plate view's "lights off": everything else is darkened
+const GLOW = { value: 1 };    // glow-in-the-dark brightness at night (the Glow intensity slider)
 const LEVEL = { value: 1 };   // how bright the model is in a photo setting (evening / night / the Model brightness slider):
                               // applied last, so every finish's own sheen and glints dim with it (glow at night doesn't)
 function addSparkle(mat) {
@@ -56,6 +57,7 @@ function addSparkle(mat) {
     shader.uniforms.uNight = NIGHT;
     shader.uniforms.uDark = DARK;
     shader.uniforms.uLevel = LEVEL;
+    shader.uniforms.uGlow = GLOW;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 attribute float sparkle;
@@ -73,6 +75,7 @@ uniform float uSparkleTime;
 uniform float uNight;
 uniform float uDark;
 uniform float uLevel;
+uniform float uGlow;
 varying float vSparkle;
 varying float vFinish;
 varying vec3 vObjPos;
@@ -134,7 +137,7 @@ else if (vFinish < 1.5) reflectedLight.indirectSpecular *= 0.35;`)
       float lum = (0.42 + 0.58 * pow(facing, 0.7)) * (0.92 + 0.08 * band) + fres * 0.45;
       vec3 glowLight = gcol * lum;
       glowLight += (vec3(1.0) - glowLight) * clamp(lum - 0.75, 0.0, 1.0) * 0.55;
-      glowLight *= 0.94 + 0.06 * sin(uSparkleTime * 0.7);
+      glowLight *= (0.94 + 0.06 * sin(uSparkleTime * 0.7)) * uGlow;
       outgoingLight = mix(outgoingLight, glowLight, uNight);
     } else {
       // in the light: pale, with a faint glow
@@ -169,7 +172,7 @@ if (vSparkle > 0.0) {
 if (uLevel < 0.999 || uLevel > 1.001) { if (!(vFinish > 4.5 && vFinish < 5.5 && uNight > 0.0)) outgoingLight *= uLevel; }
 #include <opaque_fragment>`);
   };
-  mat.customProgramCacheKey = () => 'finish8';
+  mat.customProgramCacheKey = () => 'finish9';
 }
 
 export class ModelViewer {
@@ -450,6 +453,8 @@ export class ModelViewer {
     t.matrixAutoUpdate = true;
     if (ca > ia) { t.repeat.set(1, ia / ca); t.offset.set(0, (1 - ia / ca) / 2); } else { t.repeat.set(ca / ia, 1); t.offset.set((1 - ca / ia) / 2, 0); }
   }
+  // Glow intensity (0.25..3): how brightly glow-in-the-dark filament glows at night, its halo and the light it throws
+  setGlowGain(v) { this.glowGain = Math.max(0.1, Math.min(4, Number(v) || 1)); GLOW.value = this.glowGain; this.updateGlowFx(); }
   setSceneOptions(o) { if (!this.scn) return; Object.assign(this.scn.opts, o);
     if (o.mine && this.scn.spec.kind === 'still') this.applyStill();
     if ('trueSize' in o || o.mine) this.frameScene(); }
@@ -504,16 +509,30 @@ export class ModelViewer {
       x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
       this.haloTex = new THREE.CanvasTexture(cv);
     }
+    const gain = this.glowGain ?? 1;
+    // in a photo there's nothing for the glow's light to fall on, so the photo gets what the plate shows: the light
+    // pooling on the table under the model, and a stronger halo (the glow in the air around it)
+    const photo = !!(this.scn && this.scn.spec.kind === 'still');
+    let floorZ = 0;
+    if (photo) { const b = new THREE.Box3(); for (const c of this.chunks) if (c.mesh.visible) { c.mesh.geometry.computeBoundingBox(); b.union(c.mesh.geometry.boundingBox); } floorZ = b.isEmpty() ? 0 : b.min.z + 0.3; }
     for (const c of glows) {
       const col = new THREE.Color(c.glow.color);
-      const light = new THREE.PointLight(col, 7, c.glow.radius * 9, 1.1);
+      const light = new THREE.PointLight(col, 7 * gain, c.glow.radius * 9, 1.1);
       light.position.copy(c.glow.center);
       g.add(light);
-      const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.haloTex, color: col, transparent: true, opacity: 0.4, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending }));
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.haloTex, color: col, transparent: true, opacity: Math.min(1, (photo ? 0.6 : 0.4) * gain), depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending }));
       halo.position.copy(c.glow.center);
-      halo.scale.setScalar(c.glow.radius * 3);
+      halo.scale.setScalar(c.glow.radius * (photo ? 3.6 : 3) * (0.75 + 0.25 * gain));
       halo.renderOrder = 10;
       g.add(halo);
+      if (photo) {
+        const pool = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: this.haloTex, color: col, transparent: true, opacity: Math.min(1, 0.85 * gain), depthWrite: false, blending: THREE.AdditiveBlending }));
+        const reach = c.glow.radius * 5 + Math.max(0, c.glow.center.z - floorZ) * 1.2;
+        pool.position.set(c.glow.center.x, c.glow.center.y, floorZ);
+        pool.scale.set(reach, reach, 1);
+        pool.renderOrder = 1;
+        g.add(pool);
+      }
     }
     this.glowFx = g;
     this.modelGroup.add(g);
@@ -638,12 +657,18 @@ export class ModelViewer {
       if (spA) spA.needsUpdate = true;
       if (fnA) fnA.needsUpdate = true;
       if (fn && c.kind !== 'modifier') {
+        // the glowing part of it (a whole part, or just the areas painted in glow filament, like a figure's antlers):
+        // its light, halo and the light it throws come from there
         let glowN = 0;
-        for (let k = 0; k < fn.length; k += 3) if (fn[k] > 4.5 && fn[k] < 5.5) glowN++;
-        if (glowN > fn.length / 3 * 0.2) {
-          const bb = c.mesh.geometry.boundingBox || (c.mesh.geometry.computeBoundingBox(), c.mesh.geometry.boundingBox);
+        const gb = new THREE.Box3(), gp = new THREE.Vector3();
+        for (let k = 0; k < fn.length; k += 3) {
+          if (!(fn[k] > 4.5 && fn[k] < 5.5)) continue;
+          glowN++;
+          gb.expandByPoint(gp.set(pos[k * 3], pos[k * 3 + 1], pos[k * 3 + 2]));
+        }
+        if (glowN >= 12 || (glowN > 0 && glowN === fn.length / 3)) {
           const glowFil = Object.keys(fns).find(k => fns[k] === 5 && (Number(k) === c.extruder || (tf && tf.includes(Number(k))))) || c.extruder;
-          c.glow = { color: glowColor(this.colors[glowFil] || '#cfe9d8'), center: bb.getCenter(new THREE.Vector3()), radius: Math.max(5, bb.getSize(new THREE.Vector3()).length() / 2) };
+          c.glow = { color: glowColor(this.colors[glowFil] || '#cfe9d8'), center: gb.getCenter(new THREE.Vector3()), radius: Math.max(5, gb.getSize(new THREE.Vector3()).length() / 2) };
         } else c.glow = null;
         let clearN = 0;
         for (let k = 0; k < fn.length; k += 3) if (fn[k] > 3.5 && fn[k] < 4.5) clearN++;

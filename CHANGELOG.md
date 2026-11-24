@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.37.2
+- **Night in the photo settings glows like Lights off**: glow-in-the-dark filament gets its halo, and its light pools on
+  the table or shelf under the model.
+- **Glow intensity** slider under **⇲ Adjust** (shown when a toolhead is set to glow in the dark): how brightly it
+  glows, its halo and the light it throws.
+- Fixed: glow-in-the-dark **painted** on part of a model (a figure's antlers, say) didn't light up its surroundings or
+  get a halo, on the plate with Lights off or in a setting at night; only whole glow parts did.
+
 ## 2.37.1
 - Photo settings, **⇲ Adjust**: **Left / right** and **Back / front** now move the model across the photo (back = further
   away: higher up and smaller; front = nearer, lower and bigger); before, they did nothing visible, and Back / front at
