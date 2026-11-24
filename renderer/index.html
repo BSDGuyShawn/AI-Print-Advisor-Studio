@@ -158,8 +158,11 @@
           <span class="scene-note" id="sceneNote" role="status"></span>
           <div class="scene-mine hidden" id="sceneMine">
             <label>Size <input type="range" id="mineScale" min="-2" max="2.5" step="0.01" value="0"></label>
-            <label>Left / right <input type="range" id="mineX" min="-400" max="400" step="1" value="0"></label>
-            <label>Back / front <input type="range" id="mineY" min="-300" max="700" step="1" value="0"></label>
+            <label>Left / right <input type="range" id="mineX" min="-100" max="100" step="1" value="0"></label>
+            <label>Back / front <input type="range" id="mineY" min="-100" max="100" step="1" value="0"></label>
+            <label>Photo brightness <input type="range" id="minePhoto" min="-1.5" max="1.5" step="0.01" value="0"></label>
+            <label>Model brightness <input type="range" id="mineLight" min="-1.5" max="1.5" step="0.01" value="0"></label>
+            <button class="link" id="mineReset" title="Put the size, place and brightness back">Reset</button>
           </div>
         </div>
         <div class="legend hidden" id="legend">

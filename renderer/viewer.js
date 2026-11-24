@@ -48,11 +48,14 @@ function glowColor(hex) {
 const SPARKLE_TIME = { value: 0 };
 const NIGHT = { value: 0 };   // glow-in-the-dark filament glows
 const DARK = { value: 0 };    // the plate view's "lights off": everything else is darkened
+const LEVEL = { value: 1 };   // how bright the model is in a photo setting (evening / night / the Model brightness slider):
+                              // applied last, so every finish's own sheen and glints dim with it (glow at night doesn't)
 function addSparkle(mat) {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uSparkleTime = SPARKLE_TIME;
     shader.uniforms.uNight = NIGHT;
     shader.uniforms.uDark = DARK;
+    shader.uniforms.uLevel = LEVEL;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 attribute float sparkle;
@@ -69,6 +72,7 @@ vObjPos = position;`);
 uniform float uSparkleTime;
 uniform float uNight;
 uniform float uDark;
+uniform float uLevel;
 varying float vSparkle;
 varying float vFinish;
 varying vec3 vObjPos;
@@ -162,9 +166,10 @@ if (vSparkle > 0.0) {
   vec3 tint = mix(vec3(1.0), normalize(diffuseColor.rgb + 0.05) * 1.6, 0.35);
   outgoingLight += tint * (glints * 1.8 + 0.04) * vSparkle;
 }
+if (uLevel < 0.999 || uLevel > 1.001) { if (!(vFinish > 4.5 && vFinish < 5.5 && uNight > 0.0)) outgoingLight *= uLevel; }
 #include <opaque_fragment>`);
   };
-  mat.customProgramCacheKey = () => 'finish7';
+  mat.customProgramCacheKey = () => 'finish8';
 }
 
 export class ModelViewer {
@@ -332,8 +337,8 @@ export class ModelViewer {
       key.shadow.radius = 5; key.shadow.bias = -0.0004; key.shadow.normalBias = 0.6;
       scn.group.add(key);
       this.scene.add(scn.group);
-      const dim = time === 'night' ? 0.12 : time === 'evening' ? 0.45 : 1;
       const fill = new THREE.HemisphereLight(0xffffff, 0x777068, 0.9);
+      scn.key = key; scn.fill = fill;
       scn.group.add(fill);
       const tex = new THREE.TextureLoader().load(spec.image, (t) => {
         t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; this.fitBackdrop(); this.placeOnPhoto();
@@ -352,15 +357,12 @@ export class ModelViewer {
       scn.disposables.push(tex); scn.backdrop = tex;
       this.scene.background = tex;
       this.scene.environment = studioEnvironment(this.renderer);
-      this.scene.backgroundIntensity = dim; this.scene.environmentIntensity = dim * 0.8;
-      key.intensity = 1.1 * dim; fill.intensity = 0.9 * dim;
       if (time === 'evening') key.color.set(0xffc490); else if (time === 'night') key.color.set(0x8090c0);
-      const m = opts.mine || {};
-      this.pivot.scale.setScalar(m.scale || 1);
-      this.pivot.position.set(m.x || 0, m.y || 0, 0);
+      this.applyStill();
       frame = { width: 520, dir: new THREE.Vector3(0, -1, spec.pitch ?? 0.18) };
     }
     NIGHT.value = time === 'night' ? 1 : time === 'evening' ? 0.25 : 0; DARK.value = 0;
+    if (spec.kind !== 'still') LEVEL.value = 1;
     scn.frame = frame;
     this.frameScene();
     this.updateGlowFx();
@@ -387,6 +389,28 @@ export class ModelViewer {
     this.fitBackdrop();
     this.placeOnPhoto();
   }
+  // A still photo's adjustments (the Adjust panel): the model's size, where it stands (left / right across the photo;
+  // back = further away: higher in the photo and smaller, front = nearer: lower and bigger), and the brightness of the
+  // photo and of the model. Evening and Night darken both (the brightness sliders work on top of that).
+  applyStill() {
+    const scn = this.scn;
+    if (!scn || scn.spec.kind !== 'still') return;
+    const m = scn.opts.mine || {}, time = scn.opts.time || 'day';
+    const depth = Math.max(-1, Math.min(1, (m.y || 0) / 100));
+    this.pivot.position.set(0, 0, 0);
+    this.pivot.scale.setScalar((m.scale || 1) * (1 + depth * (depth > 0 ? 0.6 : 0.45)));
+    // brightness as the eye sees it (each slider step of 1 doubles or halves it), turned into light (^2.2)
+    const photoSeen = (time === 'night' ? 0.2 : time === 'evening' ? 0.55 : 1) * Math.pow(2, m.photo || 0);
+    const modelSeen = (time === 'night' ? 0.22 : time === 'evening' ? 0.6 : 1) * Math.pow(2, m.light || 0);
+    this.scene.backgroundIntensity = Math.pow(photoSeen, 2.2);
+    this.scene.environmentIntensity = 0.8;
+    scn.key.intensity = 1.1; scn.fill.intensity = 0.9;
+    LEVEL.value = Math.pow(modelSeen, 2.2);
+    // the shadow covers the model at any size
+    const big = Math.max(scn.modelSize.x, scn.modelSize.y, scn.modelSize.z) * this.pivot.scale.x;
+    const sc = scn.key.shadow.camera, e = Math.max(600, big * 2.2);
+    if (sc.right !== e) { sc.left = -e; sc.right = e; sc.top = e; sc.bottom = -e; sc.far = Math.max(5000, e * 6); sc.updateProjectionMatrix(); }
+  }
   // In a still photo the model's feet go on the photo's table / shelf: the photo says where that surface is (fractions
   // of the photo's width and height); the view is shifted so the model stands there, wherever the photo is cropped
   placeOnPhoto() {
@@ -399,7 +423,10 @@ export class ModelViewer {
       fx = (fx - t.offset.x) / t.repeat.x;
       fy = 1 - ((1 - fy) - t.offset.y) / t.repeat.y;
     }
-    fx = Math.min(0.92, Math.max(0.08, fx)); fy = Math.min(0.95, Math.max(0.3, fy));
+    const m = scn.opts.mine || {};
+    fx += ((m.x || 0) / 100) * 0.42;
+    fy += (Math.max(-1, Math.min(1, (m.y || 0) / 100))) * 0.16;
+    fx = Math.min(0.95, Math.max(0.05, fx)); fy = Math.min(0.97, Math.max(0.25, fy));
     // the camera aims at the model's middle; its feet are below that by half its height on screen
     const dist = this.camera.position.distanceTo(this.controls.target);
     const visH = 2 * dist * Math.tan((this.camera.fov * Math.PI) / 360);
@@ -424,7 +451,7 @@ export class ModelViewer {
     if (ca > ia) { t.repeat.set(1, ia / ca); t.offset.set(0, (1 - ia / ca) / 2); } else { t.repeat.set(ca / ia, 1); t.offset.set((1 - ca / ia) / 2, 0); }
   }
   setSceneOptions(o) { if (!this.scn) return; Object.assign(this.scn.opts, o);
-    if (o.mine) { this.pivot.scale.setScalar(o.mine.scale || 1); this.pivot.position.set(o.mine.x || 0, o.mine.y || 0, 0); }
+    if (o.mine && this.scn.spec.kind === 'still') this.applyStill();
     if ('trueSize' in o || o.mine) this.frameScene(); }
   leaveScene(refit = true) {
     const scn = this.scn;
@@ -441,6 +468,7 @@ export class ModelViewer {
     if (this.bed) this.bed.visible = true;
     this.renderer.shadowMap.enabled = false;
     this.camera.clearViewOffset();
+    LEVEL.value = 1;
     this.scene.backgroundRotation.set(0, 0, 0); this.scene.environmentRotation.set(0, 0, 0);
     this.scene.backgroundIntensity = 1; this.scene.environmentIntensity = 1;
     this.controls.enableRotate = true; this.controls.enablePan = true; this.controls.minDistance = 0; this.controls.maxDistance = Infinity;

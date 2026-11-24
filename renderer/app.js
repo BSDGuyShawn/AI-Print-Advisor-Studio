@@ -1457,7 +1457,7 @@ async function applyScene() {
       // an app photo: where the model stands in it is preset (the sliders still adjust it)
       const p = SCENE_STILLS.find(x => x.id === sel.slice(6));
       if (!p) throw new Error('That photo setting isn’t available.');
-      if (SC.lastStill !== p.id) { SC.mine = { scale: p.scale || 1, x: p.x || 0, y: p.y || 0 }; SC.lastStill = p.id; syncMineSliders(); }
+      if (SC.lastStill !== p.id) { SC.mine = stillDefaults(p); SC.lastStill = p.id; syncMineSliders(); }
       spec = { kind: 'still', image: `scenes/photos/${p.file}`, light: p.light, pitch: p.pitch, at: p.at };
     } else if (sel.startsWith('mine:')) { SC.lastStill = null; spec = { kind: 'still', image: await api.sceneMyPhoto(sel.slice(5)), light: 'front' }; }
     $('sceneNote').textContent = '';
@@ -1472,7 +1472,7 @@ async function applyScene() {
 $('sceneSelect').onchange = async (e) => {
   let v = e.target.value;
   if (v === 'mine:+') {
-    try { const p = await api.sceneAddPhoto(); if (!p) { e.target.value = SC.sel; return; } v = `mine:${p.id}`; SC.mine = { scale: 1, x: 0, y: 0 }; $('mineScale').value = 0; $('mineX').value = 0; $('mineY').value = 0; }
+    try { const p = await api.sceneAddPhoto(); if (!p) { e.target.value = SC.sel; return; } v = `mine:${p.id}`; SC.mine = stillDefaults(); SC.lastStill = null; syncMineSliders(); }
     catch (err) { toast(cleanErr(err), 6000); e.target.value = SC.sel; return; }
   }
   SC.sel = v; await renderSceneSelect(); await applyScene();
@@ -1485,13 +1485,19 @@ $('sceneSize').onclick = () => {
   $('sceneSize').title = SC.trueSize ? 'True size: the model at its real size in the setting. Click to fill the view instead.' : 'Fill the view: the model shown big. Click for its true size in the setting.';
   viewer.setSceneOptions({ trueSize: SC.trueSize });
 };
-function syncMineSliders() { $('mineScale').value = Math.log2(SC.mine.scale || 1); $('mineX').value = SC.mine.x || 0; $('mineY').value = SC.mine.y || 0; }
+// the Adjust panel: size, left / right and back / front (as % of the photo), photo and model brightness (2^n)
+function stillDefaults(p) { return { scale: (p && p.scale) || 1, x: 0, y: 0, photo: 0, light: 0 }; }
+function syncMineSliders() { $('mineScale').value = Math.log2(SC.mine.scale || 1); $('mineX').value = SC.mine.x || 0; $('mineY').value = SC.mine.y || 0; $('minePhoto').value = SC.mine.photo || 0; $('mineLight').value = SC.mine.light || 0; }
 $('sceneAdjust').onclick = () => {
   const open = $('sceneMine').classList.toggle('hidden') === false;
   $('sceneAdjust').setAttribute('aria-expanded', String(open));
 };
-const mineChange = () => { SC.mine = { scale: Math.pow(2, Number($('mineScale').value)), x: Number($('mineX').value), y: Number($('mineY').value) }; viewer.setSceneOptions({ mine: SC.mine }); };
-for (const id of ['mineScale', 'mineX', 'mineY']) $(id).oninput = mineChange;
+const mineChange = () => {
+  SC.mine = { scale: Math.pow(2, Number($('mineScale').value)), x: Number($('mineX').value), y: Number($('mineY').value), photo: Number($('minePhoto').value), light: Number($('mineLight').value) };
+  viewer.setSceneOptions({ mine: SC.mine });
+};
+for (const id of ['mineScale', 'mineX', 'mineY', 'minePhoto', 'mineLight']) $(id).oninput = mineChange;
+$('mineReset').onclick = () => { SC.mine = stillDefaults(SCENE_STILLS.find(x => x.id === SC.lastStill)); syncMineSliders(); viewer.setSceneOptions({ mine: SC.mine }); };
 $('sceneShot').onclick = async () => {
   try {
     const where = SC.sel ? $('sceneSelect').selectedOptions[0].textContent : '';

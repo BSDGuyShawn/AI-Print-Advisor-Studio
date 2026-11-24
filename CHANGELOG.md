@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.37.1
+- Photo settings, **⇲ Adjust**: **Left / right** and **Back / front** now move the model across the photo (back = further
+  away: higher up and smaller; front = nearer, lower and bigger); before, they did nothing visible, and Back / front at
+  the far end lost the model's shadow. The shadow now follows the model at any size.
+- New **Photo brightness** and **Model brightness** sliders (and **Reset**) under Adjust.
+- **Evening and Night are much darker** in the photo settings, for both the photo and the model (the shine of silk,
+  chrome and galaxy finishes dims with it; glow-in-the-dark filament still glows at night).
+
 ## 2.37.0
 - **See it in place**: the 🏠 picker under the 3D view puts the model in a setting, at its true size, with real shadows
   and the setting's own light: **Garden table, Bedroom wall shelf, Fireplace mantel, Front porch by the door,
