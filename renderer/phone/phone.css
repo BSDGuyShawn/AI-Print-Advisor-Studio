@@ -18,6 +18,7 @@ html.phone input, html.phone select, html.phone textarea { font-size: 16px; }   
   html.phone #shotBtn { font-size: 0; padding: 0 12px; }
   html.phone #shotBtn::before { content: '🧾 Photo'; font-size: 15px; }
   html.phone #phoneMonitorBtn { margin-left: auto; text-decoration: none; }
+  html.phone #phoneSnapBtn { text-decoration: none; }
   html.phone .controls { flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
   html.phone .controls .search { flex: 1 0 70%; }
   html.phone .controls .sel, html.phone .controls .seg { flex: none; }

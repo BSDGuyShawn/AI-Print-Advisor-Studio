@@ -76,7 +76,9 @@ function makeCA(pcName) {
 
 // A server certificate for the PC's name(s) and addresses, signed by the CA (800 days: under Apple's 825-day limit)
 function makeServerCert(ca, { dnsNames, ips }) {
-  const caKey = crypto.createPrivateKey(ca.keyPem);
+  // { key, format } and not the bare text: inside the app (Electron 45's main process) the bare PEM text fails with
+  // BAD_DECRYPT, which stopped the secure address from starting whenever its certificate had to be made
+  const caKey = crypto.createPrivateKey({ key: ca.keyPem, format: 'pem' });
   const caCert = new crypto.X509Certificate(ca.certPem);
   const caSpki = spkiOf(caCert.publicKey);
   const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });

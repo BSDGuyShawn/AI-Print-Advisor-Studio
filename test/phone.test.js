@@ -276,3 +276,52 @@ test('the Print Monitor on phones: paired phones only, ?k= for pictures, control
   assert.strictEqual((await req(env.port, '/api/monitor/p/p1/control', { method: 'POST', headers: { cookie, ...JSONH }, body: { action: 'pause', confirm: true } })).status, 200);
   assert.deepStrictEqual(seen.map(s => s.join(' ')), ['GET /api/monitor/state', 'GET /api/monitor/p/p1/thumbnail', 'POST /api/monitor/p/p1/control']);
 });
+
+test('troubleshooter photos: paired phones only, real pictures only, and the QR code pairs a new phone back to the photo page', async (t) => {
+  const { PhotoInbox } = require('../src/phone/photos');
+  const photos = new PhotoInbox(fs.mkdtempSync(path.join(os.tmpdir(), 'aipa-ph-')));
+  const env = await setup(t, { photos });
+  const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(200, 7)]);
+  const up = (headers, data, name = 'IMG_1') => req(env.port, '/api/ts-photos', { method: 'POST', headers: { ...JSONH, ...headers }, body: { name, data } });
+  assert.strictEqual((await up({}, jpeg.toString('base64'))).status, 401, 'not paired');
+  // the QR code: the photo page on the plain address; pairing with its code lands back on the photo page
+  const link = env.s.newSnapLink();
+  assert.match(link.url, /\/phone\/snap\.html\?c=[A-Za-z0-9_-]{40,}$/);
+  assert.strictEqual((await req(env.port, '/phone/snap.html')).status, 200, 'the page itself holds no data');
+  const r = await env.post(new URL(link.url).searchParams.get('c'));
+  assert.strictEqual(r.status, 303);
+  assert.match(r.headers.location, /^\/phone\/snap\.html#k=[A-Za-z0-9_-]{40,}$/);
+  const key = r.headers.location.split('#k=')[1];
+  const auth = { 'x-aipa-key': key };
+  assert.strictEqual((await up({ 'x-aipa': '' }, jpeg.toString('base64'))).status, 401);
+  assert.strictEqual((await req(env.port, '/api/ts-photos', { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: { data: 'AA' } })).status, 403, 'needs the anti-forgery header');
+  assert.strictEqual((await up(auth, Buffer.from('<html>not a picture</html>').toString('base64'))).status, 400);
+  assert.strictEqual((await up(auth, 'not base64!')).status, 400);
+  const changes = [];
+  photos.on('change', (l) => changes.push(l));
+  const ok = JSON.parse((await up(auth, jpeg.toString('base64'), '../../evil<script>')).body).photo;
+  assert.match(ok.id, /^[a-f0-9]{16}$/);
+  assert.strictEqual(ok.state, 'waiting');
+  assert.ok(!/[<>/]/.test(ok.name), 'the name is cleaned');
+  assert.strictEqual(changes.length, 1, 'the troubleshooter hears about it');
+  const list = JSON.parse((await req(env.port, '/api/ts-photos', { headers: auth })).body).photos;
+  assert.strictEqual(list.length, 1);
+  // the picture, with ?k= (an <img> can't send a header)
+  const pic = await req(env.port, `/api/ts-photos/${ok.id}?k=${key}`);
+  assert.strictEqual(pic.status, 200);
+  assert.strictEqual(pic.headers['content-type'], 'image/jpeg');
+  assert.strictEqual((await req(env.port, `/api/ts-photos/${ok.id}`)).status, 401);
+  // the troubleshooter uses it, then it's sent; the phone deletes it
+  photos.setState([ok.id], 'added');
+  assert.strictEqual(photos.release()[0].state, 'waiting', 'closing the troubleshooter puts it back');
+  photos.setState([ok.id], 'sent');
+  assert.strictEqual(photos.release()[0].state, 'sent');
+  assert.match(await photos.dataUrl(ok.id), /^data:image\/jpeg;base64,/);
+  const after = JSON.parse((await req(env.port, '/api/ts-photos/remove', { method: 'POST', headers: { ...JSONH, ...auth }, body: { id: ok.id } })).body).photos;
+  assert.deepStrictEqual(after, []);
+  assert.strictEqual(fs.readdirSync(photos.dir).filter(f => f.endsWith('.jpg')).length, 0, 'the file is gone too');
+  // kept across a restart, without the 'added' state
+  await photos.add({ buf: jpeg, name: 'a', device: 'iPhone' });
+  photos.setState(photos.list().map(p => p.id), 'added');
+  assert.strictEqual(new PhotoInbox(photos.dir).list()[0].state, 'waiting');
+});

@@ -1,0 +1,33 @@
+/* The phone's "photos for the troubleshooter" page (snap.html) */
+:root { color-scheme: light dark; --bg: #E6E9EC; --card: #fff; --ink: #18232E; --muted: #5b6875; --line: #d3d9de; --accent: #1F7A8C; --ok: #2e7d4f; --bad: #b3261e; }
+@media (prefers-color-scheme: dark) { :root { --bg: #151b21; --card: #1f272f; --ink: #dde4ea; --muted: #9aa7b2; --line: #33404b; --ok: #5DB37C; } }
+* { box-sizing: border-box; }
+body { margin: 0; font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--ink); -webkit-text-size-adjust: 100%; }
+.wrap { max-width: 560px; margin: auto; padding: calc(18px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom)); }
+h1 { font-size: 22px; margin: 0 0 4px; }
+h2 { font-size: 16px; margin: 22px 0 8px; color: var(--muted); font-weight: 600; }
+.sub { margin: 0 0 16px; color: var(--muted); }
+.msg { background: var(--card); border-left: 4px solid var(--accent); border-radius: 10px; padding: 12px 14px; margin: 0 0 14px; }
+.msg.bad { border-left-color: var(--bad); }
+label.big { display: flex; align-items: center; justify-content: center; min-height: 96px; border-radius: 16px; background: var(--accent); color: #fff;
+  font-size: 22px; font-weight: 700; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+label.big:active { filter: brightness(.9); }
+label.small { display: flex; align-items: center; justify-content: center; min-height: 50px; margin-top: 10px; border-radius: 12px; background: var(--card);
+  border: 1px solid var(--line); font-weight: 600; cursor: pointer; }
+.or { margin: 16px 0 6px; font-weight: 600; color: var(--muted); }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pair label.small { margin-top: 0; padding: 8px; text-align: center; line-height: 1.25; }
+@media (max-width: 340px) { .pair { grid-template-columns: 1fr; } }
+.tips { font-size: 14px; color: var(--muted); }
+.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.list li { display: grid; grid-template-columns: 72px 1fr 44px; gap: 10px; align-items: center; background: var(--card); border-radius: 12px; padding: 8px; }
+.list img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; background: var(--line); display: block; }
+.list .st { font-size: 14px; color: var(--muted); }
+.list .st b { color: var(--ink); font-weight: 600; }
+.list .st.ok b { color: var(--ok); }
+.list .st.up b { color: var(--accent); }
+.list .st.bad b { color: var(--bad); }
+.list button { width: 44px; height: 44px; border: 0; border-radius: 50%; background: var(--bg); color: var(--ink); font-size: 20px; cursor: pointer; }
+.list button:disabled { visibility: hidden; }
+.foot { margin-top: 26px; text-align: center; font-size: 14px; }
+.foot a { color: var(--accent); }

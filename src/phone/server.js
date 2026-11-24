@@ -11,6 +11,7 @@
 //   - Requests must be addressed to this PC (its name, its home-network addresses or localhost): blocks DNS
 //     rebinding. Writes also need a custom header and JSON (blocks cross-site form posts).
 //   - Only the Filament screen's own files, its product photos and two QR libraries are served, from fixed folders.
+//   - Troubleshooter photos: a paired phone may upload pictures (checked to be real JPEG/PNG/WebP, src/phone/photos.js).
 //   - Optional HTTPS on a second port with the app's own certificate (cert.js), for camera scanning and web NFC.
 'use strict';
 
@@ -61,7 +62,8 @@ function page(title, body) {
 }
 
 class PhoneServer extends EventEmitter {
-  // api: { load(), save(data), claude(body), fetch(arg), hasKey() } — the same functions the app's own screen uses
+  // api: { load(), save(data), claude(body), fetch(arg), hasKey(), monitor(Request), photos (PhotoInbox) } — the same
+  // functions the app's own screens use
   // conf: { get(): phoneConfig, set(phoneConfig) } — saved settings and paired devices
   constructor({ appDir, imagesDir, dataDir, api, conf, log = () => {} }) {
     super();
@@ -174,6 +176,17 @@ class PhoneServer extends EventEmitter {
     const base = ip ? `http://${ip}:${this.cfg.port}` : this.urls().name;
     return { url: `${base}/pair?c=${code}`, expires: Date.now() + PAIR_MS };
   }
+  // The troubleshooter's "Take photos with your phone" QR code: the photo page on the plain address (it opens on every
+  // phone, before it trusts the certificate). A paired phone just uses it (moving to the secure address if it's paired
+  // there); a phone that isn't paired yet pairs with the code in it (single use, 15 minutes) and lands back on the page.
+  newSnapLink() {
+    const code = token();
+    for (const [c, e] of this.codes) if (e.expires < Date.now()) this.codes.delete(c);
+    this.codes.set(code, { expires: Date.now() + PAIR_MS, next: 'snap' });
+    const ip = lanAddresses()[0];
+    const base = ip ? `http://${ip}:${this.cfg.port}` : this.urls().name;
+    return { url: `${base}/phone/snap.html?c=${code}`, expires: Date.now() + PAIR_MS, paired: (this.cfg.devices || []).length };
+  }
   removeDevice(id) {
     const c = this.cfg;
     c.devices = (c.devices || []).filter(d => d.id !== id);
@@ -189,7 +202,7 @@ class PhoneServer extends EventEmitter {
     const fromCookie = new RegExp(`(?:^|;\\s*)${COOKIE}=([A-Za-z0-9_-]{20,100})`).exec(req.headers.cookie || '');
     const img = /^\/i\/([A-Za-z0-9_-]{20,100})\//.exec(u.pathname);
     // ?k= also for the Print Monitor's pictures and videos (an <img> or <video> can't send a header)
-    const kParam = (u.pathname === '/api/events' || u.pathname.startsWith('/api/monitor/')) && ok(u.searchParams.get('k'));
+    const kParam = (u.pathname === '/api/events' || u.pathname.startsWith('/api/monitor/') || u.pathname.startsWith('/api/ts-photos/')) && ok(u.searchParams.get('k'));
     return ok(req.headers['x-aipa-key']) || (img && img[1]) || kParam || (fromCookie && fromCookie[1]) || null;
   }
   deviceFor(req, u = new URL(req.url, 'http://x')) {
@@ -248,7 +261,8 @@ class PhoneServer extends EventEmitter {
     this.emit('status', this.status());
     this.log(`phone access: paired ${dev.name}${entry.deviceId ? ' (another address)' : ''} on ${req.headers.host} (${String(req.headers['user-agent'] || '').slice(0, 160)})`);
     res.setHeader('Set-Cookie', `${COOKIE}=${t}; Path=/; Max-Age=315360000; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`);
-    res.writeHead(303, { location: `/app/index.html${!entry.deviceId || entry.welcome ? '?paired=1' : ''}#k=${t}`, 'cache-control': 'no-store' });
+    const next = entry.next === 'snap' ? `/phone/snap.html#k=${t}` : `/app/index.html${!entry.deviceId || entry.welcome ? '?paired=1' : ''}#k=${t}`;
+    res.writeHead(303, { location: next, 'cache-control': 'no-store' });
     return res.end();
   }
 
@@ -394,6 +408,13 @@ class PhoneServer extends EventEmitter {
           const k = req.headers['x-aipa-key'];
           return this.send(res, 200, { ...(await this.api.load()), imagesBase: k ? `/i/${k}/` : '/images/', phone: this.phoneInfo(dev, secure) });
         }
+        // troubleshooter photos from phones: the list, and each picture
+        if (p === '/api/ts-photos' && this.api.photos) return this.send(res, 200, { photos: this.api.photos.list() });
+        const ph = /^\/api\/ts-photos\/([a-f0-9]{16})$/.exec(p);
+        if (ph && this.api.photos) {
+          const r = await this.api.photos.read(ph[1]);
+          return r ? this.send(res, 200, r.buf, r.mime, { 'cache-control': 'private, max-age=86400' }) : this.send(res, 404, { error: 'Not found' });
+        }
         if (p === '/api/has-key') return this.send(res, 200, { hasKey: await this.api.hasKey() });
         if (p === '/api/events') return this.events(req, res, dev);
         return this.send(res, 404, { error: 'Not found' });
@@ -408,6 +429,17 @@ class PhoneServer extends EventEmitter {
         }
         if (p === '/api/claude') return this.send(res, 200, await this.api.claude(await this.body(req, 40 * 1024 * 1024)));
         if (p === '/api/fetch') return this.send(res, 200, { result: await this.api.fetch(await this.body(req, 64 * 1024)) });
+        if (p === '/api/ts-photos' && this.api.photos) {
+          const b = await this.body(req, 22 * 1024 * 1024);   // a picture of up to 15 MB, as base64
+          if (!b || typeof b.data !== 'string' || !/^[A-Za-z0-9+/=]+$/.test(b.data)) return this.send(res, 400, { error: 'No picture.' });
+          const photo = await this.api.photos.add({ buf: Buffer.from(b.data, 'base64'), name: b.name, device: dev.name });
+          this.log(`phone access: troubleshooter photo from ${dev.name}`);
+          return this.send(res, 200, { photo });
+        }
+        if (p === '/api/ts-photos/remove' && this.api.photos) {
+          const b = await this.body(req, 1024);
+          return this.send(res, 200, { photos: await this.api.photos.remove(b && b.id) });
+        }
         if (p === '/api/local-check') { const b = await this.body(req, 1024); this.touch(dev, { localOk: !!(b && b.ok) }); return this.send(res, 200, { ok: true }); }
         if (p === '/api/link-code') {
           const code = token(), b = await this.body(req, 1024).catch(() => null);

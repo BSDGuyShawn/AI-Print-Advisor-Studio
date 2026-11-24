@@ -1368,13 +1368,16 @@ ipcMain.handle('nfc-write-cancel', () => { Nfc.cancelWrite(); return true; });
 // ---------- Phone access: the Filament library on phones on the home network (src/phone/server.js) ----------
 // Off until turned on in Settings → Phone access. Phones pair by scanning a one-time QR code.
 const { PhoneServer } = require('./src/phone/server');
+const { PhotoInbox } = require('./src/phone/photos');
+// photos of failed prints taken on a paired phone, waiting for the print troubleshooter (src/phone/photos.js)
+const Photos = new PhotoInbox(path.join(app.getPath('userData'), 'phone-photos'));
 const PHONE_DEFAULTS = { enabled: false, port: 8765, https: false, httpsPort: 8766, linkHost: 'name', readerToPhones: true, stickerLinks: true, devices: [] };
 let phoneCfg = { ...PHONE_DEFAULTS };
 let phoneSaveTimer = null;
 const Phone = new PhoneServer({
   appDir: __dirname, imagesDir: Fil.imagesDir, dataDir: app.getPath('userData'), log: (...a) => logLine(...a),
   api: { load: filamentLoad, save: (d) => Fil.save(d), claude: filamentClaude, fetch: filamentFetch, hasKey: async () => !!(await getApiKey()),
-    monitor: (r) => Monitor.handle(r) },
+    monitor: (r) => Monitor.handle(r), photos: Photos },
   conf: {
     get: () => phoneCfg,
     // paired devices and last-seen times: saved a moment later, so a busy phone doesn't rewrite config.json constantly
@@ -1382,6 +1385,19 @@ const Phone = new PhoneServer({
   },
 });
 Phone.on('status', (s) => toWindow('phone-status', s));
+// a phone sent, or someone removed, a troubleshooter photo: the troubleshooter and the phones' photo pages update
+Photos.on('change', (list) => { toWindow('ts-photos', list); Phone.broadcast('ts-photos', list); });
+ipcMain.handle('ts-photos-list', () => (DEMO ? [] : Photos.list()));
+ipcMain.handle('ts-photo-data', (_e, id) => (DEMO ? null : Photos.dataUrl(id)));
+ipcMain.handle('ts-photos-state', (_e, ids, st) => (DEMO ? [] : Photos.setState(ids, st)));
+ipcMain.handle('ts-photos-release', () => (DEMO ? [] : Photos.release()));
+ipcMain.handle('ts-photos-remove', (_e, id) => (DEMO ? [] : Photos.remove(id)));
+// the troubleshooter's QR code for taking photos with a phone
+ipcMain.handle('ts-phone-link', () => {
+  if (DEMO) return { tour: true };
+  if (!phoneCfg.enabled || !Phone.http) return { off: true, error: Phone.error || null };
+  return Phone.newSnapLink();
+});
 // every change to the inventory (from the app or a phone) tells the other screens to refresh
 Fil.onChange = (rev) => { toWindow('filament-changed', { rev }); Phone.broadcast('changed', { rev }); };
 // a scan on the PC's reader also opens the spool on phones that have the page open (Settings)

@@ -69,7 +69,8 @@ Everything AI 3D Print Advisor Studio can do, in one list. New to 3D printing? S
 ## Print history and troubleshooting
 
 - **Print history** from your printers; rate each print so future advice learns from it.
-- **Troubleshooter**: paint where a print failed, pick the symptoms, add photos; the AI reads the printed G-code at that spot and gives likely causes and fixes.
+- **Troubleshooter**: paint where a print failed, pick the symptoms, add photos; the AI reads the printed G-code at that spot and gives likely causes and fixes. **Save fixed 3MF** saves a copy of the model with the chosen fixes built in, ready to print from Orca.
+- **Photos straight from your phone**: scan the troubleshooter's QR code and take the pictures with your phone's camera; they appear in the troubleshooter by themselves over your home Wi-Fi (no cloud storage, no app).
 
 ## Costs, privacy and help
 

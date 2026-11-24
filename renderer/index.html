@@ -527,7 +527,12 @@
         <section class="ts-sec">
           <h3>Photos <em>optional</em></h3>
           <div class="ts-photos" id="tsPhotos"></div>
-          <label class="btn ts-add">Add photos<input type="file" id="tsPhotoInput" accept="image/*" multiple hidden></label>
+          <div class="ts-photo-btns">
+            <label class="btn ts-add">Add photos<input type="file" id="tsPhotoInput" accept="image/*" multiple hidden></label>
+            <button type="button" class="btn ts-add" id="tsPhoneBtn" title="Take the photos with your phone's camera: they appear here by themselves">📱 Take photos with your phone</button>
+          </div>
+          <div class="ts-wait hidden" id="tsPhoneWait"></div>
+          <div class="ts-phoneqr hidden" id="tsPhoneQr"></div>
         </section>
         <div class="ts-go"><button class="btn primary wide" id="tsRun">Troubleshoot with Claude</button><small class="cost-line" id="tsCost"></small></div>
         <div id="tsResult"></div>

@@ -242,8 +242,11 @@ Open a filament: **Prices** shows the **average per roll** (everything you paid 
 
 1. Open the **Print history** tab (your printers must be added in Settings).
 2. Next to the failed print, click **Troubleshoot…**.
-3. **Paint where it failed** on the model, pick what went wrong (spaghetti, warping, stringing…), and add a sentence if you like. A photo helps too.
+3. **Paint where it failed** on the model, pick what went wrong (spaghetti, warping, stringing…), and add a sentence if you like. A photo helps too (up to 4).
 4. Run it. You get the likely causes, most likely first, and the settings to change.
+5. Tick the fixes you want (you can edit the new values) and click **💾 Save fixed 3MF…**. If the app doesn't have the model for that print, it asks for the project file (.3mf) you sliced in Orca. It saves a copy with the fixes built in (the original stays as it was); double-click it to open it in Snapmaker Orca, check the preview, and print. (**Use these settings** instead opens the model in the main window with the fixes, to compare slices or send it to a printer.)
+
+**Photos from your phone.** Click **📱 Take photos with your phone** under Photos and scan the QR code with your phone's camera (phone access must be on: **Settings → Phone access**). The phone opens a page with a big **📷 Take a photo** button; each photo you take shows up in the troubleshooter a moment later. Photos you already took: **🖼 Choose from your photos** (the gallery) or **📁 Browse the phone's files** (Downloads and other folders); pick several at once. (HEIC photos can't be opened in the browser: use the 📷 button, or set the camera to JPEG.) The first time, the phone asks to pair with your PC: tap **Pair this phone**. You can also take the photos first, at the printer: on a paired phone, tap **📷** on the Filament page. Photos from the last 2 hours go into the troubleshooter by themselves when you open it; older ones wait under **Photos**, one click away. Remove a photo with its **✕**, on the phone or the PC.
 
 ![Troubleshooter](images/13-troubleshooter.jpg)
 

@@ -389,6 +389,19 @@ dialog.ts[open] { display: flex; flex-direction: column; }
 .ts-photos img { width: 100%; height: 100%; object-fit: cover; }
 .ts-photos .x { position: absolute; top: 2px; right: 2px; border: 0; border-radius: 50%; width: 20px; height: 20px; background: rgb(0 0 0 / .6); color: #fff; cursor: pointer; line-height: 1; }
 .ts-add { display: inline-block; font-size: 13px; }
+.ts-photo-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.ts-photos .ph.phone::after { content: '📱'; position: absolute; left: 3px; bottom: 2px; font-size: 13px; filter: drop-shadow(0 0 2px rgb(0 0 0 / .7)); }
+.ts-wait { margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+.ts-wait .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.ts-wait .wp { display: inline-block; position: relative; width: 56px; height: 56px; border-radius: var(--radius-s); overflow: hidden; border: 1px dashed var(--line); padding: 0; background: none; cursor: pointer; }
+.ts-wait .wp img { width: 100%; height: 100%; object-fit: cover; opacity: .75; }
+.ts-wait .wp:hover img { opacity: 1; }
+.ts-wait .wp .x { position: absolute; top: 1px; right: 1px; border: 0; border-radius: 50%; width: 17px; height: 17px; font-size: 11px; background: rgb(0 0 0 / .6); color: #fff; cursor: pointer; line-height: 1; padding: 0; }
+.ts-phoneqr { display: flex; gap: 14px; align-items: flex-start; margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--panel); }
+.ts-phoneqr img { width: 168px; height: 168px; image-rendering: pixelated; background: #fff; border-radius: 6px; flex: none; }
+.ts-phoneqr p { margin: 0 0 6px; font-size: 13px; }
+.ts-phoneqr ol { margin: 0 0 6px; padding-left: 18px; font-size: 13px; }
+.ts-phoneqr .live { color: var(--ok, #2e7d4f); font-weight: 600; }
 .ts-go { padding: 14px 0 6px; }
 .cause { border-left: 3px solid var(--muted); padding: 4px 0 4px 10px; margin: 8px 0; font-size: 14px; }
 .cause.high { border-color: var(--danger); } .cause.medium { border-color: var(--warn); }

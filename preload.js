@@ -87,6 +87,13 @@ contextBridge.exposeInMainWorld('advisor', {
   phoneStatus: () => ipcRenderer.invoke('phone-status'),
   phoneSet: (patch) => ipcRenderer.invoke('phone-set', patch),
   phonePair: () => ipcRenderer.invoke('phone-pair'),
+  tsPhoneLink: () => ipcRenderer.invoke('ts-phone-link'),
+  tsPhotosList: () => ipcRenderer.invoke('ts-photos-list'),
+  tsPhotoData: (id) => ipcRenderer.invoke('ts-photo-data', id),
+  tsPhotosState: (ids, state) => ipcRenderer.invoke('ts-photos-state', ids, state),
+  tsPhotosRelease: () => ipcRenderer.invoke('ts-photos-release'),
+  tsPhotosRemove: (id) => ipcRenderer.invoke('ts-photos-remove', id),
+  onTsPhotos: (cb) => ipcRenderer.on('ts-photos', (_e, list) => cb(list)),
   phoneRemove: (id) => ipcRenderer.invoke('phone-remove', id),
   onPhoneStatus: (cb) => { const h = (_e, s) => cb(s); ipcRenderer.on('phone-status', h); return () => ipcRenderer.removeListener('phone-status', h); },
   // Print Monitor (src/monitor): live printer updates, its window and settings

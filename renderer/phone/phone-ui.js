@@ -107,6 +107,14 @@
   monBtn.href = '/monitor/index.html';
   monBtn.textContent = '🖨 Printers';
   if (add) add.parentNode.insertBefore(monBtn, setupBtn);
+  // photos of a failed print for the app's print troubleshooter (renderer/phone/snap.html)
+  const snapBtn = document.createElement('a');
+  snapBtn.className = 'btn';
+  snapBtn.id = 'phoneSnapBtn';
+  snapBtn.href = '/phone/snap.html';
+  snapBtn.textContent = '📷';
+  snapBtn.title = snapBtn.ariaLabel = 'Photos of a failed print, for the troubleshooter on the PC';
+  if (add) add.parentNode.insertBefore(snapBtn, setupBtn);
   setupBtn.addEventListener('click', phoneSetup);
 
   function scanChoices() {

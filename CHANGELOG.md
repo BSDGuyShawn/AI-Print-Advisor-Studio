@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.33.0
+- **Take the troubleshooter's photos with your phone**: in the print troubleshooter click **📱 Take photos with your
+  phone** and scan the QR code. Your phone opens a page with a big **📷 Take a photo** button. Already took them? **🖼 Choose
+  from your photos** or **📁 Browse the phone's files** (Downloads, other folders), several at once. Each photo appears in
+  the troubleshooter a moment later, over your home Wi-Fi. No cloud storage, no downloading, no app
+  to install. A phone that isn't paired yet pairs right there with the same QR code.
+- Snapped photos at the printer before opening the troubleshooter? Paired phones also have a **📷** button on their
+  Filament page. The photos wait on the PC: ones from the last 2 hours go into the next troubleshooter by themselves,
+  older ones are one click away. Delete any photo on the phone or the PC (✕); they're kept for 14 days.
+- **💾 Save fixed 3MF…** in the troubleshooter's results: saves a copy of the model with the ticked fixes built in, in one
+  step, without leaving the troubleshooter. It uses the model the app knows for that print, or asks once for the project
+  file (.3mf) you sliced in Orca. The new file is named after what it fixes ("Rocket (advisor - Fixed stringing - …).3mf"),
+  next to the original, which stays as it was. Double-click it to open it in Snapmaker Orca and print.
+- Fixed: turning on phone access's **secure address** for the first time (or after the PC's address changed) could fail
+  with "BAD_DECRYPT", so the secure address didn't start.
+
 ## 2.32.3
 - **Zoom**: make everything bigger (or smaller) for easier reading: **Settings → General → Text and screen size**, the
   **View** menu, **Ctrl +**, **Ctrl −**, **Ctrl 0**, or **Ctrl + mouse wheel**. It applies to every window (the main window,

@@ -1596,12 +1596,14 @@ async function save3mf(variantId = null, opts = {}) {
     // "no AI": just the conversion and the automatic safety fixes, whatever recommendations are on screen
     const changes = opts.noAI ? [] : def ? def.changes : selectedChanges();
     if (!(await fitConfirm(changes))) return;
-    const out = await api.save3mf({ changes, rotations: def ? (def.rotations || state.rotations) : state.rotations, slider: Number($('slider').value), purpose: $('purpose').value.trim(), plateIndex: state.plateIndex, variantName: def ? def.name : null, thumbs: fileThumbs() });
+    const out = await api.save3mf({ changes, rotations: def ? (def.rotations || state.rotations) : state.rotations, slider: Number($('slider').value), purpose: $('purpose').value.trim(), plateIndex: state.plateIndex, variantName: def ? def.name : (opts.name || null), thumbs: fileThumbs() });
     if (out) {
       const n = out.fixes.length + out.corrections.length;
+      if (opts.quiet) return out;
       toast(`Saved${def ? ` “${def.name}”` : ''}${n ? ` with ${n} automatic fix${n === 1 ? '' : 'es'}` : ''}. Open the file in your slicer (double-click it, or File → Open Project), check the preview, then print.`, n ? 12000 : 8000, () => api.showInFolder(out.path));
     }
-  } catch (e) { toast(cleanErr(e), 8000); }
+    return out;
+  } catch (e) { if (opts.quiet) throw e; toast(cleanErr(e), 8000); }
 }
 async function exportPresets() {
   try {
@@ -1931,6 +1933,8 @@ const TS = { job: null, modelPath: null, model: null, viewer: null, region: null
 
 async function openTroubleshooter(job) {
   Object.assign(TS, { job, modelPath: null, model: null, region: null, mapSel: new Set(), photos: [], issues: new Set(), gcode: null, result: null });
+  $('tsPhoneQr').classList.add('hidden');
+  tsPhoneOpen();   // photos already taken on a phone (recent ones go straight in)
   $('tsDesc').value = job.rating && job.rating.note ? job.rating.note : '';
   $('tsZmin').value = ''; $('tsZmax').value = '';
   $('tsResult').innerHTML = ''; renderTsPhotos();
@@ -2054,21 +2058,116 @@ function renderTsMap(objs) {
 }
 $('tsFirstLayers').onclick = () => { $('tsZmin').value = '0'; $('tsZmax').value = '1.0'; };
 
+const TS_MAX_PHOTOS = 4;
+// a photo for Claude: at most 1280 px on the long side, JPEG
+async function tsPhotoEntry(url, label, phoneId) {
+  const img = await new Promise((r, bad) => { const im = new Image(); im.onload = () => r(im); im.onerror = () => bad(new Error('Couldn’t open the picture.')); im.src = url; });
+  const sc = Math.min(1, 1280 / Math.max(img.width, img.height));
+  const c = document.createElement('canvas'); c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return { label, dataUrl: c.toDataURL('image/jpeg', 0.85), ...(phoneId ? { phoneId } : {}) };
+}
 $('tsPhotoInput').onchange = async (e) => {
-  for (const f of [...e.target.files].slice(0, 4 - TS.photos.length)) {
+  for (const f of [...e.target.files].slice(0, TS_MAX_PHOTOS - TS.photos.length)) {
     const url = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(f); });
-    const img = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = url; });
-    const sc = Math.min(1, 1280 / Math.max(img.width, img.height));
-    const c = document.createElement('canvas'); c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
-    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    TS.photos.push({ label: `User photo of the failed print (${f.name})`, dataUrl: c.toDataURL('image/jpeg', 0.85) });
+    TS.photos.push(await tsPhotoEntry(url, `User photo of the failed print (${f.name})`));
   }
   e.target.value = ''; renderTsPhotos();
 };
 function renderTsPhotos() {
-  $('tsPhotos').innerHTML = TS.photos.map((p, i) => `<div class="ph"><img src="${p.dataUrl}" alt="Photo ${i + 1}"><button class="x" data-i="${i}" aria-label="Remove photo">×</button></div>`).join('');
-  $('tsPhotos').querySelectorAll('.x').forEach(b => b.onclick = () => { TS.photos.splice(Number(b.dataset.i), 1); renderTsPhotos(); });
+  $('tsPhotos').innerHTML = TS.photos.map((p, i) => `<div class="ph${p.phoneId ? ' phone' : ''}"><img src="${p.dataUrl}" alt="Photo ${i + 1}"${p.phoneId ? ' title="Taken with your phone"' : ''}><button class="x" data-i="${i}" aria-label="Remove photo">×</button></div>`).join('');
+  $('tsPhotos').querySelectorAll('.x').forEach(b => b.onclick = () => {
+    const [p] = TS.photos.splice(Number(b.dataset.i), 1);
+    if (p && p.phoneId && api.tsPhotosState) api.tsPhotosState([p.phoneId], 'waiting');   // back with the phone's other photos
+    renderTsPhotos();
+  });
+  renderTsPhoneWait();
 }
+
+// ---------- photos taken with a phone (Phone access): they arrive by themselves ----------
+// The PC keeps them (src/phone/photos.js) until a troubleshooter uses them. While the troubleshooter is open, new ones go
+// straight in; when it opens, the ones taken in the last 2 hours do too; older ones wait below the photos, one click away.
+TS.phoneList = []; TS.phoneAdding = new Set(); TS.phoneThumbs = new Map();
+async function tsAddPhonePhotos(items) {
+  const added = [];
+  for (const p of items) {
+    if (TS.photos.length >= TS_MAX_PHOTOS) { toast(`The troubleshooter takes ${TS_MAX_PHOTOS} photos: remove one to add another.`, 4000); break; }
+    if (TS.phoneAdding.has(p.id) || TS.photos.some(x => x.phoneId === p.id)) continue;
+    TS.phoneAdding.add(p.id);
+    try {
+      const url = await api.tsPhotoData(p.id);
+      if (url && $('tsDialog').open && TS.photos.length < TS_MAX_PHOTOS) { TS.photos.push(await tsPhotoEntry(url, `User photo of the failed print (taken with ${p.device})`, p.id)); added.push(p.id); }
+    } catch {} finally { TS.phoneAdding.delete(p.id); }
+  }
+  if (added.length) { renderTsPhotos(); await api.tsPhotosState(added, 'added'); }
+}
+async function tsPhoneOpen() {
+  if (!api.tsPhotosList) return;
+  try {
+    await api.tsPhotosRelease();
+    TS.phoneList = await api.tsPhotosList();
+    renderTsPhoneWait();
+    const recent = TS.phoneList.filter(p => p.state === 'waiting' && Date.now() - p.at < 2 * 3600 * 1000).reverse();   // oldest first
+    if (recent.length) await tsAddPhonePhotos(recent);
+  } catch {}
+}
+if (api.onTsPhotos) api.onTsPhotos(async (list) => {
+  const known = new Set(TS.phoneList.map(p => p.id)), ids = new Set(list.map(p => p.id));
+  TS.phoneList = list;
+  if (!$('tsDialog').open) return;
+  // deleted on the phone: out of the troubleshooter too
+  const before = TS.photos.length;
+  TS.photos = TS.photos.filter(p => !p.phoneId || ids.has(p.phoneId));
+  if (TS.photos.length !== before) renderTsPhotos(); else renderTsPhoneWait();
+  const fresh = list.filter(p => p.state === 'waiting' && !known.has(p.id)).reverse();
+  if (fresh.length) {
+    await tsAddPhonePhotos(fresh);
+    if (!$('tsPhoneQr').classList.contains('hidden')) $('tsPhoneQr').querySelector('.live').textContent = `✓ ${fresh.length === 1 ? 'A photo' : `${fresh.length} photos`} arrived. Take more, or close this.`;
+  }
+});
+// the phone's other photos, not in this troubleshooter: click one to add it
+function renderTsPhoneWait() {
+  const box = $('tsPhoneWait');
+  const wait = TS.phoneList.filter(p => p.state === 'waiting' && !TS.photos.some(x => x.phoneId === p.id)).slice(0, 8);
+  box.classList.toggle('hidden', !wait.length);
+  if (!wait.length) { box.innerHTML = ''; return; }
+  box.innerHTML = `Taken with your phone earlier (click one to add it):<div class="row">${wait.map(p => `<span class="wp" role="button" tabindex="0" data-id="${p.id}" title="${esc(new Date(p.at).toLocaleString())} · ${esc(p.device)}"><img alt="Photo from your phone" data-thumb="${p.id}"><button class="x" data-del="${p.id}" aria-label="Delete this photo">×</button></span>`).join('')}</div>`;
+  for (const img of box.querySelectorAll('img[data-thumb]')) {
+    const id = img.dataset.thumb;
+    const have = TS.phoneThumbs.get(id);
+    if (have) { img.src = have; continue; }
+    api.tsPhotoData(id).then(u => { if (u) { TS.phoneThumbs.set(id, u); img.src = u; } }).catch(() => {});
+  }
+  box.querySelectorAll('.wp').forEach(el => {
+    const add = (e) => { if (e.target.closest('[data-del]')) return; const p = TS.phoneList.find(x => x.id === el.dataset.id); if (p) tsAddPhonePhotos([p]); };
+    el.onclick = add; el.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); add(e); } };
+  });
+  box.querySelectorAll('[data-del]').forEach(b => b.onclick = (e) => { e.stopPropagation(); TS.phoneThumbs.delete(b.dataset.del); api.tsPhotosRemove(b.dataset.del); });
+}
+$('tsPhoneBtn').onclick = async () => {
+  const box = $('tsPhoneQr');
+  if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
+  let r;
+  try { r = await api.tsPhoneLink(); } catch (e) { toast(cleanErr(e), 5000); return; }
+  if (r.tour) { toast('The tour can’t take photos with a phone.', 4000); return; }
+  if (r.off) {
+    box.innerHTML = `<div><p><b>Phone access is off.</b> Turn it on to take the photos with your phone: they come straight here over your home Wi-Fi (nothing goes through the internet).${r.error ? ` <span class="error">${esc(r.error)}</span>` : ''}</p>
+      <button class="btn" id="tsPhoneSettings">Open Settings → Phone access</button></div>`;
+    box.classList.remove('hidden');
+    $('tsPhoneSettings').onclick = () => { openSettings(); if (typeof selectSettingsTab === 'function') selectSettingsTab('phone'); };
+    return;
+  }
+  const q = window.qrcode(0, 'M'); q.addData(r.url); q.make();
+  box.innerHTML = `<img alt="QR code: opens the photo page on your phone" src="${q.createDataURL(5, 2)}">
+    <div><p><b>Scan this with your phone’s camera.</b></p>
+    <ol><li>It opens a page with a big <b>📷 Take a photo</b> button, or choose photos you already took.</li><li>Take the photos: each one appears here a moment later.</li>
+    ${r.paired ? '' : '<li>The first time, the phone asks to pair with this PC (tap <b>Pair this phone</b>).</li>'}</ol>
+    <p class="hint">The phone must be on the same Wi-Fi as this PC. Paired phones can also open it any time with the 📷 button on their Filament page. This code works for 15 minutes.</p>
+    <p class="live"></p></div>`;
+  box.classList.remove('hidden');
+};
+// closing the troubleshooter: photos it didn't send wait for the next one
+$('tsDialog').addEventListener('close', () => { $('tsPhoneQr').classList.add('hidden'); if (api.tsPhotosRelease) api.tsPhotosRelease().catch(() => {}); });
 
 $('tsRun').onclick = async () => {
   if (!TS.job) return;
@@ -2092,6 +2191,8 @@ $('tsRun').onclick = async () => {
       if (!out) { $('tsResult').innerHTML = ''; return; }
     }
     TS.result = out; renderTsResult(); guideEvent('troubleshot');
+    const fromPhone = TS.photos.filter(p => p.phoneId).map(p => p.phoneId);
+    if (fromPhone.length && api.tsPhotosState) api.tsPhotosState(fromPhone, 'sent').catch(() => {});
     $('tsResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
     state.history = null; // refresh to show the saved diagnosis
   } catch (e) { $('tsResult').innerHTML = `<div class="error"><b>Couldn’t troubleshoot.</b><p>${esc(cleanErr(e))}</p></div>`; }
@@ -2116,28 +2217,76 @@ function renderTsResult() {
     ${r.questions.length ? `<h3 class="group-title">To narrow it down</h3><ul class="fix-list">${r.questions.map(x => `<li>${esc(x)}</li>`).join('')}</ul><p class="hint">Add the answers to the description and troubleshoot again.</p>` : ''}
     ${caveatHtml()}
     <div class="ts-actions">
-      ${TS.modelPath ? '<button class="btn primary" id="tsUse">Use these settings</button>' : '<button class="btn primary" id="tsUseOpen">Open the model and use these settings</button>'}
+      <button class="btn primary" id="tsSaveFixed" title="Save a copy of the model (.3mf) with the ticked fixes built in, to open in Snapmaker Orca and print">💾 Save fixed 3MF…</button>
+      ${TS.modelPath ? '<button class="btn" id="tsUse">Use these settings</button>' : '<button class="btn" id="tsUseOpen">Open the model and use these settings</button>'}
       <button class="btn" id="tsCopy">Copy checklist</button>
-    </div>`;
+    </div>
+    <p class="hint" id="tsSaveNote">${TS.modelPath ? 'Saves a copy of <b>' + esc(TS.modelPath.split(/[\\/]/).pop()) + '</b> with the ticked fixes built in; the original stays as it was.' : 'Asks for the model’s project file (.3mf, the one you sliced in Orca), then saves a copy with the ticked fixes built in; the original stays as it was.'}</p>`;
   $('tsCopy').onclick = async () => {
     const lines = [`Troubleshooting ${TS.job.filename}`, '', r.summary, ''];
     for (const x of tsSelected()) lines.push(`[ ] ${x.label}${x.slot ? ` (T${x.slot})` : ''}: ${x.current ?? 'default'} -> ${x.recommended}   [${x.gui}]`);
     if (r.physical_checks.length) { lines.push('', 'At the printer:'); r.physical_checks.forEach(c => lines.push(`[ ] ${c}`)); }
     await navigator.clipboard.writeText(lines.join('\n')); toast('Checklist copied.', 3000);
   };
-  const use = async (pathToModel) => {
+  // the model in the main window, with the ticked fixes as its recommendations (keepOpen: the troubleshooter stays)
+  const load = async (pathToModel, keepOpen) => {
     const picked = tsSelected().map(x => ({ key: x.key, recommended: x.recommended, slot: x.slot || 0, action: 'change', priority: x.priority, reason: x.reason }));
-    $('tsDialog').close();
+    const fit = !$('tsFitRow').classList.contains('hidden') && $('tsFitTogether').checked;
+    if (!keepOpen) $('tsDialog').close();
     await openFile(api.openPath(pathToModel));
+    if (!state.file || state.file.filePath !== pathToModel) throw new Error('The model didn’t open.');
+    // the plate that was printed ("…_plate_2.gcode")
+    const plate = Number((/_plate_(\d+)/i.exec(TS.job.filename) || [])[1]);
+    if (plate && plate !== state.plateIndex && [...$('plateSelect').options].some(o => Number(o.value) === plate)) {
+      $('plateSelect').value = String(plate); state.plateIndex = plate; state.compare = null; await loadPlate();
+    }
+    if (fit && !$('fitTogether').checked) $('fitTogether').checked = true;
     const newRows = await api.rowsFor(picked);
     state.result = { plan: { summary: `From the troubleshooter (${TS.job.filename}): ${r.summary}`, risks: r.causes.slice(0, 3).map(c => ({ severity: c.likelihood === 'high' ? 'warn' : 'info', title: c.cause, detail: c.evidence })),
         manual_steps: r.physical_checks, orientation: r.orientation, estimated_effect: '', material_notes: '', multicolor_notes: '', history_notes: '' },
       rows: newRows, recipe: { name: 'None', about: 'Settings from the troubleshooter, on top of the project as saved.' }, orientationChoices: [], originalSlice: null, usedHistory: false };
     renderResults(); showTab('recs');
-    toast('Troubleshooter settings loaded. Compare slices, save, or send the fixed print.', 7000);
+    return picked.length;
+  };
+  const use = async (pathToModel) => {
+    try { await load(pathToModel, false); toast('Troubleshooter settings loaded. Compare slices, save, or send the fixed print.', 7000); }
+    catch (e) { toast(cleanErr(e), 8000); }
   };
   const u = $('tsUse'); if (u) u.onclick = () => use(TS.modelPath);
   const uo = $('tsUseOpen'); if (uo) uo.onclick = async () => { const pth = await api.tsPickModel(); if (pth) use(pth); };
+  // 💾 Save fixed 3MF: open the model (or ask for it once), apply the ticked fixes, save a copy, all from here
+  $('tsSaveFixed').onclick = async () => {
+    const btn = $('tsSaveFixed'), note = $('tsSaveNote');
+    if (!tsSelected().length) { toast('Tick at least one fix under “Settings for the next print”.', 5000); return; }
+    let pth = TS.modelPath;
+    if (!pth) {
+      pth = await api.tsPickModel();
+      if (!pth) return;
+      TS.modelPath = pth;   // remembered for this troubleshooter (Use these settings, saving again)
+    }
+    btn.disabled = true;
+    note.textContent = 'Opening the model and applying the fixes…';
+    try {
+      await load(pth, true);
+      if (!selectedChanges().length) throw new Error('None of the ticked fixes change this project: it already has those values.');
+      // the file name says what it fixes: "Rocket (advisor - Fixed stringing - 2026-11-23 7.42 PM).3mf" (the issues
+      // picked now, or those of the earlier diagnosis on screen)
+      const diag = (TS.job.diagnoses || []).find(d => d.full === TS.result);
+      const issues = TS.issues.size ? [...TS.issues] : ((diag && diag.issueTypes) || []);
+      const what = issues.slice(0, 2).map(i => i.split(/\s*(?:\/| or )\s*/)[0].toLowerCase()).join(' and ');
+      note.textContent = 'Choose where to save it…';
+      const out = await save3mf(null, { quiet: true, name: what ? `Fixed ${what}` : 'Fixed' });
+      if (!out) { note.textContent = 'Not saved.'; return; }
+      const auto = [...out.fixes.map(f => `${f.key.replace(/_/g, ' ')} → ${f.value}: ${f.reason}`), ...out.corrections];
+      const file = out.path.split(/[\\/]/).pop();
+      note.innerHTML = `<span class="ok-line">✓ Saved <b>${esc(file)}</b>.</span> Double-click it to open it in Snapmaker Orca, check the preview, then print. <button class="link" id="tsShowSaved">Show in folder</button>
+        ${auto.length ? `<details><summary>Also adjusted so the file works in Orca (${auto.length})</summary><ul>${auto.map(a => `<li>${esc(a)}</li>`).join('')}</ul></details>` : ''}`;
+      $('tsShowSaved').onclick = () => api.showInFolder(out.path);
+      guideEvent('saved');
+    } catch (e) {
+      note.innerHTML = `<span class="error">Couldn’t save the fixed file: ${esc(cleanErr(e))}</span>`;
+    } finally { btn.disabled = false; }
+  };
 }
 function tsSelected() {
   return [...document.querySelectorAll('#tsResult .setting')].filter(el => el.querySelector('input[type=checkbox]').checked).map(el => {

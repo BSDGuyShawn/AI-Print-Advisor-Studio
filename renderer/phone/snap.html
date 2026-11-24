@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' blob: data:; style-src 'self'; script-src 'self'; connect-src 'self' http: https:; frame-ancestors 'none'">
+  <meta name="theme-color" content="#1F7A8C">
+  <title>Troubleshooter photos</title>
+  <link rel="stylesheet" href="snap.css">
+  <link rel="apple-touch-icon" href="icon-180.png">
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1>Photos of the failed print</h1>
+      <p class="sub">They go straight to the print troubleshooter in <b>AI 3D Print Advisor Studio</b> on your PC.</p>
+    </header>
+    <div id="msg" class="msg" role="status" hidden></div>
+    <section id="take" hidden>
+      <label class="big">📷 Take a photo<input type="file" id="cam" accept="image/*" capture="environment" hidden></label>
+      <p class="or">Already took them?</p>
+      <div class="pair">
+        <label class="small">🖼 Choose from your photos<input type="file" id="pick" accept="image/*" multiple hidden></label>
+        <!-- file extensions in accept make Android open its file browser (Downloads, other apps' folders, SD card)
+             instead of the photo picker -->
+        <label class="small">📁 Browse the phone’s files<input type="file" id="files" accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif" multiple hidden></label>
+      </div>
+      <p class="tips">Select as many as you like: tap and hold to pick several. Up to 4 go with a diagnosis; the rest wait on the PC.<br>
+        Tips: get close to the problem, use good light, and take one photo of the whole print too.</p>
+    </section>
+    <section id="sentBox" hidden>
+      <h2>Sent from this phone and others</h2>
+      <ul id="list" class="list"></ul>
+    </section>
+    <p class="foot"><a href="/app/index.html" id="back">Filament library</a></p>
+  </main>
+  <script src="snap.js"></script>
+</body>
+</html>

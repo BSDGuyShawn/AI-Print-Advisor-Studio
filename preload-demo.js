@@ -255,6 +255,8 @@ contextBridge.exposeInMainWorld('advisor', {
   onNfcTag: () => () => {}, onNfcStatus: () => () => {}, onNfcWriteProgress: () => () => {},
   nfcPorts: async () => ({ ports: [] }), nfcTestPort: failing('nfc'), nfcWrite: failing('nfc'), nfcWriteCancel: async () => true,
   phoneStatus: async () => ({ tour: true, enabled: false, running: false, devices: [] }), phoneSet: failing('generic'), phonePair: failing('generic'),
+  tsPhoneLink: async () => ({ tour: true }), tsPhotosList: async () => [], tsPhotoData: async () => null, tsPhotosState: async () => [],
+  tsPhotosRelease: async () => [], tsPhotosRemove: async () => [], onTsPhotos: () => {},
   phoneRemove: async () => ({}), onPhoneStatus: () => () => {}, onFilamentChanged: () => () => {},
   onMonitor: () => () => {}, onMonitorFocus: () => () => {}, openMonitor: async () => false, monitorSettings: async () => ({ tour: true, notifications: { desktop: { events: {} }, ntfy: { events: {} }, email: { events: {}, milestones: [] } } }),
   monitorSet: failing('generic'), monitorTest: failing('generic'), monitorKeepalive: async () => ({ ok: false, status: 'Not in the tour.' }), monitorImportU1Studio: failing('generic'),
