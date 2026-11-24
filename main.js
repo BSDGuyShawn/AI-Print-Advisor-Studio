@@ -211,6 +211,30 @@ function rememberBounds(name, w) {
   const later = () => { clearTimeout(t); t = setTimeout(save, 400); };
   w.on('move', later); w.on('resize', later); w.on('maximize', save); w.on('unmaximize', save); w.on('close', save);
 }
+// ---------- zoom: one size for every window (View menu, Ctrl +/-/0, Ctrl + mouse wheel, Settings → General) ----------
+const ZOOM_STEPS = [0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
+let zoomFactor = (() => { const z = Number(readWinState().zoom); return z >= 0.5 && z <= 3 ? z : 1; })();
+function applyZoom(w) { if (w && !w.isDestroyed()) w.webContents.setZoomFactor(zoomFactor); }
+function setZoom(z) {
+  zoomFactor = Math.min(2, Math.max(0.67, Math.round(z * 100) / 100));
+  for (const w of BrowserWindow.getAllWindows()) applyZoom(w);
+  const s = readWinState(); s.zoom = zoomFactor;
+  try { require('fs').writeFileSync(WIN_STATE(), JSON.stringify(s)); } catch {}
+  for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send('zoom', zoomFactor);
+  buildMenu().catch(() => {});
+}
+function stepZoom(dir) {
+  const i = ZOOM_STEPS.findIndex(s => s >= zoomFactor - 0.001);
+  const cur = i < 0 ? ZOOM_STEPS.length - 1 : i;
+  setZoom(ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, Math.max(0, dir > 0 ? (ZOOM_STEPS[cur] > zoomFactor + 0.001 ? cur : cur + 1) : cur - 1))]);
+}
+// every window: keep the zoom after navigation, and Ctrl + mouse wheel changes it for all windows
+app.on('browser-window-created', (_e, w) => {
+  w.webContents.on('did-finish-load', () => applyZoom(w));
+  w.webContents.on('zoom-changed', (_ev, dir) => stepZoom(dir === 'in' ? 1 : -1));
+});
+ipcMain.handle('zoom-get', () => zoomFactor);
+ipcMain.handle('zoom-set', (_e, z) => { if (Number.isFinite(z) && z >= 0.5 && z <= 3) setZoom(z); return zoomFactor; });
 // started by "Start with Windows": open in the tray, not on screen
 const START_HIDDEN = process.argv.includes('--hidden');
 function createWindow() {
@@ -1945,7 +1969,15 @@ async function buildMenu() {
       ...(isMac ? [] : [{ type: 'separator' }, { role: 'quit', label: 'Exit' }]),
     ] },
     { role: 'editMenu' },
-    { label: 'View', submenu: [{ role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'resetZoom' }, { type: 'separator' }, { role: 'togglefullscreen' }] },
+    { label: 'View', submenu: [
+      { label: `Text and screen size: ${Math.round(zoomFactor * 100)}%`, enabled: false },
+      { label: 'Zoom In', accelerator: 'CmdOrCtrl+=', click: () => stepZoom(1) },
+      { label: 'Zoom In', accelerator: 'CmdOrCtrl+Plus', visible: false, acceleratorWorksWhenHidden: true, click: () => stepZoom(1) },
+      { label: 'Zoom In', accelerator: 'CmdOrCtrl+numadd', visible: false, acceleratorWorksWhenHidden: true, click: () => stepZoom(1) },
+      { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => stepZoom(-1) },
+      { label: 'Zoom Out', accelerator: 'CmdOrCtrl+numsub', visible: false, acceleratorWorksWhenHidden: true, click: () => stepZoom(-1) },
+      { label: 'Actual Size (100%)', accelerator: 'CmdOrCtrl+0', click: () => setZoom(1) },
+      { type: 'separator' }, { role: 'togglefullscreen' }] },
     { label: 'Help', submenu: [
       { label: 'Step-by-Step Guide', click: send('guide') },
       { label: 'User Guide (online)', click: () => shell.openExternal('https://github.com/jtroberts83/AI-Print-Advisor-Studio#readme') },

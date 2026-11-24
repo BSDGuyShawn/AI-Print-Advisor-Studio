@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.32.3
+- **Zoom**: make everything bigger (or smaller) for easier reading: **Settings → General → Text and screen size**, the
+  **View** menu, **Ctrl +**, **Ctrl −**, **Ctrl 0**, or **Ctrl + mouse wheel**. It applies to every window (the main window,
+  the Print Monitor, the Filament screen) and is remembered.
+- **The printer bar's height can be changed**: drag its bottom edge. The printer cards, pictures and text grow and shrink
+  with it, keeping their proportions (double-click the edge for the normal size). Remembered too.
+- The main window keeps opening on the monitor you last used it on (since 2.32.2), like the Print Monitor.
+
 ## 2.32.2
 - The Print Monitor window opens where you left it: the same monitor, place and size (and maximized if it was).
   The main window does too. If that monitor isn't connected any more, it opens on the main screen.

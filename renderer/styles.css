@@ -46,9 +46,10 @@ button { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* top bar */
-.topbar { height: 56px; display: grid; grid-template-columns: minmax(250px, 340px) minmax(0, 1fr) auto auto; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--panel); overflow: hidden; }
+.topbar { height: 56px; display: grid; grid-template-columns: minmax(200px, 340px) minmax(0, 1fr) auto minmax(0, max-content); align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--panel); overflow: hidden; }
 .topbar .print-name.hidden { display: none; }
-.top-actions { flex-wrap: nowrap; }
+.top-actions { flex-wrap: nowrap; min-width: 0; overflow-x: auto; scrollbar-width: thin; }   /* zoomed in or a narrow window: scroll, never wrap */
+.top-actions > .btn { white-space: nowrap; flex: none; }
 .brand { display: flex; align-items: center; gap: 10px; font: 600 19px/1 var(--font-num); letter-spacing: .01em; }
 .brand-mark { width: 26px; height: 26px; fill: var(--accent); }
 .file-title { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -205,7 +206,7 @@ dialog::backdrop { background: rgb(10 20 30 / .45); }
 
 @media (max-width: 1280px) {
   .layout { grid-template-columns: 300px minmax(0, 1fr) 400px; }
-  .topbar { grid-template-columns: 300px 1fr auto; }
+  .topbar { grid-template-columns: minmax(180px, 300px) minmax(0, 1fr) minmax(0, max-content); }
 }
 
 /* ---------- v2: tabs, orientation, comparison, history ---------- */
@@ -783,8 +784,13 @@ fieldset.monitor small { color: var(--muted); }
 .mon-miles { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 13.5px; }
 
 /* ---------- the printing bar on the main screen ---------- */
-body.has-kpi { --kpi-h: 64px; }
-.kpibar { height: 64px; display: flex; align-items: center; gap: 12px; padding: 6px 16px; background: var(--panel); border-bottom: 1px solid var(--line); overflow: hidden; }
+/* The bar is drawn at 64 px and scaled as a whole (CSS zoom = chosen height / 64), so its cards, pictures and text keep
+   their proportions at any height; drag its bottom edge to change it (renderer/app.js sets --kpi-h and the zoom) */
+.kpibar { height: 64px; display: flex; align-items: center; gap: 12px; padding: 6px 16px; background: var(--panel); border-bottom: 1px solid var(--line); overflow: hidden; position: relative; }
+.kpi-grip { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; z-index: 2; }
+.kpi-grip::after { content: ''; position: absolute; left: 50%; bottom: 1px; width: 44px; height: 3px; margin-left: -22px; border-radius: 2px; background: var(--line); opacity: 0; transition: opacity .15s; }
+.kpibar:hover .kpi-grip::after, .kpi-grip.dragging::after { opacity: 1; }
+body.kpi-resizing { cursor: ns-resize; user-select: none; }
 .kpi-sum { display: flex; flex-direction: column; font-size: 12.5px; color: var(--muted); white-space: nowrap; min-width: 110px; }
 .kpi-sum b { font-size: 18px; color: var(--ink); margin-right: 4px; }
 .kpi-sum .kpi-ready { color: var(--ok, #2f855a); font-weight: 600; }

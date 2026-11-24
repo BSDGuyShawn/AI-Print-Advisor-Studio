@@ -2754,6 +2754,7 @@ function openSettings() {
   renderNfcSettings();
   renderPhoneSettings();
   renderMonitorSettings();
+  if (api.zoomGet) api.zoomGet().then(z => { const sel = $('zoomSelect'); const near = [...sel.options].reduce((a, o) => Math.abs(+o.value - z) < Math.abs(+a.value - z) ? o : a); sel.value = near.value; }).catch(() => {});
   selectSettingsTab('general');
   $('settingsDialog').showModal();
   guideEvent('settings');
@@ -2981,6 +2982,10 @@ function hideToast() { $('toast').classList.add('hidden'); }
 document.querySelector('[data-tab=compare]').addEventListener('click', e => { e.currentTarget.textContent = 'Compare slices'; });
 
 
+// ---------- zoom: applies at once (it's saved by the app, not by Save settings) ----------
+$('zoomSelect').addEventListener('change', (e) => { if (api.zoomSet) api.zoomSet(Number(e.target.value)); });
+if (api.onZoom) api.onZoom(() => { if (typeof renderKpiBar === 'function') setTimeout(renderKpiBar, 50); });
+
 // ---------- Settings tabs ----------
 function selectSettingsTab(tab) {
   const t = document.querySelector(`#settingsDialog .stabs [data-stab="${tab}"]`) ? tab : 'general';
@@ -3096,6 +3101,7 @@ function renderKpiBar() {
   const show = KPI.show && ps.length > 0;
   bar.classList.toggle('hidden', !show);
   document.body.classList.toggle('has-kpi', show);
+  sizeKpiBar(show);
   if (!show) return;
   const now = Date.now() / 1000;
   const printing = ps.filter(p => ['printing', 'paused', 'preparing'].includes(p.stage));
@@ -3118,13 +3124,36 @@ function renderKpiBar() {
   const life = ps.map(p => ({ name: p.name, s: (p.totals && p.totals.total_print_time) || 0, jobs: (p.totals && p.totals.total_jobs) || 0 }));
   const lifeAll = life.reduce((t, x) => t + x.s, 0), jobsAll = life.reduce((t, x) => t + x.jobs, 0);
   const lifeTip = life.map(x => `${x.name}: ${kpiHours(x.s)} printed, ${Math.round(x.jobs)} prints`).join('\n') + `\nAll printers: ${kpiHours(lifeAll)}, ${Math.round(jobsAll)} prints`;
-  const html = `<div class="kpi-sum"><b>${printing.length}</b> printing${next ? `<span>next done ${clock(next)}</span>` : ''}${ready ? `<span class="kpi-ready">${ready} ready to remove</span>` : ''}</div>
+  const html = `<div class="kpi-grip" title="Drag to make the bar bigger or smaller (double-click: normal size)"></div><div class="kpi-sum"><b>${printing.length}</b> printing${next ? `<span>next done ${clock(next)}</span>` : ''}${ready ? `<span class="kpi-ready">${ready} ready to remove</span>` : ''}</div>
     ${lifeAll ? `<div class="kpi-sum kpi-life" title="${esc(lifeTip)}"><b>${kpiHours(lifeAll)}</b> printed<span>all printers · ${Math.round(jobsAll).toLocaleString()} prints</span></div>` : ''}
     <div class="kpi-cards">${ps.map(card).join('')}</div>
     <button type="button" class="btn ghost kpi-open" data-mon-open="">Print Monitor</button>`;
   if (bar.__html !== html) { bar.innerHTML = html; bar.__html = html; }   // only when something shows differently
 }
 $('kpiBar').addEventListener('click', (e) => { const b = e.target.closest('[data-mon-open]'); if (b) { hideKpiPeek(); api.openMonitor(b.dataset.monOpen || undefined); } });
+// The bar's height: drag its bottom edge (48 to 200 px); everything in it scales with it. Kept on this PC.
+const KPI_BASE = 64;
+let kpiH = (() => { const v = Number(localStorage.getItem('aipa.kpiH')); return v >= 48 && v <= 200 ? v : KPI_BASE; })();
+function sizeKpiBar(show = !$('kpiBar').classList.contains('hidden')) {
+  $('kpiBar').style.zoom = String(kpiH / KPI_BASE);
+  document.body.style.setProperty('--kpi-h', show ? `${kpiH}px` : '0px');
+}
+$('kpiBar').addEventListener('pointerdown', (e) => {
+  const grip = e.target.closest('.kpi-grip');
+  if (!grip || e.button !== 0) return;
+  e.preventDefault(); hideKpiPeek();
+  const y0 = e.clientY, h0 = kpiH;
+  grip.classList.add('dragging'); document.body.classList.add('kpi-resizing');
+  const move = (ev) => { kpiH = Math.round(Math.min(200, Math.max(48, h0 + ev.clientY - y0))); sizeKpiBar(); };
+  const up = () => {
+    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+    grip.classList.remove('dragging'); document.body.classList.remove('kpi-resizing');
+    localStorage.setItem('aipa.kpiH', String(kpiH));
+    window.dispatchEvent(new Event('resize'));   // the 3D view and others re-measure
+  };
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+});
+$('kpiBar').addEventListener('dblclick', (e) => { if (e.target.closest('.kpi-grip')) { kpiH = KPI_BASE; localStorage.setItem('aipa.kpiH', String(kpiH)); sizeKpiBar(); window.dispatchEvent(new Event('resize')); } });
 // Hovering a printer in the bar shows a bigger card: a larger picture of the print and its details
 const kpiPeek = document.createElement('div');
 kpiPeek.className = 'kpi-peek hidden';

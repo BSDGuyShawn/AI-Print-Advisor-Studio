@@ -258,7 +258,7 @@ contextBridge.exposeInMainWorld('advisor', {
   phoneRemove: async () => ({}), onPhoneStatus: () => () => {}, onFilamentChanged: () => () => {},
   onMonitor: () => () => {}, onMonitorFocus: () => () => {}, openMonitor: async () => false, monitorSettings: async () => ({ tour: true, notifications: { desktop: { events: {} }, ntfy: { events: {} }, email: { events: {}, milestones: [] } } }),
   monitorSet: failing('generic'), monitorTest: failing('generic'), monitorKeepalive: async () => ({ ok: false, status: 'Not in the tour.' }), monitorImportU1Studio: failing('generic'),
-  openSettingsTab: async () => false, onOpenSettingsTab: () => {},
+  openSettingsTab: async () => false, onOpenSettingsTab: () => {}, zoomGet: async () => 1, zoomSet: async () => 1, onZoom: () => {},
   remixPrepare: (a) => replay('remix-prepare', [a], { delay: 900, steps: ['Cutting the model into patches…'] }),
   partsIdentify: (a) => withCost('Color remix: parts', 0.08, replay('parts-identify', [a], { delay: 5000, steps: ['Identifying the parts of the model…'] })),
   partsConfirm: (a) => replay('parts-confirm', [a], { delay: 600 }),

@@ -303,6 +303,8 @@ Add your printers in **Settings → Printers** (the address you'd type to open F
 - **Phone (ntfy)**: install the free [ntfy](https://ntfy.sh) app, click **New** for a topic nobody could guess, subscribe to the same topic in the app.
 - **Email**: your mail server (for Gmail `smtp.gmail.com`, port 587, STARTTLS, and an **app password**). Progress emails come with a camera photo and the printer's numbers at the steps you tick (1 / 25 / 50 / 75 %), and the "done" email has the final photo. **Send a test alert** checks it.
 
+**Bigger or smaller**: drag the bottom edge of the printer bar to change its height; everything in it scales along (double-click the edge for the normal size). To make the whole app bigger for reading, use **Settings → General → Text and screen size**, or **Ctrl +** / **Ctrl −** / **Ctrl 0** (or Ctrl + mouse wheel). Windows open on the monitor, place and size you last used.
+
 **Keep watching**: closing the window keeps the app in the tray (by the clock) so alerts and the final photo still happen; right-click the tray icon to quit. **Start with Windows** opens it in the tray when you sign in. Untick either in Settings → Print monitor.
 
 **Cameras**: a Snapmaker U1's built-in camera needs the printer's API key (the app keeps it awake while you watch or print). For other printers pick a webcam snapshot or MJPEG address in Settings → Printers, or No camera.
