@@ -115,6 +115,10 @@ You get a list of changes. Each row says **what changes**, **from what to what**
 
 ---
 
+### Files with several plates or several different objects
+- **One plate's recommendations** only change the objects on that plate when you save; the other plates keep their settings. A few settings can't be set per object in Orca (filament temperatures, first-layer height, prime tower); those apply to the whole file, and the app tells you.
+- **Analyze all objects (N)** (under Get recommended settings) asks the AI about every *different* object on its own: copies and near-identical objects are analyzed once and get the same settings. It first shows how many requests that is and roughly what it costs. Afterwards, click an object to see and edit its settings. Settings that must be the same for a whole plate are listed once; if objects disagree, pick the value. **Save as 3MF** saves every object's settings in one file (in Orca you'll see them on each object: right-click → its settings).
+
 ## 8. Compare versions
 
 Open the **Compare slices** tab, tick the versions you want (Original, Recommended, Finest, Fine, Fast, Fastest), and click **Slice and compare**.

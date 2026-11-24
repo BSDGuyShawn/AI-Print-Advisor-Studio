@@ -13,6 +13,7 @@ const { load3mf, applyChanges, compose, setBuildTransforms, rotationAbout, plate
 const { analyzeGcodeFile } = require('./gcode');
 const { expand: expandMix } = require('./mixed');
 const { ensureThumbnails } = require('./thumbs');
+const { setObjectSettings, releaseLayerHeights } = require('./perobject');
 const { sanitizeZip, describe: describeFixes, parseRangeErrors, applyRangeErrors, describeFix } = require('./sanitize');
 const U1_TEMPLATE = require('./u1-template-settings.json');
 const { BY_KEY, CURATED, validate } = require('./orca-settings');
@@ -275,7 +276,9 @@ class Slicer {
 
   // Returns { buffer, corrections } where corrections are plain-language notes of automatic fixes.
   // project: the already-parsed project for baseBuffer (optional). Passing it avoids re-reading large meshes.
-  static async buildVariantDetailed(baseBuffer, { changes = [], rotations = {}, project = null } = {}) {
+  // changes: project-wide settings [{key, value, slot}]; objectChanges: per-object settings { [objectId]: [{key, value}] }
+  // (src/perobject.js), for files whose objects need different settings
+  static async buildVariantDetailed(baseBuffer, { changes = [], objectChanges = null, rotations = {}, project = null } = {}) {
     const corrections = [];
     const zip = await JSZip.loadAsync(baseBuffer);
     for (const n of Object.keys(zip.files)) if (/^Metadata\/(plate_\d+\.gcode(\.md5)?|slice_info\.config)$/.test(n)) zip.remove(n);
@@ -284,6 +287,22 @@ class Slicer {
       const ps = JSON.parse(await psFile.async('string'));
       applyChanges(ps, changes);
       zip.file('Metadata/project_settings.config', JSON.stringify(ps, null, 4));
+    }
+    // A new layer height only takes effect where the model doesn't set its own: release those (per-object layer
+    // heights, variable layer height profiles) for every object (project-wide change) or the objects concerned
+    const oc = objectChanges && Object.keys(objectChanges).length ? objectChanges : null;
+    const lhObjects = oc ? Object.keys(oc).filter(id => oc[id].some(c => c.key === 'layer_height')) : [];
+    if (changes.some(c => c.key === 'layer_height')) {
+      corrections.push(...(await releaseLayerHeights(zip, null, Object.fromEntries(lhObjects.map(id => [id, true])))));
+    } else if (lhObjects.length) {
+      corrections.push(...(await releaseLayerHeights(zip, lhObjects, Object.fromEntries(lhObjects.map(id => [id, true])))));
+    }
+    if (oc) {
+      const msFile = zip.file('Metadata/model_settings.config');
+      if (msFile) {
+        const r = setObjectSettings(await msFile.async('string'), oc);
+        zip.file('Metadata/model_settings.config', r.xml);
+      }
     }
     const rotKeys = Object.keys(rotations).filter(k => rotations[k]);
     const proj = project || await load3mf(baseBuffer);

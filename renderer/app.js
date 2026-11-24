@@ -120,7 +120,7 @@ async function openFile(promise, restore = null, opts = {}) {
     setBusy('file', restore ? 'Restoring your session…' : 'Reading the 3MF…');
     const info = await promise;
     if (!info) { clearBusy('file'); return; }
-    Object.assign(state, { file: info, result: null, compare: null, rotations: {}, checks: [], orientObj: null, assemblyChoice: null, blockersOn: false, remixApplied: false, swapUndo: null });
+    Object.assign(state, { file: info, result: null, objects: null, objPlan: null, compare: null, rotations: {}, checks: [], orientObj: null, assemblyChoice: null, blockersOn: false, remixApplied: false, swapUndo: null });
     resetRemix(); swReset();
     state.slots = initialSlots(info.filaments);
     state.mixes = info.mixes || [];
@@ -138,6 +138,7 @@ async function openFile(promise, restore = null, opts = {}) {
     await prepare();
     if (restore && restore.result) {
       state.result = restore.result;
+      if (restore.objects && restore.objects.results) state.objects = restore.objects;
       renderResults();
       applyRowEdits(restore.rowEdits);
       $('analyzeBtn').textContent = 'Get new recommendations';
@@ -175,6 +176,7 @@ function sessionPayload() {
   return {
     plateIndex: state.plateIndex, slots: state.slots, rotations: state.rotations, slider: Number($('slider').value), purpose: $('purpose').value,
     result: state.result, rowEdits: state.result ? rowEdits() : null,
+    objects: state.objects ? { ...state.objects, results: state.objects.results.map((r, i) => (i === state.objects.cur ? { ...r, edits: rowEdits() } : r)) } : null,
     comparePicks: state.comparePicks ? [...state.comparePicks] : null,
     compareIds: state.compare && state.compare.results ? state.compare.results.filter(r => r.ok).map(r => r.id) : [], tab,
     selectedVariant: state.selectedVariant || null,
@@ -997,7 +999,7 @@ $('bxExport').onclick = async () => {
   try { localStorage.setItem('bambuPrinter', $('bxPrinter').value); } catch { /* only a convenience */ }
   $('bxExport').disabled = true; $('bxStatus').textContent = 'Converting and exporting with Bambu Studio… (a minute or two)';
   try {
-    const r = await withBusy('bambu', 'Exporting for Bambu Lab…', () => api.exportBambu({ machine: $('bxPrinter').value, changes: def.changes, rotations: def.rotations || state.rotations, plateIndex: state.plateIndex, variantName: def.name, thumbs: fileThumbs() }));
+    const r = await withBusy('bambu', 'Exporting for Bambu Lab…', () => api.exportBambu({ machine: $('bxPrinter').value, changes: def.changes, objectChanges: def.objectChanges || null, rotations: def.rotations || state.rotations, plateIndex: state.plateIndex, variantName: def.name, thumbs: fileThumbs() }));
     if (r) { $('bambuDialog').close(); toast(`Saved the ${r.machine.replace(/ 0\.4 nozzle$/, '')} version (${r.how})${r.mixes ? `. ${r.mixes === 1 ? 'The color mix is' : `The ${r.mixes} color mixes are`} now ${r.mixes === 1 ? 'a filament' : 'filaments'} of ${r.mixes === 1 ? 'its' : 'their'} own in the blended color, so it needs ${r.filaments} filaments in the AMS` : ''}.${r.moved ? ` The model was moved ${r.moved} mm on the plate to make room for the purge tower.` : ''} It’s a Bambu Studio project, ready to upload to MakerWorld.`, 10000, () => api.showInFolder(r.path)); }
     else $('bxStatus').textContent = '';
   } catch (e) { $('bxStatus').textContent = cleanErr(e); }
@@ -1066,9 +1068,11 @@ async function offerPastAnalyses() {
   const when = (iso) => new Date(iso).toLocaleString();
   const modelName = (m) => m === 'chatbot' ? 'free chatbot' : String(m).replace(/^claude-/, '').replace(/-(\d+)-(\d+)$/, ' $1.$2').replace(/^\w/, c => c.toUpperCase());
   box.innerHTML = `<b>You’ve analyzed this file before.</b> Reuse an earlier answer at no cost:
-    <span class="past-list">${list.slice(0, 5).map((a, i) => `<button class="btn" data-past="${i}">${esc(when(a.at))} · ${esc(modelName(a.model))}${a.result && a.result.recipe ? ` · ${esc(a.result.recipe.name)}` : ''}</button>`).join('')}</span>`;
+    <span class="past-list">${list.slice(0, 5).map((a, i) => `<button class="btn" data-past="${i}">${esc(when(a.at))} · ${esc(modelName(a.model))}${a.kind === 'objects' ? ` · all objects (${a.result.results.length})` : a.result && a.result.recipe ? ` · ${esc(a.result.recipe.name)}` : ''}</button>`).join('')}</span>`;
   box.querySelectorAll('[data-past]').forEach(b => b.onclick = () => {
     const a = list[Number(b.dataset.past)];
+    if (a.kind === 'objects') { if (a.slider != null) { $('slider').value = a.slider; drawLayers(); refreshRecipe(); } setObjectsResult(a.result); toast('Loaded the earlier analysis of every object. No new AI request was made.', 5000); return; }
+    state.objects = null;
     state.result = a.result;
     if (a.slider != null) { $('slider').value = a.slider; drawLayers(); refreshRecipe(); }
     if (a.purpose) $('purpose').value = a.purpose;
@@ -1202,6 +1206,7 @@ async function loadPlate() {
   $('viewerNote').classList.toggle('hidden', !notes.length);
   $('viewerNote').textContent = notes.join(' ');
   renderStats(); renderOrientation();
+  refreshObjectsPlan();
   if (added) reprepare();
 }
 
@@ -1431,6 +1436,7 @@ $('analyzeBtn').onclick = async () => {
       if (!res) { state.result ? renderResults() : (body.classList.add('hidden'), $('resultsEmpty').classList.remove('hidden')); return; }
     }
     state.result = res;
+    state.objects = null;
     state.compare = null;
     saveSession();
     setTimeout(() => guideEvent('analyzed'), 50);
@@ -1458,7 +1464,7 @@ function renderResults() {
     return `<div class="callout"><b>Reorient ${esc(c.objectName)}: ${esc(c.option.label)}.</b> ${esc(c.reason)}
       <div class="row">${applied ? '<span class="ok-line">Applied</span>' : `<button class="btn primary" data-orient="${i}">Apply this orientation</button>`}</div></div>`;
   }).join('');
-  body.innerHTML = `
+  body.innerHTML = `${state.objects ? objectsHeader() : ''}
     <div class="actions">
       <span class="count" id="selCount"></span>
       <button class="btn" id="copyBtn" title="Copy a to-do list of these changes, to make them by hand in your slicer">Copy checklist</button>
@@ -1494,6 +1500,7 @@ function renderResults() {
   $('copyBtn').onclick = copyChecklist; $('presetBtn').onclick = exportPresets; $('saveBtn').onclick = () => { save3mf(); guideEvent('saved'); }; $('bambuRecBtn').onclick = () => openBambuExport('recommended');
   $('toCompare').onclick = () => showTab('compare');
   $('sendRecBtn').onclick = () => openSend('recommended');
+  if (state.objects) { wireObjectsHeader(); $('presetBtn').disabled = true; $('presetBtn').title = 'Presets hold one set of settings: not available when each object has its own'; }
   updateCount(); refreshChecks();
 }
 
@@ -1594,9 +1601,11 @@ async function save3mf(variantId = null, opts = {}) {
   try {
     const def = variantId ? variantDef(variantId) : null;
     // "no AI": just the conversion and the automatic safety fixes, whatever recommendations are on screen
-    const changes = opts.noAI ? [] : def ? def.changes : selectedChanges();
-    if (!(await fitConfirm(changes))) return;
-    const out = await api.save3mf({ changes, rotations: def ? (def.rotations || state.rotations) : state.rotations, slider: Number($('slider').value), purpose: $('purpose').value.trim(), plateIndex: state.plateIndex, variantName: def ? def.name : (opts.name || null), thumbs: fileThumbs() });
+    const rec = !opts.noAI && !def ? recChanges() : null;
+    const changes = opts.noAI ? [] : def ? def.changes : rec.changes;
+    const objectChanges = opts.noAI ? null : def ? (def.objectChanges || null) : rec.objectChanges;
+    if (!(await fitConfirm([...changes, ...Object.values(objectChanges || {}).flat()]))) return;
+    const out = await api.save3mf({ changes, objectChanges, rotations: def ? (def.rotations || state.rotations) : state.rotations, slider: Number($('slider').value), purpose: $('purpose').value.trim(), plateIndex: state.plateIndex, variantName: def ? def.name : (opts.name || null), thumbs: fileThumbs() });
     if (out) {
       const n = out.fixes.length + out.corrections.length;
       if (opts.quiet) return out;
@@ -1615,7 +1624,18 @@ async function exportPresets() {
 async function copyChecklist() {
   const lines = [`Snapmaker Orca changes for ${state.file.fileName}`, ''];
   for (const [i, rot] of Object.entries(state.rotations)) { const o = state.analysis.objects.find(x => x.itemIndex === +i); if (rot && o) lines.push(`[ ] Reorient ${o.name} (see the app's orientation choice)`); }
-  for (const c of selectedChanges()) lines.push(`[ ] ${c.label}${c.slot ? ` (T${c.slot})` : ''}: ${c.current ?? 'default'} -> ${c.value}   [${c.gui}]${c.reason ? `\n    ${c.reason}` : ''}`);
+  if (state.objects) {
+    // every object's own settings (Orca: right-click the object -> Add settings), then the whole-plate ones
+    const plan = objectPlan(), byId = new Map();
+    for (const r of state.objects.results) if (r.result) byId.set(r.group.objectIds[0], r);
+    for (const [id, list] of Object.entries(plan.objectChanges || {})) {
+      const r = byId.get(id); if (!r) continue;
+      lines.push(`${r.group.name}${r.group.count > 1 ? ` (x${r.group.count})` : ''}: right-click it in Orca -> Add settings`);
+      for (const c of list) lines.push(`[ ] ${(r.result.rows.find(x => x.key === c.key) || {}).label || c.key}: ${c.value}`);
+      lines.push('');
+    }
+    if (plan.changes.length) { lines.push('Whole plate (Process / Filament settings):'); plan.changes.forEach(c => lines.push(`[ ] ${(plan.shared.find(x => x.key === c.key) || {}).label || c.key}${c.slot ? ` (T${c.slot})` : ''}: ${c.value}`)); }
+  } else for (const c of selectedChanges()) lines.push(`[ ] ${c.label}${c.slot ? ` (T${c.slot})` : ''}: ${c.current ?? 'default'} -> ${c.value}   [${c.gui}]${c.reason ? `\n    ${c.reason}` : ''}`);
   if (state.result.plan.manual_steps.length) { lines.push('', 'By hand:'); state.result.plan.manual_steps.forEach(m => lines.push(`[ ] ${m}`)); }
   await navigator.clipboard.writeText(lines.join('\n'));
   toast('Checklist copied.', 3000);
@@ -1643,15 +1663,22 @@ async function runCompare(ids) {
   const variants = [];
   for (const id of ids) {
     if (id === 'original') variants.push({ id, name: VARIANT_NAMES[id], changes: [] });
-    else if (id === 'recommended') { if (state.result) variants.push({ id, name: VARIANT_NAMES[id], changes: selectedChanges().map(c => ({ key: c.key, value: c.value, slot: c.slot })) }); }
+    else if (id === 'recommended') { if (state.result) variants.push({ id, name: VARIANT_NAMES[id], ...recChanges() }); }
     else {
       // a quality preset plus the AI's other recommendations (supports, cooling…), so picking "Fast" doesn't
       // drop what the model needs; the preset decides layer height and speeds
       const r = await api.recipePreview(RECIPE_SLIDER[id]);
       // keys the recipe decides (even ones it leaves as they are) aren't overridden by the AI's values
       const presetKeys = new Set([...r.changes.map(c => `${c.key}#${c.slot || 0}`), ...(r.governs || []).map(k => `${k}#0`)]);
-      const extra = state.result ? selectedChanges().filter(c => c.source !== 'recipe' && !presetKeys.has(`${c.key}#${c.slot || 0}`)).map(c => ({ key: c.key, value: c.value, slot: c.slot })) : [];
-      variants.push({ id, name: state.result ? VARIANT_NAMES[id].replace(' recipe', ' + recommendations') : VARIANT_NAMES[id], changes: [...r.changes, ...extra] });
+      const extra = state.result && !state.objects ? selectedChanges().filter(c => c.source !== 'recipe' && !presetKeys.has(`${c.key}#${c.slot || 0}`)).map(c => ({ key: c.key, value: c.value, slot: c.slot })) : [];
+      // every object's own settings too (except what the preset decides)
+      let objectChanges = null;
+      if (state.objects) {
+        const rc = recChanges();
+        extra.push(...rc.changes.filter(c => !presetKeys.has(`${c.key}#${c.slot || 0}`)));
+        objectChanges = Object.fromEntries(Object.entries(rc.objectChanges || {}).map(([oid, l]) => [oid, l.filter(c => !presetKeys.has(`${c.key}#0`))]));
+      }
+      variants.push({ id, name: state.result ? VARIANT_NAMES[id].replace(' recipe', ' + recommendations') : VARIANT_NAMES[id], changes: [...r.changes, ...extra], objectChanges });
     }
   }
   for (const v of variants) v.rotations = state.rotations;
@@ -1779,10 +1806,10 @@ async function openInOrca(variantId) {
   if (!state.file) return;
   if (!state.info.available) { toast('Set the Snapmaker Orca location in Settings first.', 5000); openSettings(); return; }
   // the current plan (if any), or a sliced version from Compare
-  const def = variantId ? variantDef(variantId) : { id: 'current', name: state.result ? 'Recommended' : 'Current', changes: state.result ? selectedChanges().map(c => ({ key: c.key, value: c.value, slot: c.slot })) : [], rotations: state.rotations };
-  if (!(await fitConfirm(def.changes))) return;
+  const def = variantId ? variantDef(variantId) : { id: 'current', name: state.result ? 'Recommended' : 'Current', ...(state.result ? recChanges() : { changes: [], objectChanges: null }), rotations: state.rotations };
+  if (!(await fitConfirm([...def.changes, ...Object.values(def.objectChanges || {}).flat()]))) return;
   try {
-    const r = await withBusy('orca', 'Writing the project and starting Snapmaker Orca…', () => api.openInOrca({ changes: def.changes, rotations: def.rotations, plateIndex: state.plateIndex, variantName: def.name, thumbs: fileThumbs() }));
+    const r = await withBusy('orca', 'Writing the project and starting Snapmaker Orca…', () => api.openInOrca({ changes: def.changes, objectChanges: def.objectChanges || null, rotations: def.rotations, plateIndex: state.plateIndex, variantName: def.name, thumbs: fileThumbs() }));
     if (!r) return;
     const name = r.path.split(/[\\/]/).pop();
     const big = state.analysis && state.analysis.totals.triangles > 300000;
@@ -1810,8 +1837,134 @@ function noticeWithActions(msg, actions) {
 // ---------- send to printer ----------
 const SEND = { job: null, printers: [], printer: null, map: {} };
 const prefsKey = 'u1advisor.sendPrefs';
+// ---------- "Analyze all objects": one AI request per unique object, each object's settings saved on it ----------
+// state.objects = { results: [{ group: {id, name, count, plates, objectIds}, result | error, edits }], cur, picks }
+// While it's on, state.result is the shown object's recommendations, so the usual rows, checks and buttons work; the
+// other objects' ticks and edits are kept in their `edits`. Saving merges them all (recChanges): settings Orca allows
+// per object go on that object (and its copies), the rest (filament, first layer…) are whole-plate settings, shared by
+// all objects; when objects disagree on one of those, the user picks the value.
+let PER_OBJ = null;
+api.perObjectKeys().then(l => { PER_OBJ = new Set(l); }).catch(() => { PER_OBJ = new Set(); });
+async function refreshObjectsPlan() {
+  const b = $('analyzeAllBtn');
+  try { state.objPlan = await api.objectsPlan(); } catch { state.objPlan = null; }
+  const p = state.objPlan;
+  b.classList.toggle('hidden', !p || p.unique < 2);
+  if (p) b.textContent = `Analyze all objects (${p.unique} different${p.objects > p.unique ? ` of ${p.objects}` : ''})`;
+}
+function setObjectsResult(res) {
+  const results = res.results.map(r => ({ ...r, edits: r.edits || null }));
+  const cur = Math.max(0, results.findIndex(r => r.result));
+  state.objects = { results, cur, picks: (res.picks || {}) };
+  state.result = results[cur].result;
+  state.compare = null;
+  renderResults(); renderStats(); renderCompare();
+  $('analyzeBtn').textContent = 'Get new recommendations';
+  saveSession();
+}
+function switchObject(i) {
+  const o = state.objects;
+  if (!o || i === o.cur || !o.results[i] || !o.results[i].result) return;
+  o.results[o.cur].edits = rowEdits();
+  o.cur = i;
+  state.result = o.results[i].result;
+  renderResults();
+  applyRowEdits(o.results[i].edits);
+  // show that object's plate
+  const pl = o.results[i].group.plates[0];
+  if (pl && pl !== state.plateIndex && [...$('plateSelect').options].some(op => Number(op.value) === pl)) { $('plateSelect').value = String(pl); state.plateIndex = pl; state.compare = null; loadPlate(); }
+  saveSession();
+}
+// every object's ticked settings: { changes (whole plate), objectChanges: { objectId: [{key, value}] }, shared }
+function objectPlan() {
+  const o = state.objects, perObj = PER_OBJ || new Set();
+  const objectChanges = {}, shared = new Map();
+  o.results.forEach((r, i) => {
+    if (!r.result) return;
+    const edits = i === o.cur ? rowEdits() : r.edits;
+    for (const row of r.result.rows) {
+      const e = edits && edits[row.id];
+      const on = e ? e.checked : (row.action === 'change' && !row.unchanged && !row.invalid);
+      if (!on || row.invalid) continue;
+      const value = e ? e.value : row.recommended;
+      if (perObj.has(row.key) && !row.slot) {
+        for (const id of r.group.objectIds) (objectChanges[id] ||= []).push({ key: row.key, value });
+      } else {
+        const s = shared.get(row.id) || { id: row.id, key: row.key, slot: row.slot || 0, label: row.label, wants: [] };
+        s.wants.push({ value: String(value), from: r.group.name, priority: row.priority });
+        shared.set(row.id, s);
+      }
+    }
+  });
+  const rank = { high: 0, medium: 1, low: 2 };
+  const list = [...shared.values()].map(s => {
+    const values = [...new Set(s.wants.map(w => w.value))];
+    const count = (v) => s.wants.filter(w => w.value === v).length;
+    const best = values.sort((a, b) => count(b) - count(a) || Math.min(...s.wants.filter(w => w.value === a).map(w => rank[w.priority] ?? 3)) - Math.min(...s.wants.filter(w => w.value === b).map(w => rank[w.priority] ?? 3)))[0];
+    const chosen = o.picks[s.id] && values.includes(o.picks[s.id]) ? o.picks[s.id] : best;
+    return { ...s, values, chosen, conflict: values.length > 1 };
+  });
+  return { changes: list.map(s => ({ key: s.key, value: s.chosen, slot: s.slot })), objectChanges: Object.keys(objectChanges).length ? objectChanges : null, shared: list };
+}
+// what Save / Compare / Send / Open in Orca use for "the recommendations"
+function recChanges() {
+  if (state.objects) { const p = objectPlan(); return { changes: p.changes, objectChanges: p.objectChanges }; }
+  return { changes: selectedChanges().map(c => ({ key: c.key, value: c.value, slot: c.slot })), objectChanges: null };
+}
+function objectsHeader() {
+  const o = state.objects, p = objectPlan();
+  const pills = o.results.map((r, i) => `<button class="obj${r.error ? ' err' : ''}" data-obj="${i}" aria-pressed="${i === o.cur}" ${r.error ? `title="${esc(r.error)}" disabled` : ''}>${esc(r.group.name)}${r.group.count > 1 ? ` <small>×${r.group.count}</small>` : ''}${r.group.plates.length && (state.file.plates || []).length > 1 ? ` <small>plate ${r.group.plates.join(', ')}</small>` : ''}${r.error ? ' <small>(failed)</small>' : ''}</button>`).join('');
+  const sharedHtml = p.shared.length ? `<div class="shared"><b>Whole-plate settings</b> (filament, first layer…: one value for every object on a plate):<ul>${p.shared.map(s => `<li>${esc(s.label)}${s.slot ? ` T${s.slot}` : ''}: ${s.conflict
+    ? `<span class="conflict">objects disagree</span> <select data-pick="${esc(s.id)}" aria-label="${esc(s.label)}">${s.values.map(v => `<option value="${esc(v)}" ${v === s.chosen ? 'selected' : ''}>${esc(v)} (${esc(s.wants.filter(w => w.value === v).map(w => w.from).join(', '))})</option>`).join('')}</select>`
+    : `<b>${esc(s.chosen)}</b>`}</li>`).join('')}</ul></div>` : '';
+  return `<div class="objs"><h3>Settings per object</h3><p class="hint">Each object below was analyzed on its own; its settings are saved on it (and its copies) in one file. Pick an object to see and edit its settings.</p>
+    <div class="obj-list">${pills}</div>${sharedHtml}</div>`;
+}
+function wireObjectsHeader() {
+  document.querySelectorAll('#resultsBody [data-obj]').forEach(b => b.onclick = () => switchObject(Number(b.dataset.obj)));
+  document.querySelectorAll('#resultsBody [data-pick]').forEach(s => s.onchange = () => { state.objects.picks[s.dataset.pick] = s.value; state.compare = null; saveSession(); });
+}
+
+$('analyzeAllBtn').onclick = () => {
+  if (!state.file || state.busy || !state.objPlan) return;
+  if (state.config.aiMode === 'chat') { toast('Analyzing every object needs the Claude API (one request per object). Switch the AI mode in Settings, or use Get recommended settings.', 7000); return; }
+  if (!state.config.hasKey) { openSettings(); return; }
+  const p = state.objPlan;
+  showTab('recs');
+  $('resultsEmpty').classList.add('hidden');
+  const body = $('resultsBody');
+  body.classList.remove('hidden');
+  const cost = p.usdEach != null ? `about $${(p.usdEach * p.unique).toFixed(2)} (about $${p.usdEach.toFixed(2)} each, from your past requests)` : 'the cost of one recommendation for each';
+  body.innerHTML = `<div class="objs-plan"><h2>Analyze all objects</h2>
+    <p>${p.objects} object${p.objects === 1 ? '' : 's'}${p.plates > 1 ? ` on ${p.plates} plates` : ''}, <b>${p.unique} different</b> (copies and near-identical objects are analyzed once and get the same settings).</p>
+    <p>That’s <b>${p.unique} AI requests</b>, ${cost}, and about ${p.minutes} minute${p.minutes === 1 ? '' : 's'}. Each object’s settings are saved on that object, in one file.</p>
+    <ul>${p.groups.map(g => `<li>${esc(g.name)}${g.count > 1 ? ` ×${g.count}` : ''}</li>`).join('')}</ul>
+    <div class="row"><button class="btn primary" id="objsGo">Analyze ${p.unique} objects</button><button class="btn" id="objsCancel">Cancel</button></div></div>`;
+  $('objsCancel').onclick = () => { state.result ? renderResults() : (body.classList.add('hidden'), $('resultsEmpty').classList.remove('hidden')); };
+  $('objsGo').onclick = runAllObjects;
+};
+async function runAllObjects() {
+  if (state.busy) return;
+  state.busy = true; $('analyzeBtn').disabled = true; $('analyzeAllBtn').disabled = true;
+  const started = Date.now(), body = $('resultsBody');
+  body.innerHTML = `<div class="working"><h2>Analyzing every object in ${esc(state.file.fileName)}</h2><div class="bar"></div><p class="progress-line">Measuring the objects…</p><p class="hint" id="elapsed"></p></div>`;
+  const timer = setInterval(() => { const el = $('elapsed'); if (el) el.textContent = `${Math.round((Date.now() - started) / 1000)} s`; }, 1000);
+  try {
+    const used = state.analysis.totals.extrudersUsed || [];
+    const materials = state.slots.map(s => ({ toolhead: `T${s.slot}`, material: s.type, preset: s.preset || null, color: s.color, usedOnThisPlate: used.includes(s.slot) }));
+    setBusy('claude', 'Analyzing every object…');
+    const res = await api.runClaudeObjects({ plateIndex: state.plateIndex, slider: Number($('slider').value), materials, purpose: $('purpose').value.trim(), assembly: $('fitTogether').checked });
+    setObjectsResult(res);
+    const failed = res.results.filter(r => r.error);
+    if (failed.length) toast(`${failed.length} object${failed.length === 1 ? '' : 's'} couldn’t be analyzed (${failed.map(r => r.group.name).join(', ')}); they keep the file’s settings.`, 9000);
+    setTimeout(() => guideEvent('analyzed'), 50);
+  } catch (e) {
+    body.innerHTML = `<div class="error"><b>Analysis failed.</b><p>${esc(cleanErr(e))}</p></div>`;
+  } finally { clearInterval(timer); clearBusy('claude'); state.busy = false; $('analyzeBtn').disabled = false; $('analyzeAllBtn').disabled = false; }
+}
+
 function variantDef(id) {
-  if (id === 'recommended') return { id, name: 'Recommended', changes: selectedChanges().map(c => ({ key: c.key, value: c.value, slot: c.slot })), rotations: state.rotations };
+  if (id === 'recommended') return { id, name: 'Recommended', ...recChanges(), rotations: state.rotations };
   if (id === 'original') return { id, name: 'Original', changes: [], rotations: state.rotations };
   return (state.variantDefs && state.variantDefs[id]) || { id, name: id, changes: [], rotations: state.rotations };
 }
@@ -1825,7 +1978,7 @@ api.onSendProgress(p => sdStatus(p.label, p.pct));
 
 async function openSend(variantId) {
   if (!state.file) return;
-  if (!(await fitConfirm(variantDef(variantId).changes))) return;
+  { const d = variantDef(variantId); if (!(await fitConfirm([...d.changes, ...Object.values(d.objectChanges || {}).flat()]))) return; }
   if (!state.config.printers || !state.config.printers.length) { toast('Add your printers’ addresses in Settings first.', 5000); openSettings(); return; }
   const dlg = $('sendDialog');
   SEND.job = null; SEND.map = {};
@@ -2276,10 +2429,12 @@ function renderTsResult() {
       const what = issues.slice(0, 2).map(i => i.split(/\s*(?:\/| or )\s*/)[0].toLowerCase()).join(' and ');
       note.textContent = 'Choose where to save it…';
       const out = await save3mf(null, { quiet: true, name: what ? `Fixed ${what}` : 'Fixed' });
+      const plate = Number((/_plate_(\d+)/i.exec(TS.job.filename) || [])[1]) || null;
       if (!out) { note.textContent = 'Not saved.'; return; }
       const auto = [...out.fixes.map(f => `${f.key.replace(/_/g, ' ')} → ${f.value}: ${f.reason}`), ...out.corrections];
       const file = out.path.split(/[\\/]/).pop();
       note.innerHTML = `<span class="ok-line">✓ Saved <b>${esc(file)}</b>.</span> Double-click it to open it in Snapmaker Orca, check the preview, then print. <button class="link" id="tsShowSaved">Show in folder</button>
+        ${out.perObject ? `<br>The fixes are on the objects of the plate that was printed${plate ? ` (plate ${plate})` : ''}; the other plates keep their settings.${out.wholeFile.length ? ` These apply to the whole file (Orca can’t set them per object): ${out.wholeFile.map(w => `${esc(w.label)}${w.slot ? ` T${w.slot}` : ''} ${esc(w.value)}`).join(', ')}.` : ''}` : ''}
         ${auto.length ? `<details><summary>Also adjusted so the file works in Orca (${auto.length})</summary><ul>${auto.map(a => `<li>${esc(a)}</li>`).join('')}</ul></details>` : ''}`;
       $('tsShowSaved').onclick = () => api.showInFolder(out.path);
       guideEvent('saved');

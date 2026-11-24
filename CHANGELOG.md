@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.34.0
+- **Settings per object, in one file.** Files with several plates, or several different objects on a plate, can now
+  get different settings for different objects, saved on the objects themselves (the same as right-click → Add settings
+  in Orca). Checked with Snapmaker Orca's own slicer: each object prints with its own walls, infill, layer height…
+  - **Saving recommendations for one plate** of a multi-plate file now changes only that plate's objects; the other
+    plates keep their settings. Settings Orca can't set per object (filament temperatures, first-layer height, prime
+    tower…) still apply to the whole file, and the app says which.
+  - **Troubleshooter → Save fixed 3MF** puts the fixes only on the plate that was printed.
+  - **Analyze all objects (N)**, next to Get recommended settings: one AI request per *different* object (copies and
+    near-identical objects, like a set of similar pegs, are analyzed once and share the settings). Shows the number of
+    requests and the expected cost first. Then pick an object to see and edit its settings; settings that must be the
+    same for a whole plate are listed once, and when objects disagree you choose the value. Save, Compare, Send and
+    Open in Orca use every object's settings.
+- **Fixed: a new layer height could be ignored in Orca.** Some models set their own layer height on the object, or use
+  a variable layer height; Orca uses those instead of the project's layer height, so the file still printed (and showed)
+  the old one. Changing the layer height now removes them where they'd override it, and says so. Height ranges the
+  designer set (e.g. a finer section) are kept.
+
 ## 2.33.0
 - **Take the troubleshooter's photos with your phone**: in the print troubleshooter click **📱 Take photos with your
   phone** and scan the QR code. Your phone opens a page with a big **📷 Take a photo** button. Already took them? **🖼 Choose

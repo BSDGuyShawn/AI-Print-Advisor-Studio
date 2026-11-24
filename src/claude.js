@@ -98,6 +98,12 @@ ${catalogText({ curatedOnly: compact })}`;
 function buildUserContent(p) {
   const { fileName, analysis, settings, slider, recipe, recipeChanges, materials, purpose, images, originalSlice, history, baseNotes } = p;
   const payload = {
+    // "Analyze all objects": one request per unique object; its settings are written on that object in the file
+    ...(p.focus ? { task: {
+      analyze: `Only the object in plate.objects (${p.focus.name}${p.focus.copies > 1 ? `, ${p.focus.copies} copies/near-identical objects that get the same settings` : ''}). Recommend the settings for THIS object; they are saved as per-object settings on it, so other objects keep their own.`,
+      wholePlateSettings: 'Filament (toolhead) settings, first-layer height, first-layer and travel speeds and the prime tower apply to every object on the plate: recommend those only if this object really needs them, and say why in the reason.',
+      otherObjectsOnThisPlate: p.focus.others,
+    } } : {}),
     file: fileName,
     preference: { sliderValue0Quality100Speed: slider, meaning: sliderDescription(slider) },
     recipe: { name: recipe.name, about: recipe.about, appliedChanges: recipeChanges.map(c => `${c.key}=${c.value}`) },

@@ -222,6 +222,7 @@ contextBridge.exposeInMainWorld('advisor', {
   tsOpen: async (a) => { const r = find('ts-open', [a], { strict: true }); if (!r) { notice('ts'); throw new Error('The tour troubleshoots the “Demo Rocket” print only.'); } return clone(r.r); },
   tsPickModel: blocked('files'),
   tsLoad: (a) => replay('ts-load', [a], { delay: 1500, steps: ['Loading the printed G-code and the model…'] }),
+  objectsPlan: async () => null, perObjectKeys: async () => [], runClaudeObjects: async () => { throw new Error('The tour analyzes the plate as a whole.'); },
   tsRun: (a) => withCost('Troubleshooting', 0.12, replay('ts-run', [a], { delay: 6000, steps: ['Reading what the printer did at the failed spot…', 'Claude is diagnosing the print…', 'Claude is diagnosing the print…'] })),
   rowsFor: (s) => replay('rows-for', [s]),
   chatAnswer: failing('ai'),

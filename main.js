@@ -26,6 +26,8 @@ const { heuristicName, aiName } = require('./src/naming');
 const { analyzeGcode } = require('./src/gcode');
 const { troubleshoot, ISSUES, systemPrompt: tsSystemPrompt, buildContent: tsBuildContent } = require('./src/troubleshoot');
 const { CATALOG, CONTEXT_KEYS, BY_KEY } = require('./src/orca-settings');
+const { canBePerObject } = require('./src/perobject');
+const { uniqueObjects } = require('./src/objects');
 const crypto = require('crypto');
 const JSZip = require('jszip');
 const fss = require('fs');
@@ -33,7 +35,7 @@ const { fetchJobs, PrintLog, historyForPrompt } = require('./src/history');
 const Spend = require('./src/spend');
 // Which feature an AI call belongs to, for the spending record: the window action that started it.
 const AI_FEATURES = { 'run-claude': 'Recommendations', 'parts-identify': 'Color remix: parts', 'remix-run': 'Color remix: schemes', 'remix-swap-run': 'Color remix: swap colors',
-  'shopping-find': 'Finding filament to buy', 'ts-run': 'Troubleshooting', 'filament-claude': 'Filament: screenshots and photos', 'open-path': 'Print names' };
+  'shopping-find': 'Finding filament to buy', 'run-claude-objects': 'Recommendations (all objects)', 'ts-run': 'Troubleshooting', 'filament-claude': 'Filament: screenshots and photos', 'open-path': 'Print names' };
 {
   const handle = ipcMain.handle.bind(ipcMain);
   ipcMain.handle = (channel, fn) => handle(channel, AI_FEATURES[channel] ? (...a) => Spend.run(AI_FEATURES[channel], () => fn(...a)) : fn);
@@ -585,15 +587,61 @@ ipcMain.handle('run-checks', async (_e, { plateIndex, changes, rotations }) => {
 });
 
 // Append the fixes Snapmaker Orca would otherwise prompt for (or refuse) when the project is opened.
-function finalize(changes, plateIndex, rotations) {
-  const a = analyzePlate(S.base.project, plateIndex || 1, rotations || {}, { orient: false });
+// This is the one place every save, slice, send and "open in Orca" passes through. It also decides where settings go:
+//   - changes: settings for the plate being worked on. In a file with several plates (with objects on them), the ones
+//     Orca allows per object are written on that plate's objects only (src/perobject.js), so the other plates keep
+//     their settings; the rest (filament, first layer, prime tower…) apply to the whole file and are listed in
+//     fin.wholeFile so the app can say so.
+//   - objectChanges: settings for single objects ({ [objectId]: [{key, value}] }, from "Analyze all objects").
+function finalize(changes, plateIndex, rotations, objectChanges = null) {
+  const proj = S.base.project;
+  const a = analyzePlate(proj, plateIndex || 1, rotations || {}, { orient: false });
   // Parts that fit together: nothing changes walls, line widths or sizes, whatever proposed it (the AI, a quality
-  // preset, a Compare version). This is the one place every save, slice, send and "open in Orca" passes through.
+  // preset, a Compare version).
   let kept = [];
   if (S.assembly) { const g = guardFit(changes || [], true); changes = g.kept; kept = g.dropped; }
-  const fin = withCompat({ baseSettings: { ...S.base.settings, __converted: S.base.mode === 'converted' }, changes: changes || [], customLayering: a.totals.customLayering, usedSlots: a.totals.extrudersUsed, lib: S.lib, objectCount: a.totals.objectCount });
-  if (kept.length) fin.fixes = [...fin.fixes, { key: 'parts fit together', value: 'kept as designed', reason: fitNote(kept) }];
+  let global = changes || [];
+  const perObject = {};
+  const add = (id, c) => { const l = perObject[id] = perObject[id] || []; const i = l.findIndex(x => x.key === c.key); if (i >= 0) l[i] = c; else l.push(c); };
+  const plateIds = [...new Set(a.objects.map(o => proj.items[o.itemIndex] && proj.items[o.itemIndex].objectId).filter(Boolean))];
+  const platesWithObjects = (proj.plates || []).filter(p => p.objectIds && p.objectIds.length).length;
+  const wholeFile = [];
+  if (platesWithObjects > 1 && plateIds.length) {
+    const g = [];
+    for (const c of global) {
+      if (canBePerObject(c.key)) plateIds.forEach(id => add(id, { key: c.key, value: c.value }));
+      else { g.push(c); wholeFile.push(c); }
+    }
+    global = g;
+  }
+  for (const [id, list] of Object.entries(objectChanges || {})) {
+    let l = (list || []).filter(c => canBePerObject(c.key));
+    if (S.assembly) { const gf = guardFit(l, true); l = gf.kept; kept.push(...gf.dropped); }
+    l.forEach(c => add(id, { key: c.key, value: c.value }));
+  }
+  const fin = withCompat({ baseSettings: { ...S.base.settings, __converted: S.base.mode === 'converted' }, changes: global, customLayering: a.totals.customLayering, usedSlots: a.totals.extrudersUsed, lib: S.lib, objectCount: a.totals.objectCount });
+  // the same safety rules for each object's own settings (on top of the project's and the plate's)
+  const names = Object.fromEntries(proj.items.map(it => [it.objectId, it.name]));
+  for (const [id, list] of Object.entries(perObject)) {
+    const r = withCompat({ baseSettings: { ...S.base.settings, __converted: S.base.mode === 'converted' }, changes: [...fin.changes, ...list.map(c => ({ ...c, slot: 0 }))], customLayering: a.totals.customLayering, usedSlots: a.totals.extrudersUsed, lib: S.lib, objectCount: a.totals.objectCount });
+    const globalFix = new Set(fin.fixes.map(f => `${f.key}=${f.value}`));
+    for (const f of r.fixes) {
+      if (globalFix.has(`${f.key}=${f.value}`)) continue;
+      if (canBePerObject(f.key)) { add(id, { key: f.key, value: f.value }); fin.fixes.push({ ...f, reason: `${names[id] || 'An object'}: ${f.reason}` }); }
+    }
+  }
+  // Orca's prime tower needs one layer height for every object on a plate: objects that would differ get the finest
+  const prime = String([].concat(S.base.settings.enable_prime_tower)[0]) === '1' || a.totals.multiColor;
+  const lh = plateIds.map(id => (perObject[id] || []).find(c => c.key === 'layer_height')).filter(Boolean);
+  if (prime && lh.length && new Set(lh.map(c => String(c.value))).size > 1) {
+    const finest = String(Math.min(...lh.map(c => Number(c.value))));
+    plateIds.forEach(id => { if (perObject[id]) add(id, { key: 'layer_height', value: finest }); });
+    fin.fixes.push({ key: 'layer_height', value: finest, reason: 'Objects on a multi-color plate (with a prime tower) must share one layer height: they use the finest one recommended.' });
+  }
+  if (kept.length) fin.fixes = [...fin.fixes, { key: 'parts fit together', value: 'kept as designed', reason: fitNote([...new Map(kept.map(k => [k.key, k])).values()]) }];
   fin.fitKept = kept;
+  fin.objectChanges = Object.keys(perObject).length ? perObject : null;
+  fin.wholeFile = wholeFile;
   return fin;
 }
 
@@ -625,9 +673,9 @@ async function sliceVariant(plateIndex, v) {
 }
 
 async function sliceVariantOnce(plateIndex, v) {
-  const fin = finalize(v.changes, plateIndex, v.rotations);
-  const built = await Slicer.buildVariantDetailed(S.base.buffer, { changes: fin.changes, rotations: v.rotations || {}, project: S.base.project });
-  const cacheKey = JSON.stringify({ file: S.originalHash, slots: S.slots, changes: fin.changes.map(c => [c.key, c.value, c.slot || 0]).sort(), rotations: v.rotations || {}, app: require('./package.json').version });
+  const fin = finalize(v.changes, plateIndex, v.rotations, v.objectChanges);
+  const built = await Slicer.buildVariantDetailed(S.base.buffer, { changes: fin.changes, objectChanges: fin.objectChanges, rotations: v.rotations || {}, project: S.base.project });
+  const cacheKey = JSON.stringify({ file: S.originalHash, slots: S.slots, changes: fin.changes.map(c => [c.key, c.value, c.slot || 0]).sort(), objectChanges: fin.objectChanges, rotations: v.rotations || {}, app: require('./package.json').version });
   const r = await S.slicer.slice(built.buffer, plateIndex, cacheKey);
   const fixes = fin.fixes.map(f => `${f.key.replace(/_/g, ' ')} → ${f.value}: ${f.reason}`);
   return { ...r, corrections: [...new Set([...fixes, ...built.corrections, ...(r.corrections || [])])] };
@@ -732,6 +780,83 @@ ipcMain.handle('run-claude', async (_e, args) => { await S.ready;
   return out;
 });
 
+// "Analyze all objects": the file's unique objects (copies and near-identical ones together, src/objects.js) and what
+// analyzing them would take: one AI request each, priced from this user's own past recommendation requests
+ipcMain.handle('per-object-keys', () => [...require('./src/perobject').PER_OBJECT]);
+ipcMain.handle('objects-plan', async () => { await S.ready;
+  if (!S.base) return null;
+  const groups = uniqueObjects(S.base.project, S.rotations);
+  const past = Spend.summary().byFeature.filter(f => /^Recommendations/.test(f.feature));
+  const calls = past.reduce((n, f) => n + f.calls, 0), usd = past.reduce((n, f) => n + f.usd, 0);
+  const plates = [...new Set(groups.flatMap(g => [g.lead.plate]))];
+  return { unique: groups.length, objects: groups.reduce((n, g) => n + g.count, 0), plates: plates.length,
+    usdEach: calls ? usd / calls : null, minutes: Math.max(1, Math.round(plates.length * 0.7 + groups.length * 0.6)),
+    groups: groups.map(g => ({ id: g.id, name: g.name, count: g.count, plates: g.plates })) };
+});
+async function mapLimit(list, n, fn) {
+  const out = new Array(list.length); let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, list.length) }, async () => { while (i < list.length) { const k = i++; out[k] = await fn(list[k], k); } }));
+  return out;
+}
+ipcMain.handle('run-claude-objects', async (_e, args) => { await S.ready;
+  if (S.base) assertRightPrinter();
+  if (!S.base) throw new Error('Open a .3mf file first.');
+  const cfg = await readConfig();
+  if (cfg.aiMode === 'chat') throw new Error('Analyzing every object needs the Claude API (one request per object): switch AI mode in Settings, or use Get recommended settings.');
+  const proj = S.base.project;
+  const groups = uniqueObjects(proj, S.rotations);
+  if (!groups.length) throw new Error('No objects to analyze.');
+  const recipe = recipeFor(args.slider, S.lib);
+  const rChanges = recipeChanges(recipe, S.base.settings, S.lib);
+  const assembly = typeof args.assembly === 'boolean' ? args.assembly : projectLooksLikeAssembly(proj);
+  S.assembly = assembly;
+  if (assembly) { const g = guardFit(rChanges, true); rChanges.splice(0, rChanges.length, ...g.kept); }
+  // one real slice per plate (shared by its objects), the print history once
+  const slices = {}, sliceErrors = {};
+  const plates = [...new Set(groups.map(g => g.lead.plate))];
+  if (S.slicer && S.slicer.available) {
+    S.slicer.setLimitFor((proj.items || []).reduce((n, it) => n + it.meshes.reduce((m, x) => m + x.mesh.triangles.length / 3, 0), 0));
+    for (const [k, pl] of plates.entries()) {
+      progress(`Slicing ${plates.length > 1 ? `plate ${pl} (${k + 1} of ${plates.length})` : 'the original'} in Snapmaker Orca…`);
+      try { slices[pl] = await sliceVariant(pl, { changes: [], rotations: S.rotations }); if (pl === args.plateIndex) S.lastSlices.original = slices[pl]; }
+      catch (e) { sliceErrors[pl] = e.message; }
+    }
+  }
+  let history = null;
+  const printers = await getPrinters();
+  if (printers.some(p => p.url)) {
+    progress('Reading print history from your printers…');
+    try {
+      const { jobs } = FAKE_PRINTER ? { jobs: JSON.parse(await fs.readFile(path.join(FAKE_PRINTER, 'jobs.json'), 'utf8')) } : await fetchJobs(printers);
+      history = historyForPrompt(S.printLog.decorate(jobs), path.basename(S.filePath));
+    } catch {}
+  }
+  const apiKey = await getApiKey(), model = cfg.model || DEFAULT_MODEL;
+  let started = 0;
+  const results = await mapLimit(groups, 2, async (g) => {
+    const analysis = analyzePlate(proj, g.lead.plate, S.rotations);
+    delete analysis.preview;
+    for (const o of analysis.objects) delete o.rotationAffine;
+    const focus = analysis.objects.find(o => o.itemIndex === g.lead.itemIndex) || analysis.objects[0];
+    const others = analysis.objects.filter(o => !g.items.includes(o.itemIndex)).slice(0, 12).map(o => ({ name: o.name, sizeMm: o.sizeMm, extruder: o.extruder }));
+    const one = { ...analysis, objects: [focus] };
+    const thumb = S.original.images.find(i => i.name === `Metadata/plate_${g.lead.plate}.png`);
+    const images = thumb && thumb.base64 !== PLACEHOLDER_BASE64 ? [{ label: `Slicer thumbnail of plate ${g.lead.plate}`, mediaType: thumb.mediaType, base64: thumb.base64 }] : [];
+    const ctx = { analysis: one, recipe, rChanges, originalSlice: slices[g.lead.plate] || null, sliceError: sliceErrors[g.lead.plate] || null, history, slider: args.slider, purpose: args.purpose, assembly };
+    progress(`Claude is analyzing ${g.name}${g.count > 1 ? ` (×${g.count})` : ''}: object ${++started} of ${groups.length}…`);
+    try {
+      const plan = await analyzeWithClaude({ apiKey, model, fileName: path.basename(S.filePath), analysis: one, settings: settingsSummary({ projectSettings: S.base.settings }),
+        slider: args.slider, recipe, recipeChanges: rChanges, materials: args.materials, purpose: args.purpose, images, assembly,
+        originalSlice: ctx.originalSlice, history, baseNotes: S.base.notes, focus: { name: g.name, copies: g.count, others } });
+      return { group: g, result: finishRecommendation(ctx, plan) };
+    } catch (e) { return { group: g, error: e.message }; }
+  });
+  if (results.every(r => r.error)) throw new Error(results[0].error);
+  const out = { kind: 'objects', results };
+  await archiveAnalysis({ kind: 'objects', model, slider: args.slider, purpose: args.purpose, slots: S.slots, rotations: S.rotations, result: out }).catch(e => logLine('archive failed:', e));
+  return out;
+});
+
 ipcMain.handle('slice-variants', async (_e, { plateIndex, variants }) => { await S.ready;
   if (S.base) assertRightPrinter();
   if (!S.slicer || !S.slicer.available) throw new Error('Set the Snapmaker Orca location in Settings to slice.');
@@ -775,7 +900,7 @@ async function gcodeSettings(file) {
   } catch { return null; }
 }
 
-ipcMain.handle('save-3mf', async (_e, { changes, rotations, slider, purpose, plateIndex, variantName, thumbs }) => { await S.ready;
+ipcMain.handle('save-3mf', async (_e, { changes, objectChanges, rotations, slider, purpose, plateIndex, variantName, thumbs }) => { await S.ready;
   if (S.base) assertRightPrinter();
   if (!S.base) throw new Error('Open a .3mf file first.');
   // A plain model with no slicer available: wrap it as a U1 project from the bundled template instead of refusing.
@@ -790,13 +915,14 @@ ipcMain.handle('save-3mf', async (_e, { changes, rotations, slider, purpose, pla
   const def = path.join(path.dirname(S.filePath), `${printName()}${advisorStamp(label)}.3mf`);
   const r = await dialog.showSaveDialog(win, { title: variantName ? `Save “${variantName}” as a 3MF project` : 'Save as a 3MF project', defaultPath: def, filters: [{ name: '3MF project', extensions: ['3mf'] }] });
   if (r.canceled || !r.filePath) return null;
-  const fin = finalize(changes, plateIndex, rotations);
-  const built = await Slicer.buildVariantDetailed(baseBuffer, { changes: fin.changes, rotations: rotations || {}, project: baseBuffer === S.base.buffer ? S.base.project : null });
+  const fin = finalize(changes, plateIndex, rotations, objectChanges);
+  const built = await Slicer.buildVariantDetailed(baseBuffer, { changes: fin.changes, objectChanges: fin.objectChanges, rotations: rotations || {}, project: baseBuffer === S.base.buffer ? S.base.project : null });
   built.buffer = await addPackageThumbnails(built.buffer, thumbs, plateIndex || 1).catch(() => built.buffer);
   built.buffer = await stampPrintName(built.buffer, r.filePath).catch(() => built.buffer);
   await fs.writeFile(r.filePath, built.buffer);
   await S.printLog.addRun({ file: path.basename(r.filePath), modelPath: r.filePath, source: path.basename(S.filePath), changes: fin.changes.map(c => ({ key: c.key, value: c.value, slot: c.slot || null })), rotated: Object.keys(rotations || {}).length, slots: S.slots, slider, purpose });
-  return { path: r.filePath, fixes: fin.fixes, corrections: [...extra, ...built.corrections] };
+  return { path: r.filePath, fixes: fin.fixes, corrections: [...extra, ...built.corrections], perObject: fin.objectChanges ? Object.keys(fin.objectChanges).length : 0,
+    wholeFile: fin.objectChanges ? fin.wholeFile.map(c => ({ key: c.key, label: BY_KEY[c.key] ? BY_KEY[c.key].label : c.key, value: c.value, slot: c.slot || 0 })) : [] };
 });
 
 ipcMain.handle('save-gcode', async (_e, { variantId, name }) => { await S.ready;
@@ -1112,14 +1238,14 @@ ipcMain.handle('bambu-locate', async () => {
   const cfg = await readConfig(); cfg.bambuPath = r.filePaths[0]; await writeConfig(cfg);
   return r.filePaths[0];
 });
-ipcMain.handle('export-bambu', async (_e, { machine, changes, rotations, plateIndex, variantName, thumbs }) => { await S.ready;
+ipcMain.handle('export-bambu', async (_e, { machine, changes, objectChanges, rotations, plateIndex, variantName, thumbs }) => { await S.ready;
   if (!S.base) throw new Error('Open a model first.');
   assertRightPrinter();
   const exe = await findBambuStudio();
   if (!exe) throw new Error('Bambu Studio isn’t installed (it’s free from bambulab.com). It does the final export so MakerWorld accepts the file.');
   // the version being shared, exactly as it would print on the U1 (fit protection and fixes included)
-  const fin = finalize(changes || [], plateIndex, rotations);
-  const u1 = await Slicer.buildVariantDetailed(S.base.buffer, { changes: fin.changes, rotations: rotations || {}, project: S.base.project });
+  const fin = finalize(changes || [], plateIndex, rotations, objectChanges);
+  const u1 = await Slicer.buildVariantDetailed(S.base.buffer, { changes: fin.changes, objectChanges: fin.objectChanges, rotations: rotations || {}, project: S.base.project });
   const u1ps = JSON.parse(await (await JSZip.loadAsync(u1.buffer)).file('Metadata/project_settings.config').async('string'));
   const lib = new ProfileLibrary(exe, { machine, cacheFile: path.join(app.getPath('userData'), 'profile-index-bambu.json') });
   const slicer = new Slicer({ exe, lib, workDir: path.join(app.getPath('userData'), 'work-bambu') });
@@ -2042,15 +2168,15 @@ function watchOrcaFile(file, writtenHash) {
   });
 }
 
-ipcMain.handle('open-in-orca', async (_e, { changes, rotations, plateIndex, variantName, thumbs }) => { await S.ready;
+ipcMain.handle('open-in-orca', async (_e, { changes, objectChanges, rotations, plateIndex, variantName, thumbs }) => { await S.ready;
   if (S.base) assertRightPrinter();
   if (!S.base) throw new Error('Open a .3mf file first.');
   const exe = S.slicer && S.slicer.exe;
   if (!exe || !fss.existsSync(exe)) throw new Error('Set the Snapmaker Orca location in Settings first.');
   let baseBuffer = S.base.buffer;
   if (!Object.keys(S.base.settings || {}).length) baseBuffer = await Slicer.cliReady(S.base.buffer, S.base.project);
-  const fin = finalize(changes || [], plateIndex, rotations);
-  const built = await Slicer.buildVariantDetailed(baseBuffer, { changes: fin.changes, rotations: rotations || {}, project: baseBuffer === S.base.buffer ? S.base.project : null });
+  const fin = finalize(changes || [], plateIndex, rotations, objectChanges);
+  const built = await Slicer.buildVariantDetailed(baseBuffer, { changes: fin.changes, objectChanges: fin.objectChanges, rotations: rotations || {}, project: baseBuffer === S.base.buffer ? S.base.project : null });
   let target = friendlyPath(path.dirname(S.filePath));
   const inPlace = path.resolve(target) === path.resolve(S.filePath);
   // don't overwrite edits made in Orca since the advisor last wrote this file
