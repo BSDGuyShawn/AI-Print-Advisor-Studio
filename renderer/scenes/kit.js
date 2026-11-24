@@ -34,6 +34,7 @@ export const floor = (g, w, d, m, x = 0, y = 0, z = 0) => put(g, new THREE.Plane
 export function glowLight(g, color, intensity, dist, x, y, z, r = 8) {
   const bulb = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), new THREE.MeshBasicMaterial({ color }));
   bulb.position.set(x, y, z); g.add(bulb);
+  bulb.userData.accent = true;   // one of the setting's own lights (the Accent lights slider dims it); not the moon
   if (intensity > 0) { const l = new THREE.PointLight(color, intensity, dist, 1); l.position.set(x, y, z); g.add(l); bulb.userData.light = l; }
   return bulb;
 }

@@ -40,7 +40,7 @@ export const BUILT = [
     for (const [x, y] of [[-2600, 3800], [2300, 4200], [600, 5200]]) { cyl(g, 110, 140, 1800, mat(0x5a3d26), x, y, 0); ball(g, 1100, mat(0x3f7a2c, { r: 1 }), x, y, 2700, 1, 1, 1.1); }
     // garden lanterns light up at night
     const lanterns = [glowLight(g, 0xffcf80, lampPower(t, 900), 3500, -900, 900, 300, 30), glowLight(g, 0xffcf80, lampPower(t, 900), 3500, 1100, 800, 300, 30)];
-    if (isNight(t)) glowLight(g, 0xfffbe8, 0, 0, -3000, 9000, 6000, 260);   // the moon
+    if (isNight(t)) glowLight(g, 0xfffbe8, 0, 0, -3000, 9000, 6000, 260).userData.accent = false;   // the moon
     return { group: g, spot: V(0, 0, 750), frame: { width: 1300, dir: V(0, -1, 0.42) }, background: sky(t), animate: (s) => flicker(lanterns, lampPower(t, 900), s, 3) };
   } },
 
@@ -208,7 +208,7 @@ export const BUILT = [
     jack(-700, -150, 0, 210); jack(650, -100, 0, 170); jack(-1100, 250, 0, 150);
     const candles = [];
     for (const x of [-250, 230]) { cyl(g, 25, 25, 200, mat(0xe8e0d0), x, 180, 650); candles.push(glowLight(g, 0xffb050, 400, 1600, x, 180, 870, 9)); }
-    glowLight(g, 0xf2f0dc, 0, 0, 2600, 9000, 5200, 520);                                  // the moon
+    glowLight(g, 0xf2f0dc, 0, 0, 2600, 9000, 5200, 520).userData.accent = false;          // the moon
     for (let i = 0; i < 6; i++) { const w = box(g, 3, 3, 500, mat(0xdddddd, { op: 0.5 }), -2000 + i * 40, 590, 2300 - i * 60); w.rotation.y = (i - 3) * 0.25; }
     return { group: g, spot: V(30, 0, 650), frame: { width: 2300, dir: V(0.1, -1, 0.34) }, background: tt === 'night' ? gradient('#090416', '#2a1440') : gradient('#2a1440', '#c0602a'),
       animate: (s) => { flicker(lanterns, 1300, s, 8); flicker(candles, 400, s, 10); } };

@@ -267,7 +267,14 @@ export class ModelViewer {
     this.spinT0 = null;
   }
   spinStep(t, dt = 1 / 60) {
-    if (this.scn && this.scn.animate) this.scn.animate(t / 1000);
+    if (this.scn && this.scn.accents) {
+      // Accent lights: each frame from the setting's own levels (flickering candles and twinkling lights included),
+      // then scaled: 0 = off, 1 = as built, 2 = twice as bright
+      const a = this.scn.opts.accent ?? 1;
+      for (const x of this.scn.accents) { x.bulb.material.color.copy(x.col); if (x.light) x.light.intensity = x.li; }
+      if (this.scn.animate) this.scn.animate(t / 1000);
+      if (a !== 1) for (const x of this.scn.accents) { if (x.light) x.light.intensity *= a; if (a < 1) x.bulb.material.color.multiplyScalar(0.1 + 0.9 * a); }
+    } else if (this.scn && this.scn.animate) this.scn.animate(t / 1000);
     if (!this.spin) return;
     if (this.scn) { this.pivot.rotation.z += dt * Math.PI * 2 / 25; return; }
     if (this.spinT0 == null) {
@@ -312,6 +319,9 @@ export class ModelViewer {
       const def = BUILT.find(b => b.id === spec.id) || BUILT[0];
       const r = def.build(time);
       scn.group.add(r.group); scn.animate = r.animate; scn.spot = r.spot; frame = r.frame;
+      // the setting's own lights (lamps, candles, the fire, under-cabinet lights…), for the Accent lights slider
+      scn.accents = [];
+      r.group.traverse(o => { if (o.userData.accent) scn.accents.push({ bulb: o, light: o.userData.light || null, li: o.userData.light ? o.userData.light.intensity : 0, col: o.material.color.clone() }); });
       this.scene.background = r.background;
       this.scene.add(scn.group);
       this.pivot.position.copy(r.spot);

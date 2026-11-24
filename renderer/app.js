@@ -1429,7 +1429,7 @@ function pushColors(v = viewer) { const L = filamentLooks(); v.setFilamentColors
 // Dragging turns the model; the setting stays put. The app always starts on the build plate.
 let SCENE_STILLS = [];
 fetch('scenes/photos/manifest.json').then(r => (r.ok ? r.json() : [])).then(l => { SCENE_STILLS = Array.isArray(l) ? l : []; renderSceneSelect(); }).catch(() => {});
-const SC = { sel: '', time: 'day', trueSize: true, mine: { scale: 1, x: 0, y: 0 }, myPhotos: [], busy: false };
+const SC = { sel: '', time: 'day', trueSize: true, mine: { scale: 1, x: 0, y: 0 }, accent: 1, myPhotos: [], busy: false };
 async function renderSceneSelect() {
   try { SC.myPhotos = await api.sceneMyPhotos(); } catch { SC.myPhotos = []; }
   const o = (v, label) => `<option value="${esc(v)}" ${SC.sel === v ? 'selected' : ''}>${esc(label)}</option>`;
@@ -1444,8 +1444,11 @@ async function applyScene() {
   const inScene = !!sel;
   document.querySelectorAll('#sceneBar .scene-only').forEach(e => e.classList.toggle('hidden', !inScene));
   const photo = sel.startsWith('mine:') || sel.startsWith('still:');
-  $('sceneAdjust').classList.toggle('hidden', !photo);
-  if (!photo) { $('sceneMine').classList.add('hidden'); $('sceneAdjust').setAttribute('aria-expanded', 'false'); }
+  // Adjust: in a photo the model's size, place and brightness; in a built setting its own (accent) lights; both: glow
+  $('sceneAdjust').classList.toggle('hidden', !inScene);
+  if (!inScene) { $('sceneMine').classList.add('hidden'); $('sceneAdjust').setAttribute('aria-expanded', 'false'); }
+  document.querySelectorAll('#sceneMine .still-only').forEach(e => e.classList.toggle('hidden', !photo));
+  document.querySelectorAll('#sceneMine .built-only').forEach(e => e.classList.toggle('hidden', photo));
   $('sceneSize').classList.toggle('hidden', !inScene || photo);
   document.querySelectorAll('#sceneTime [data-time]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.time === SC.time)));
   if (!inScene) { viewer.setScene(null); $('sceneNote').textContent = ''; return; }
@@ -1461,7 +1464,7 @@ async function applyScene() {
       spec = { kind: 'still', image: `scenes/photos/${p.file}`, light: p.light, pitch: p.pitch, at: p.at };
     } else if (sel.startsWith('mine:')) { SC.lastStill = null; spec = { kind: 'still', image: await api.sceneMyPhoto(sel.slice(5)), light: 'front' }; }
     $('sceneNote').textContent = '';
-    viewer.setScene(spec, { time: SC.time, trueSize: SC.trueSize, mine: SC.mine });
+    viewer.setScene(spec, { time: SC.time, trueSize: SC.trueSize, mine: SC.mine, accent: SC.accent });
     localStorage.setItem('aipa.scene', JSON.stringify({ sel, time: SC.time, trueSize: SC.trueSize }));
   } catch (e) {
     $('sceneNote').textContent = ''; toast(cleanErr(e), 7000);
@@ -1497,7 +1500,13 @@ const mineChange = () => {
   viewer.setSceneOptions({ mine: SC.mine });
 };
 for (const id of ['mineScale', 'mineX', 'mineY', 'minePhoto', 'mineLight']) $(id).oninput = mineChange;
-$('mineReset').onclick = () => { SC.mine = stillDefaults(SCENE_STILLS.find(x => x.id === SC.lastStill)); syncMineSliders(); viewer.setSceneOptions({ mine: SC.mine }); $('mineGlow').value = 0; viewer.setGlowGain(1); };
+$('mineReset').onclick = () => {
+  $('mineGlow').value = 0; viewer.setGlowGain(1);
+  SC.accent = 1; $('sceneAccent').value = 1; viewer.setSceneOptions({ accent: 1 });
+  if (SC.sel.startsWith('still:') || SC.sel.startsWith('mine:')) { SC.mine = stillDefaults(SCENE_STILLS.find(x => x.id === SC.lastStill)); syncMineSliders(); viewer.setSceneOptions({ mine: SC.mine }); }
+};
+// Accent lights (built settings): kept from setting to setting
+$('sceneAccent').oninput = () => { SC.accent = Number($('sceneAccent').value); viewer.setSceneOptions({ accent: SC.accent }); };
 // Glow intensity: 2^n, kept across settings (also used by Lights off on the plate)
 $('mineGlow').oninput = () => viewer.setGlowGain(Math.pow(2, Number($('mineGlow').value)));
 $('sceneShot').onclick = async () => {

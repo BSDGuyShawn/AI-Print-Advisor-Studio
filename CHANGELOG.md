@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.37.3
+- **⇲ Adjust in the built settings** (garden, shelf, mantel, porch, Thanksgiving, Christmas, desk, kitchen, Halloween,
+  kids' room), with:
+  - **Accent lights**: dims, brightens or turns off the setting's own lights: the kitchen's under-cabinet lights, lamps,
+    candles, the fire, Christmas tree lights, jack-o'-lanterns, the desk monitor and lamp (0 = off). Handy at Night or
+    with Lights off so only the glow-in-the-dark print lights the room.
+  - **Glow intensity** (when a filament is glow in the dark), as in the photo settings.
+
 ## 2.37.2
 - **Night in the photo settings glows like Lights off**: glow-in-the-dark filament gets its halo, and its light pools on
   the table or shelf under the model.

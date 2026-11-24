@@ -153,15 +153,16 @@
             <button role="radio" aria-checked="true" data-time="day">Day</button><button role="radio" aria-checked="false" data-time="evening">Evening</button><button role="radio" aria-checked="false" data-time="night">Night</button>
           </div>
           <button class="scene-only hidden" id="sceneSize" aria-pressed="true" title="True size: the model at its real size in the setting. Click to fill the view instead.">True size</button>
-          <button class="hidden" id="sceneAdjust" aria-expanded="false" title="Change the model's size and where it stands in the photo">⇲ Adjust</button>
+          <button class="hidden" id="sceneAdjust" aria-expanded="false" title="Adjust the setting: in a photo the model's size, place and brightness; in a built setting its lamps and accent lights; the glow of glow-in-the-dark filament">⇲ Adjust</button>
           <button id="sceneShot" title="Save what you see as a picture (PNG)">📷 Save picture</button>
           <span class="scene-note" id="sceneNote" role="status"></span>
           <div class="scene-mine hidden" id="sceneMine">
-            <label>Size <input type="range" id="mineScale" min="-2" max="2.5" step="0.01" value="0"></label>
-            <label>Left / right <input type="range" id="mineX" min="-100" max="100" step="1" value="0"></label>
-            <label>Back / front <input type="range" id="mineY" min="-100" max="100" step="1" value="0"></label>
-            <label>Photo brightness <input type="range" id="minePhoto" min="-1.5" max="1.5" step="0.01" value="0"></label>
-            <label>Model brightness <input type="range" id="mineLight" min="-1.5" max="1.5" step="0.01" value="0"></label>
+            <label class="still-only">Size <input type="range" id="mineScale" min="-2" max="2.5" step="0.01" value="0"></label>
+            <label class="still-only">Left / right <input type="range" id="mineX" min="-100" max="100" step="1" value="0"></label>
+            <label class="still-only">Back / front <input type="range" id="mineY" min="-100" max="100" step="1" value="0"></label>
+            <label class="still-only">Photo brightness <input type="range" id="minePhoto" min="-1.5" max="1.5" step="0.01" value="0"></label>
+            <label class="still-only">Model brightness <input type="range" id="mineLight" min="-1.5" max="1.5" step="0.01" value="0"></label>
+            <label class="built-only" title="The setting's own lights: lamps, candles, the fire, under-cabinet lights, Christmas lights… (0 = off)">Accent lights <input type="range" id="sceneAccent" min="0" max="2" step="0.01" value="1"></label>
             <label class="hidden" id="mineGlowRow" title="How brightly glow-in-the-dark filament glows at night (its halo and the light it throws)">Glow intensity <input type="range" id="mineGlow" min="-2" max="1.6" step="0.01" value="0"></label>
             <button class="link" id="mineReset" title="Put the size, place and brightness back">Reset</button>
           </div>
