@@ -876,6 +876,21 @@ body.kpi-resizing { cursor: ns-resize; user-select: none; }
 .sd-verify details { margin-top: 6px; }
 .ts-plate { display: inline-block; margin-left: 6px; }
 .ts-plate select { font: inherit; font-size: 12.5px; }
+/* Send dialog: the sliced-print preview */
+.sd-preview { display: grid; grid-template-columns: 1fr 200px; gap: 12px; }
+.sd-pv-view { position: relative; height: 420px; border-radius: var(--radius-s); overflow: hidden; background: var(--viewer-bg); }
+.sd-pv-view canvas { display: block; width: 100%; height: 100%; }
+.sd-pv-wait { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; }
+.sd-pv-side { display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; }
+.sd-pv-feats { display: flex; flex-direction: column; gap: 3px; max-height: 300px; overflow: auto; }
+.sd-pv-feats label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.sd-pv-feats .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.sd-pv-feats small { margin-left: auto; color: var(--muted); }
+.sd-pv-layer { display: flex; flex-direction: column; gap: 4px; }
+.sd-verify .problems { list-style: none; margin: 0 0 8px; padding: 0; }
+.sd-verify .problems li { padding: 6px 8px; border-radius: var(--radius-s); margin-bottom: 4px; }
+.sd-verify .problems li.block { background: rgb(224 106 85 / .15); border-left: 3px solid var(--danger); }
+.sd-verify .problems li.warn { background: rgb(224 163 58 / .12); border-left: 3px solid var(--warn); }
 .ts-saved { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--radius-s); padding: 8px 12px; margin: 0 0 10px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
 .ts-saved select { font: inherit; font-size: 12.5px; margin-left: 4px; }
 .callout.ts-carry { margin-bottom: 10px; }

@@ -28,7 +28,8 @@ const { troubleshoot, ISSUES, systemPrompt: tsSystemPrompt, buildContent: tsBuil
 const { CATALOG, CONTEXT_KEYS, BY_KEY } = require('./src/orca-settings');
 const { canBePerObject } = require('./src/perobject');
 const { uniqueObjects } = require('./src/objects');
-const { verifyPrint } = require('./src/verify');
+const { verifyPrint, bedCheck } = require('./src/verify');
+const { toolpaths, preflight } = require('./src/preflight');
 const crypto = require('crypto');
 const JSZip = require('jszip');
 const fss = require('fs');
@@ -675,8 +676,9 @@ async function sliceVariant(plateIndex, v) {
 
 async function sliceVariantOnce(plateIndex, v) {
   const fin = finalize(v.changes, plateIndex, v.rotations, v.objectChanges);
-  const built = await Slicer.buildVariantDetailed(S.base.buffer, { changes: fin.changes, objectChanges: fin.objectChanges, rotations: v.rotations || {}, project: S.base.project });
-  const cacheKey = JSON.stringify({ file: S.originalHash, slots: S.slots, changes: fin.changes.map(c => [c.key, c.value, c.slot || 0]).sort(), objectChanges: fin.objectChanges, rotations: v.rotations || {}, app: require('./package.json').version });
+  const shift = v.shift ? { plate: plateIndex, dx: v.shift.dx || 0, dy: v.shift.dy || 0 } : null;
+  const built = await Slicer.buildVariantDetailed(S.base.buffer, { changes: fin.changes, objectChanges: fin.objectChanges, rotations: v.rotations || {}, project: S.base.project, shift });
+  const cacheKey = JSON.stringify({ file: S.originalHash, slots: S.slots, changes: fin.changes.map(c => [c.key, c.value, c.slot || 0]).sort(), objectChanges: fin.objectChanges, rotations: v.rotations || {}, shift, app: require('./package.json').version });
   const r = await S.slicer.slice(built.buffer, plateIndex, cacheKey);
   const fixes = fin.fixes.map(f => `${f.key.replace(/_/g, ' ')} → ${f.value}: ${f.reason}`);
   return { ...r, corrections: [...new Set([...fixes, ...built.corrections, ...(r.corrections || [])])] };
@@ -964,8 +966,41 @@ ipcMain.handle('send-prepare', async (_e, { plateIndex, variant }) => { await S.
   // always the version exactly as it is now (ticks and values may have changed since an earlier slice); an unchanged
   // version comes straight from the slice cache
   progress(`Slicing ${variant.name || 'the print'} in Snapmaker Orca…`);
-  const r = await sliceVariant(plateIndex, variant);
+  let r = await sliceVariant(plateIndex, variant);
+  // what the print will really use, read back from this slice (G-code settings, measured layer heights, per-object
+  // settings in the sliced project, every move inside the bed), checked against every intended change
+  const names = Object.fromEntries(S.base.project.items.map(it => [String(it.objectId), String(it.name || '').replace(/_id_\d+_copy_\d+$/, '')]));
+  const check = async (slice, v) => {
+    const fin = finalize(v.changes || [], plateIndex, v.rotations, v.objectChanges);
+    const used = (slice.filaments || []).map(f => Number(f.id)).filter(n => n > 0);
+    return verifyPrint({ gcodeText: await fs.readFile(slice.gcodePath, 'utf8'), slicedProject: await fs.readFile(slice.slicedProjectPath).catch(() => null),
+      inputProject: await fs.readFile(path.join(path.dirname(slice.gcodePath), 'input.3mf')).catch(() => null),
+      changes: fin.changes, objectChanges: fin.objectChanges, names: { ...names }, usedSlots: used.length ? used : [1] });
+  };
+  let verify = null;
+  try {
+    verify = await check(r, variant);
+    // A print that would leave the bed (a wider brim or skirt next to the edge): move it back on by the measured amount
+    // and slice again, at most twice; if it still doesn't fit, printing is blocked in the dialog
+    let shift = { dx: 0, dy: 0 };
+    for (let k = 0; k < 2 && verify.bed && !verify.bed.ok && verify.bed.shift; k++) {
+      const before = verify.bed;
+      shift = { dx: +(shift.dx + before.shift.dx).toFixed(2), dy: +(shift.dy + before.shift.dy).toFixed(2) };
+      progress('The print would go past the edge of the bed: moving it back on and slicing again…');
+      const v2 = { ...variant, shift };
+      const r2 = await sliceVariant(plateIndex, v2);
+      const verify2 = await check(r2, v2);
+      verify2.moved = { ...shift, was: before.worst, over: before.over };
+      r = r2; verify = verify2;
+    }
+    // everything that would stop the printer or ruin the print (Orca's own errors included): any of these blocks Print
+    const text = await fs.readFile(r.gcodePath, 'utf8');
+    const used = (r.filaments || []).map(f => Number(f.id)).filter(n => n > 0);
+    verify.problems = preflight(text, parseConfigBlock(text) || {}, { warnings: r.warnings || [], usedSlots: used.length ? used : [1] });
+    verify.blocked = verify.problems.some(p => p.severity === 'block');
+  } catch (e) { logLine('verify failed:', e.message); verify = { error: e.message, blocked: true, problems: [{ severity: 'block', title: 'The print couldn’t be checked', detail: e.message }] }; }
   S.lastSlices[variant.id] = r;
+  logLine(`send: ${variant.name || variant.id} plate ${plateIndex}: ${verify && verify.bed ? (verify.bed.ok ? 'fits on the bed' : `OUTSIDE the bed (${verify.bed.worst && `${verify.bed.worst.type} at ${verify.bed.worst.axis} ${verify.bed.worst.value}`})`) : 'bed not checked'}${verify && verify.moved ? `, moved ${verify.moved.dx}/${verify.moved.dy} mm` : ''}`);
   const ps = S.base.settings || {};
   const types = ps.filament_type || [], colors = ps.filament_colour || [], presets = ps.filament_settings_id || [];
   const fromSlice = (r.filaments || []).map(f => ({ index: Number(f.id) - 1, grams: f.usedGrams || 0, type: f.type }));
@@ -974,19 +1009,15 @@ ipcMain.handle('send-prepare', async (_e, { plateIndex, variant }) => { await S.
     .map(f => ({ ...f, type: f.type || types[f.index] || 'PLA', color: colors[f.index] || '#888888', preset: presets[f.index] || '' }));
   // the name a voice assistant will read out: "White Voronoi Cat", or "White Voronoi Cat Fast" for a version
   const vword = /^(original|recommended)$/.test(variant.id) ? '' : ` ${String(variant.name || variant.id).replace(/\s*(\+.*|recipe)$/i, '').replace(/^Reoriented:\s*/i, '').trim()}`;
-  // what the print will really use, read back from this slice (G-code settings, measured layer heights, per-object
-  // settings in the sliced project), checked against every intended change
-  let verify = null;
-  try {
-    const fin = finalize(variant.changes || [], plateIndex, variant.rotations, variant.objectChanges);
-    const names = Object.fromEntries(S.base.project.items.map(it => [String(it.objectId), String(it.name || '').replace(/_id_\d+_copy_\d+$/, '')]));
-    const usedSlots = filaments.length ? filaments.map(f => f.index + 1) : [1];
-    verify = await verifyPrint({ gcodeText: await fs.readFile(r.gcodePath, 'utf8'), slicedProject: await fs.readFile(r.slicedProjectPath).catch(() => null),
-      inputProject: await fs.readFile(path.join(path.dirname(r.gcodePath), 'input.3mf')).catch(() => null),
-      changes: fin.changes, objectChanges: fin.objectChanges, names, usedSlots });
-  } catch (e) { logLine('verify failed:', e.message); verify = { error: e.message }; }
   return { variantId: variant.id, remoteName: safeRemoteName(`${printName()}${vword}`),
     timeSeconds: r.timeSeconds, grams: r.grams, filaments, warnings: r.warnings || [], corrections: r.corrections || [], verify };
+});
+
+// the sliced print that would be sent, as toolpaths for the preview (by feature, layer by layer)
+ipcMain.handle('send-preview', async (_e, variantId) => { await S.ready;
+  const r = S.lastSlices[variantId];
+  if (!r || !r.gcodePath) throw new Error('Slice it first.');
+  return toolpaths(await fs.readFile(r.gcodePath, 'utf8'));
 });
 
 ipcMain.handle('send-print', async (_e, { variantId, printerIndex, remoteName, mapTable, prefs, thumbs }) => { await S.ready;
@@ -1001,6 +1032,11 @@ ipcMain.handle('send-print', async (_e, { variantId, printerIndex, remoteName, m
   // embed U1-sized thumbnails rendered by the app (CLI G-code has none)
   const pngs = (thumbs || []).map(t => ({ w: t.w, h: t.h, base64: String(t.dataUrl).split(',')[1] || '' })).filter(t => t.base64);
   const raw = await fs.readFile(r.gcodePath, 'utf8');
+  // never send a print that would move past the bed (the printer stops with "movement exceeded travel limit")
+  const blockers = preflight(raw, parseConfigBlock(raw) || {}, { warnings: r.warnings || [] }).filter(p => p.severity === 'block');
+  if (blockers.length) throw new Error(`Not sent: ${blockers.map(p => `${p.title}. ${p.detail}`).join(' ')}`);
+  const bed = bedCheck(raw, parseConfigBlock(raw));
+  if (bed && !bed.ok) throw new Error(`Not sent: this print would move outside the bed (${bed.worst ? `${bed.worst.type || 'a move'} at ${bed.worst.axis} ${bed.worst.value} mm` : 'off the edge'}; the bed is X ${bed.rect.x0}–${bed.rect.x1}, Y ${bed.rect.y0}–${bed.rect.y1} mm). Move the model away from the edge or make the brim/skirt smaller.`);
   // never send a job that would print on a cold bed
   const startBlock = raw.slice(0, Math.max(0, raw.indexOf(';LAYER_CHANGE')) || 200000);
   const bedSets = [...startBlock.matchAll(/^M(?:140|190)\b[^\n]*?\bS(\d+(?:\.\d+)?)/gm)].map(m => +m[1]);

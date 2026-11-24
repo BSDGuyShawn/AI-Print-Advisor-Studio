@@ -44,6 +44,44 @@ async function objectSettings(zipBuffer) {
   return out;
 }
 
+// Every move of the print itself (from the first layer to its last extrusion; the printer's own start and end code is
+// left out) must stay inside the printable area, or the printer stops with "movement exceeded travel limit". A wider
+// brim or skirt can push the first layer past the bed edge when an object sits near it. Returns where it goes out and
+// how far the print would have to move to fit (and whether it can).
+function bedCheck(text, cfg) {
+  const pts = String((cfg && cfg.printable_area) || '').split(',').map(p => p.split('x').map(Number)).filter(p => p.length === 2 && p.every(Number.isFinite));
+  if (pts.length < 3) return null;
+  const rect = { x0: Math.min(...pts.map(p => p[0])), x1: Math.max(...pts.map(p => p[0])), y0: Math.min(...pts.map(p => p[1])), y1: Math.max(...pts.map(p => p[1])) };
+  const start = text.indexOf(';LAYER_CHANGE');
+  if (start < 0) return null;
+  const end = text.indexOf('; EXECUTABLE_BLOCK_END', start);
+  const lines = text.slice(start, end < 0 ? undefined : end).split('\n');
+  let lastE = -1;
+  for (let i = lines.length - 1; i >= 0; i--) if (/^G[123] [^;]*E\.?\d/.test(lines[i]) && !/E-/.test(lines[i])) { lastE = i; break; }
+  let abs = true, type = '', minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, worst = null, over = 0;
+  for (let i = 0; i <= lastE; i++) {
+    const l = lines[i];
+    if (l.startsWith(';TYPE:')) { type = l.slice(6).trim(); continue; }
+    if (l.startsWith('G91')) { abs = false; continue; }
+    if (l.startsWith('G90')) { abs = true; continue; }
+    if (!abs || !/^G[0123] /.test(l)) continue;
+    const code = l.split(';')[0];
+    const mx = /X(-?[\d.]+)/.exec(code), my = /Y(-?[\d.]+)/.exec(code);
+    if (mx) { const x = +mx[1]; minX = Math.min(minX, x); maxX = Math.max(maxX, x); const d = Math.max(rect.x0 - x, x - rect.x1); if (d > over) { over = d; worst = { axis: 'X', value: x, type }; } }
+    if (my) { const y = +my[1]; minY = Math.min(minY, y); maxY = Math.max(maxY, y); const d = Math.max(rect.y0 - y, y - rect.y1); if (d > over) { over = d; worst = { axis: 'Y', value: y, type }; } }
+  }
+  if (!Number.isFinite(minX)) return null;
+  const ok = over <= 0.05;
+  // the shift that brings it inside (with a 1 mm margin), if the print is small enough to fit
+  const margin = 1;
+  const dx = minX < rect.x0 ? rect.x0 - minX + margin : maxX > rect.x1 ? rect.x1 - maxX - margin : 0;
+  const dy = minY < rect.y0 ? rect.y0 - minY + margin : maxY > rect.y1 ? rect.y1 - maxY - margin : 0;
+  const fits = (maxX - minX) <= (rect.x1 - rect.x0) - 2 * margin && (maxY - minY) <= (rect.y1 - rect.y0) - 2 * margin;
+  const r1 = (n) => +n.toFixed(2);
+  return { ok, rect, extent: { x0: r1(minX), x1: r1(maxX), y0: r1(minY), y1: r1(maxY) }, worst: worst && { ...worst, value: r1(worst.value) }, over: r1(over),
+    shift: ok || !fits ? null : { dx: r1(dx), dy: r1(dy) } };
+}
+
 // changes: [{key, value, slot}] for the whole print; objectChanges: { objectId: [{key, value}] }; names: { objectId: name };
 // usedSlots: toolheads the print uses. Returns { checks: [{label, where, wanted, actual, ok, note}], summary: [...], layers, allOk }
 // inputProject: the file given to the slicer; Orca renumbers objects in the project it exports (and keeps only the
@@ -97,7 +135,8 @@ async function verifyPrint({ gcodeText, slicedProject, inputProject = null, chan
   }
   const temps = usedSlots.map(s => `T${s} ${value('nozzle_temperature', s) ?? '?'} °C`).join(', ');
   if (cfg.nozzle_temperature) summary.push({ label: 'Nozzle temperature', value: temps });
-  return { checks, summary, layers: L, allOk: checks.every(c => c.ok), hasConfig: Object.keys(cfg).length > 0 };
+  const bed = gcodeText ? bedCheck(gcodeText, cfg) : null;
+  return { checks, summary, layers: L, bed, allOk: checks.every(c => c.ok) && (!bed || bed.ok), hasConfig: Object.keys(cfg).length > 0 };
 }
 
-module.exports = { verifyPrint, measureLayers, same };
+module.exports = { verifyPrint, measureLayers, bedCheck, same };

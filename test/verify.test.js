@@ -46,3 +46,24 @@ test('per-object settings are checked in the sliced project', async () => {
   assert.match(wing.where, /Wing \(per object\)/);
   assert.ok(!body.ok, 'the setting is missing on Body');
 });
+
+test('the bed check catches a skirt past the bed edge and works out the move back on', () => {
+  const { bedCheck } = require('../src/verify');
+  const { preflight } = require('../src/preflight');
+  const cfg = { printable_area: '0.5x1,270.5x1,270.5x271,0.5x271', printable_height: '270', nozzle_diameter: '0.4', layer_height: '0.2' };
+  const body = (y) => `; EXECUTABLE_BLOCK_START\nG1 X10 Y-3 F3000\n;LAYER_CHANGE\n;Z:0.2\n;TYPE:Skirt\nG1 X100 Y${y} E.5\nG1 X150 Y${y} E.5\n;TYPE:Outer wall\nG1 X120 Y50 E.5\n;LAYER_CHANGE\n;Z:0.4\nG1 X120 Y60 E.5\nG1 X5 Y280 F9000\n; EXECUTABLE_BLOCK_END\n`;
+  const bad = bedCheck(body(-1.06), cfg);
+  assert.strictEqual(bad.ok, false);
+  assert.deepStrictEqual(bad.worst, { axis: 'Y', value: -1.06, type: 'Skirt' });
+  assert.strictEqual(bad.shift.dy, 3.06, 'moved back so the skirt is 1 mm inside the bed');
+  assert.ok(bedCheck(body(2), cfg).ok, 'the start code (Y -3) and the parking move after the last extrusion are not the print');
+  const probs = preflight(body(-1.06).padEnd(2000, ' '), cfg, { usedSlots: [1] });
+  assert.ok(probs.some(p => p.severity === 'block' && /outside the bed/.test(p.title)));
+  assert.ok(!preflight(body(2).padEnd(2000, ' '), cfg, { usedSlots: [1] }).some(p => p.severity === 'block'));
+  // too tall, slicer errors, an empty file
+  const tall = body(2).replace(';Z:0.4', ';Z:300').padEnd(2000, ' ');
+  assert.ok(preflight(tall, cfg).some(p => /Too tall/.test(p.title)));
+  assert.ok(preflight(body(2).padEnd(2000, ' '), cfg, { warnings: ['Object is outside the print area'] }).some(p => p.severity === 'block'));
+  assert.ok(!preflight(body(2).padEnd(2000, ' '), cfg, { warnings: ['G-code path conflict between A and B'] }).some(p => p.severity === 'block'), 'Orca only warns about path conflicts');
+  assert.ok(preflight('', cfg).some(p => p.severity === 'block'));
+});

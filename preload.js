@@ -90,6 +90,7 @@ contextBridge.exposeInMainWorld('advisor', {
   phoneStatus: () => ipcRenderer.invoke('phone-status'),
   phoneSet: (patch) => ipcRenderer.invoke('phone-set', patch),
   phonePair: () => ipcRenderer.invoke('phone-pair'),
+  sendPreview: (variantId) => ipcRenderer.invoke('send-preview', variantId),
   tsPhoneLink: () => ipcRenderer.invoke('ts-phone-link'),
   tsPhotosList: () => ipcRenderer.invoke('ts-photos-list'),
   tsPhotoData: (id) => ipcRenderer.invoke('ts-photo-data', id),

@@ -278,7 +278,8 @@ class Slicer {
   // project: the already-parsed project for baseBuffer (optional). Passing it avoids re-reading large meshes.
   // changes: project-wide settings [{key, value, slot}]; objectChanges: per-object settings { [objectId]: [{key, value}] }
   // (src/perobject.js), for files whose objects need different settings
-  static async buildVariantDetailed(baseBuffer, { changes = [], objectChanges = null, rotations = {}, project = null } = {}) {
+  // shift: { plate, dx, dy } moves that plate's objects (mm), e.g. so a brim or skirt stays on the bed
+  static async buildVariantDetailed(baseBuffer, { changes = [], objectChanges = null, rotations = {}, project = null, shift = null } = {}) {
     const corrections = [];
     const zip = await JSZip.loadAsync(baseBuffer);
     for (const n of Object.keys(zip.files)) if (/^Metadata\/(plate_\d+\.gcode(\.md5)?|slice_info\.config)$/.test(n)) zip.remove(n);
@@ -307,6 +308,12 @@ class Slicer {
     const rotKeys = Object.keys(rotations).filter(k => rotations[k]);
     const proj = project || await load3mf(baseBuffer);
     const affines = {}, transforms = {};
+    const shifted = new Set();
+    const T = shift && (shift.dx || shift.dy) ? [1, 0, 0, 0, 1, 0, 0, 0, 1, shift.dx || 0, shift.dy || 0, 0] : null;
+    if (T) {
+      const mem = plateMembership(proj);
+      for (const it of proj.items) { const m = mem.get(it.index); if (m && m.plate === shift.plate && m.where !== 'outside') shifted.add(it.index); }
+    }
     if (rotKeys.length) {
       for (const k of rotKeys) {
         const it = proj.items[+k];
@@ -315,8 +322,13 @@ class Slicer {
         affines[+k] = A;
         transforms[+k] = compose(it.buildTransform, A);
       }
+    }
+    // then the move, on top of the placement (and rotation)
+    for (const i of shifted) transforms[i] = compose(transforms[i] || proj.items[i].buildTransform, T);
+    if (Object.keys(transforms).length) {
       const xml = await zip.file(proj.rootPath).async('string');
       zip.file(proj.rootPath, setBuildTransforms(xml, transforms));
+      if (shifted.size) corrections.push(`Moved the print ${[shift.dy ? `${Math.abs(shift.dy)} mm ${shift.dy > 0 ? 'toward the back' : 'toward the front'}` : '', shift.dx ? `${Math.abs(shift.dx)} mm ${shift.dx > 0 ? 'to the right' : 'to the left'}` : ''].filter(Boolean).join(' and ')} so all of it (brim and skirt included) stays on the bed.`);
     }
     corrections.push(...(await sanitizeZip(zip)).map(describeFix));
     corrections.push(...(await Slicer.nudgeOntoPlates(zip, proj, affines, transforms)));

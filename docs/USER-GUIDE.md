@@ -134,7 +134,7 @@ You'll see each version's **look** (smooth or visible lines), **strength**, **pr
 With a version picked:
 
 - **Save as 3MF**: saves the model with these settings built in. Double-click the file to open it in Snapmaker Orca, check the preview, and print from there.
-- **Send to printer…**: uploads straight to one of your printers. **Settings in this print** lists every changed setting, read back from the sliced file that will be sent (✓ when it's really in the print; the layer height is also measured from the toolpaths), plus the print's main settings. Pick the printer, check which spool goes in which toolhead, and click **Print**.
+- **Send to printer…**: uploads straight to one of your printers. The **Preview** shows the sliced print in 3D (tick features on and off, slide through the layers). The app checks the print file first, as Orca does: anything that would leave the bed, be too tall or otherwise stop the printer blocks Print (a print that just pokes past the bed edge is moved back on automatically). **Settings in this print** lists every changed setting, read back from the sliced file that will be sent (✓ when it's really in the print; the layer height is also measured from the toolpaths), plus the print's main settings. Pick the printer, check which spool goes in which toolhead, and click **Print**.
 - **Open in slicer**: opens it in Snapmaker Orca right away.
 
 ![Send to printer](images/05-send-to-printer.jpg)

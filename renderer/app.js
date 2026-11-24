@@ -1,4 +1,5 @@
 import { ModelViewer } from './viewer.js';
+import { GcodePreview } from './gcode-preview.js';
 import { createGlossary } from './glossary.js';
 
 const api = window.advisor;
@@ -2004,16 +2005,51 @@ function renderSendVerify(v) {
   const perObj = v.checks.some(c => / \(per object\)$/.test(c.where));
   const summary = v.summary.length ? `<details ${v.checks.length ? '' : 'open'}><summary>Main settings of this print</summary><table>${v.summary.map(s => `<tr><td>${esc(s.label)}</td><td>${esc(s.value)}</td></tr>`).join('')}</table>
     ${perObj ? '<small>These are the print’s general values; objects with their own settings (above) use those instead.</small>' : ''}</details>` : '';
-  box.innerHTML = head + (rows ? `<table>${rows}</table>` : '') + summary;
+  // does all of it stay on the bed? (a brim or skirt next to the edge can push the first layer off it)
+  const b = v.bed;
+  SEND.blocked = !!(b && !b.ok) || !!v.blocked;
+  const probs = (v.problems || []).filter(p => !(p.title === 'Goes outside the bed' && b && !b.ok));
+  const probHtml = probs.length ? `<ul class="problems">${probs.map(p => `<li class="${p.severity}"><b>${p.severity === 'block' ? '⛔' : '⚠'} ${esc(p.title)}.</b> ${esc(p.detail)}${p.severity === 'block' ? ' <b>Printing is blocked.</b>' : ''}</li>`).join('')}</ul>`
+    : (v.problems ? '<p class="vsum ok">✓ No problems found in the print file (bed size, height, layers, extrusion, temperatures, slicer errors).</p>' : '');
+  const fmt = (n) => (Math.round(n * 10) / 10).toString();
+  const bedHtml = !b ? '<p class="hint">Couldn’t check the print against the bed size.</p>'
+    : !b.ok ? `<p class="vsum bad bed">⛔ This print would move outside the bed: the ${esc((b.worst && b.worst.type || 'print').toLowerCase())} reaches ${b.worst ? `${b.worst.axis} ${fmt(b.worst.value)} mm` : 'past the edge'}, and the bed is X ${fmt(b.rect.x0)}–${fmt(b.rect.x1)}, Y ${fmt(b.rect.y0)}–${fmt(b.rect.y1)} mm. The printer would stop with “movement exceeded travel limit”. <b>Printing is blocked.</b> Move the model away from the edge in Orca, or untick the brim/skirt changes.</p>`
+      : `<p class="vsum ok bed">✓ Fits on the bed: every move of the print is inside the printable area (X ${fmt(b.extent.x0)}–${fmt(b.extent.x1)}, Y ${fmt(b.extent.y0)}–${fmt(b.extent.y1)} mm).${v.moved ? ` It was moved ${[v.moved.dy ? `${fmt(Math.abs(v.moved.dy))} mm ${v.moved.dy > 0 ? 'toward the back' : 'toward the front'}` : '', v.moved.dx ? `${fmt(Math.abs(v.moved.dx))} mm ${v.moved.dx > 0 ? 'to the right' : 'to the left'}` : ''].filter(Boolean).join(' and ')} first: its ${esc((v.moved.was && v.moved.was.type || 'edge').toLowerCase())} went ${fmt(v.moved.over)} mm past the bed edge.` : ''}</p>`;
+  box.innerHTML = bedHtml + probHtml + head + (rows ? `<table>${rows}</table>` : '') + summary;
+  if (SEND.blocked) $('sdStart').disabled = true;
+}
+// the sliced print drawn in 3D, with each feature shown or hidden and a layer slider
+let SEND_PV = null;
+async function showSendPreview(job) {
+  const view = $('sdPreview'), feats = $('sdPvFeats'), slider = $('sdPvLayer');
+  feats.innerHTML = ''; $('sdPvLayerLbl').textContent = '—';
+  let data;
+  try { data = await api.sendPreview(job.variantId); } catch (e) { view.querySelector('.sd-pv-wait')?.remove(); view.insertAdjacentHTML('beforeend', `<p class="hint sd-pv-wait">Couldn’t draw the preview: ${esc(cleanErr(e))}</p>`); return; }
+  if (!data || SEND.job !== job) return;
+  view.querySelector('.sd-pv-wait')?.remove();
+  if (!SEND_PV) SEND_PV = new GcodePreview(view);
+  SEND_PV.load(data, job.verify && job.verify.bed);
+  const total = data.features.reduce((n, f) => n + f.count, 0) || 1;
+  feats.innerHTML = data.features.map((f, i) => `<label><input type="checkbox" data-pvf="${i}" checked><span class="sw" style="background:${esc(f.color)}"></span>${esc(f.name)}<small>${Math.max(0.1, Math.round(f.count / total * 1000) / 10)}%</small></label>`).join('');
+  feats.querySelectorAll('[data-pvf]').forEach(c => c.onchange = () => SEND_PV.setVisible(data.features[Number(c.dataset.pvf)].name, c.checked));
+  const n = data.layers.length;
+  slider.max = String(Math.max(0, n - 1)); slider.value = String(Math.max(0, n - 1));
+  const label = () => { const L = Number(slider.value); $('sdPvLayerLbl').textContent = n ? `${L + 1} of ${n} (Z ${data.layers[L] ?? '?'} mm)` : '—'; };
+  slider.oninput = () => { SEND_PV.setMaxLayer(Number(slider.value)); label(); };
+  label();
+  $('sdPvNote').textContent = `Drag to turn, scroll to zoom. This is the exact file that will be sent${data.thinned ? ' (drawn with fewer points to stay smooth)' : ''}.`;
 }
 async function openSend(variantId) {
   if (!state.file) return;
   { const d = variantDef(variantId); if (!(await fitConfirm([...d.changes, ...Object.values(d.objectChanges || {}).flat()]))) return; }
   if (!state.config.printers || !state.config.printers.length) { toast('Add your printers’ addresses in Settings first.', 5000); openSettings(); return; }
   const dlg = $('sendDialog');
-  SEND.job = null; SEND.map = {};
+  SEND.job = null; SEND.map = {}; SEND.blocked = false;
   $('sdFilaments').innerHTML = ''; $('sdPrinters').innerHTML = '<p class="hint">Checking your printers…</p>'; $('sdFilNote').textContent = '';
   $('sdVerify').innerHTML = '<p class="hint">Slicing, then reading the settings back from the sliced print…</p>';
+  if (SEND_PV) SEND_PV.clear();
+  if (!$('sdPreview').querySelector('.sd-pv-wait')) $('sdPreview').insertAdjacentHTML('beforeend', '<p class="hint sd-pv-wait">Drawing the sliced print…</p>');
+  $('sdPvFeats').innerHTML = '';
   $('sdStart').disabled = true;
   const thumbs = viewer.thumbnails([48, 300, 512]);
   SEND.thumbs = thumbs.filter(t => t.w !== 512);
@@ -2030,6 +2066,7 @@ async function openSend(variantId) {
   if (job.error) { sdStatus(job.error, null, 'error'); $('sdVerify').innerHTML = ''; return; }
   SEND.job = job; SEND.printers = printers;
   renderSendVerify(job.verify);
+  showSendPreview(job);
   $('sdName').value = job.remoteName;
   $('sdTime').textContent = hm(job.timeSeconds);
   $('sdGrams').textContent = `${fmt(job.grams || 0)} g`;
@@ -2089,13 +2126,14 @@ function renderSendFilaments() {
   $('sdFilaments').querySelectorAll('.sd-fil select').forEach(sel => sel.onchange = () => { SEND.map[Number(sel.closest('.sd-fil').dataset.f)] = Number(sel.value); renderSendFilaments(); });
   $('sdFilNote').textContent = SEND.printer && SEND.printer.online ? `Toolheads show what ${SEND.printer.name} reports as loaded.` : 'Printer offline: toolheads can’t show what’s loaded.';
   const bad = job.filaments.some(f => job.filaments.filter(o => SEND.map[o.index] === SEND.map[f.index]).length > 1);
-  $('sdStart').disabled = !SEND.printer || !SEND.printer.online || /printing|paused/.test(SEND.printer.state) || bad;
+  $('sdStart').disabled = !SEND.printer || !SEND.printer.online || /printing|paused/.test(SEND.printer.state) || bad || SEND.blocked;
 }
 ['sdFlow', 'sdTimelapse', 'sdLevel'].forEach(id => $(id).addEventListener('change', () => localStorage.setItem(prefsKey, JSON.stringify({ flowCalibrate: $('sdFlow').checked, timelapse: $('sdTimelapse').checked, bedLevel: $('sdLevel').checked }))));
 $('sdClose').onclick = () => $('sendDialog').close();
 $('sdStart').onclick = async () => {
   const job = SEND.job, pr = SEND.printer;
   if (!job || !pr) return;
+  if (SEND.blocked) { sdStatus('Printing is blocked: this print has a problem (see above).', null, 'error'); return; }
   $('sdStart').disabled = true;
   sdStatus(`Uploading to ${pr.name}…`, 0);
   try {
@@ -2109,7 +2147,7 @@ $('sdStart').onclick = async () => {
     setTimeout(() => $('sendDialog').close(), 1800);
   } catch (e) {
     sdStatus(cleanErr(e), null, 'error');
-    $('sdStart').disabled = false;
+    $('sdStart').disabled = !!SEND.blocked;
   }
 };
 

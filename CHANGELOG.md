@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.35.0
+- **Safety: a print that would leave the bed is never sent.** A wider brim or skirt next to the bed edge pushed a
+  print's first layer past the front of the U1's bed (the printer stopped with "Axis movement anomaly … Y-axis movement
+  exceeded travel limit"). Every move of the sliced print is now checked against the printable area before sending;
+  when it doesn't fit, the app moves the print back on by the measured amount, slices again and checks again, and if
+  it still doesn't fit, **Print is blocked** (the upload itself refuses it too).
+- **Checked before every print** (like Snapmaker Orca does before it lets you print): outside the bed, too tall, no
+  layers, no extrusion, a layer too thick for the nozzle, broken numbers, temperatures out of range, a cut-short file,
+  and errors Snapmaker Orca reported while slicing. Real problems block Print; the rest are shown as warnings.
+- **Preview of the sliced print** in Send to printer: the exact file that will be sent, in 3D, in Orca's colours, with
+  each feature (walls, infill, supports, skirt, brim…) shown or hidden and a layer slider.
+
 ## 2.34.2
 - **The troubleshooter opens the plate that was printed.** For prints whose file name doesn't say the plate, it matches
   the objects in the printed G-code to the model's plates (e.g. "Wings Redo" → the plate with the two wings). A
