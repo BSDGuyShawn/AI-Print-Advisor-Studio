@@ -48,7 +48,10 @@ function evaluate(tris, d) {
     if (pu < minU) minU = pu; if (pu > maxU) maxU = pu;
     if (pw < minW) minW = pw; if (pw > maxW) maxW = pw;
   }
-  let ov45 = 0, ov30 = 0, contact = 0;
+  // The file's own placement is taken as the way the model is displayed (a figure stands as designed): its upward
+  // faces (the top, seen from above) and sides are what people look at. When another orientation turns those faces
+  // downward they print on supports and come out rough (support scars, drooping), so they count extra.
+  let ov45 = 0, ov30 = 0, contact = 0, seenTop = 0, seenSide = 0;
   for (const a of tris) for (let i = 0; i < a.length; i += 9) {
     const ux = a[i + 3] - a[i], uy = a[i + 4] - a[i + 1], uz = a[i + 5] - a[i + 2];
     const vx = a[i + 6] - a[i], vy = a[i + 7] - a[i + 1], vz = a[i + 8] - a[i + 2];
@@ -64,16 +67,21 @@ function evaluate(tris, d) {
     if (down > 0.999 && h0 < 0.05 && h1 < 0.05 && h2 < 0.05) { contact += area; continue; }
     ov45 += area;
     if (down > COS30) ov30 += area;
+    const nzFile = nz / len;
+    if (nzFile > 0.3) seenTop += area; else if (nzFile > -0.3) seenSide += area;
   }
   const size = { x: +(maxU - minU).toFixed(1), y: +(maxW - minW).toFixed(1), z: +(maxH - minH).toFixed(1) };
   const M = getMachine();
   const fits = Math.min(size.x, size.y) <= Math.min(M.bed.width, M.bed.depth) && Math.max(size.x, size.y) <= Math.max(M.bed.width, M.bed.depth) && size.z <= M.height;
   const slender = size.z / Math.max(1, Math.min(size.x, size.y));
-  const o = { overhangCm2: ov45 / 100, overhang30Cm2: ov30 / 100, contactCm2: contact / 100, heightMm: size.z, size, fits };
+  const o = { overhangCm2: ov45 / 100, overhang30Cm2: ov30 / 100, contactCm2: contact / 100, heightMm: size.z, size, fits,
+    visibleTopCm2: seenTop / 100, visibleSideCm2: seenSide / 100 };
   // a part that only touches the bed along a line or point cannot stand without supports or a raft
   // large enough that a stable option always ranks above an unstable one
   const unstable = o.contactCm2 < 0.2 ? 50 : 0;
-  o.score = o.overhangCm2 + 2 / (o.contactCm2 + 0.4) + 0.003 * o.heightMm + (slender > 4 ? 2 : 0) + unstable + (fits ? 0 : 1000);
+  // visible surfaces on supports weigh three times (top) or twice (sides) an underside overhang: a smooth, as-designed
+  // top matters more than a few less cm² of support underneath
+  o.score = o.overhangCm2 + 2 * o.visibleTopCm2 + o.visibleSideCm2 + 2 / (o.contactCm2 + 0.4) + 0.003 * o.heightMm + (slender > 4 ? 2 : 0) + unstable + (fits ? 0 : 1000);
   o.unstable = !!unstable;
   return o;
 }
@@ -99,6 +107,15 @@ function candidates(tris) {
   return out;
 }
 
+// What an orientation does to the surfaces people see (the top and sides as the model is displayed).
+function lookNote(e) {
+  const top = e.visibleTopCm2, side = e.visibleSideCm2;
+  if (top < 0.5 && side < 1) return { level: 'good', text: 'Top and sides print as designed (smooth, no support marks)' };
+  const bad = top >= 3 || top + side >= 8;
+  const parts = [top >= 0.5 ? `${+top.toFixed(1)} cm² of the visible top` : '', side >= 1 ? `${+side.toFixed(1)} cm² of the visible sides` : ''].filter(Boolean).join(' and ');
+  return { level: bad ? 'bad' : 'fair', text: `${parts} would print on supports (rough surface, support marks)` };
+}
+
 // tris: array of Float32Array world triangles for one object. Returns options sorted best first.
 function orientObject(tris) {
   const dirs = candidates(tris);
@@ -110,7 +127,8 @@ function orientObject(tris) {
       label: describe(d, e.heightMm, h0), isCurrent: i === 0, down: d.map(v => +v.toFixed(4)),
       rotation: rotationTo(d).map(v => +v.toFixed(6)),
       overhangCm2: +e.overhangCm2.toFixed(2), overhang30Cm2: +e.overhang30Cm2.toFixed(2),
-      contactCm2: +e.contactCm2.toFixed(2), heightMm: e.heightMm, size: e.size, fits: e.fits, unstable: e.unstable, score: +e.score.toFixed(3),
+      contactCm2: +e.contactCm2.toFixed(2), visibleTopCm2: +e.visibleTopCm2.toFixed(2), visibleSideCm2: +e.visibleSideCm2.toFixed(2),
+      look: lookNote(e), heightMm: e.heightMm, size: e.size, fits: e.fits, unstable: e.unstable, score: +e.score.toFixed(3),
     };
   });
   results.sort((a, b) => a.score - b.score);

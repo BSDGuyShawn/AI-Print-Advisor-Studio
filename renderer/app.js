@@ -123,6 +123,8 @@ async function openFile(promise, restore = null, opts = {}) {
     const info = await promise;
     if (!info) { clearBusy('file'); return; }
     if (state.tsCarry && state.tsCarry.filePath !== info.filePath) state.tsCarry = null;
+    // a new model starts with an empty "What is this part for?" (a restored session brings its own back below)
+    if (!restore) $('purpose').value = '';
     Object.assign(state, { file: info, result: null, objects: null, objPlan: null, compare: null, rotations: {}, checks: [], orientObj: null, assemblyChoice: null, blockersOn: false, remixApplied: false, swapUndo: null });
     resetRemix(); swReset();
     state.slots = initialSlots(info.filaments);
@@ -1546,6 +1548,7 @@ function renderOrientation() {
       <input type="radio" name="orient" value="${esc(o.id)}" ${on ? 'checked' : ''}>
       <span class="t">${esc(o.isCurrent ? 'As placed in the file' : o.label)}</span>
       <span class="m">${o.overhangCm2} cm² overhang, ${o.contactCm2} cm² on the bed, ${o.heightMm} mm (${inch(o.heightMm)} in) tall${o.fits ? '' : ', too big'}</span>
+      ${o.look ? `<span class="look ${esc(o.look.level)}">${o.look.level === 'good' ? '✓' : '⚠'} Look: ${esc(o.look.text)}</span>` : ''}
     </label>`;
   }).join('');
   $('orientList').querySelectorAll('input').forEach(inp => inp.onchange = () => {
@@ -3137,7 +3140,7 @@ function firstSetup() {
 // "?" tips: plain-language explanations next to sections
 const TIPS = {
   toolheads: 'A toolhead (T1, T2…) is a nozzle that melts and lays down one filament. Single-nozzle printers use T1 for everything. Set each to the filament you’ll load: PLA is easiest and most common, PETG is tougher and handles heat better, TPU is flexible.',
-  orientation: 'How the model sits on the bed changes a lot: parts printed over thin air (“overhangs”) need supports, and a model touching the bed with a large flat area sticks better and won’t tip over. “Lowest risk” is the app’s pick.',
+  orientation: 'How the model sits on the bed changes a lot: parts printed over thin air (“overhangs”) need supports, and a model touching the bed with a large flat area sticks better and won’t tip over. Each choice also says what it does to the look: the top and sides people see should print smooth, not on supports, so a figure is never flipped upside down just to save support underneath. “Lowest risk” is the app’s pick.',
   goal: 'Quality prints thinner layers, so surfaces look smoother but the print takes longer. Speed prints thicker layers: much faster, with more visible lines. The middle is a good everyday choice.',
 };
 function showTip(btn) {

@@ -91,6 +91,10 @@ How a model sits on the bed changes everything. Parts printed over thin air (**o
 
 1. Click **Overhangs** above the model. **Red** areas would print over thin air.
 2. Look at the **Orientation** list. Each option shows its overhang area, how much touches the bed and its height. **"lowest risk"** is the app's pick.
+   Each option also has a **Look** line: whether the top and sides people see print smooth, as designed, or how much of
+   them would be printed on supports (rough, with support marks). The app takes the way the file is placed as the
+   way the model is displayed, and never picks flipping a figure or statue upside down just to save support
+   underneath: the hidden underside can take supports, the visible top shouldn't.
 3. Click an option to try it. The model turns in the 3D view.
 
 | Before: saved lying down, lots of red | After: "Stood upright · lowest risk" |

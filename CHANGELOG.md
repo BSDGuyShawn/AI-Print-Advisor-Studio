@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.37.6
+- **Orientation keeps the visible top looking good.** Each orientation now has a **Look** line: whether the top and
+  sides people see print smooth, as designed, or how much of them would be printed on supports (rough, support
+  marks). Supports on the visible top or sides count much more than supports on the hidden underside, so the app no
+  longer suggests flipping a figure, statue or bust upside down (or onto its side) just to save some support
+  underneath. The AI is told the same: how the print looks comes first.
+- **Opening a model clears "What is this part for?"**, so text written for the last model isn't used for the new one
+  (a restored session still brings its own text back).
+
 ## 2.37.5
 - **Updates go straight to the newest version.** Check for updates / Install and restart now always installs the
   newest release, however many versions behind you are, instead of a version found earlier (at launch or the day

@@ -77,6 +77,7 @@ You receive: geometry measured from the mesh (after any orientation already appl
 How to decide:
 - Ground every recommendation in this evidence. Slicer warnings (e.g. "floating cantilever") are authoritative.
 - Orientation: choose an option id only when it is clearly better (less overhang without becoming unstable, i.e. enough bed contact). Options flagged unstable touch the bed along a line or point.
+- How the print LOOKS comes first. The file's placement is usually how the model is displayed (check the images), so its top and sides are what people see; the underside usually is not. visibleTopOnSupportsCm2 / visibleSidesOnSupportsCm2 say how much of those seen surfaces an option would print on supports (rough, support scars, drooping). Never recommend flipping a figure, statue, animal, bust or other display piece upside down (or onto its face) to save support underneath: that ruins the head, back and top people look at. Fewer supports on a hidden underside is the right trade; supports on the visible top is not. Only recommend such an orientation for a functional part where looks don't matter, and say what it does to the look.
 - Respect the slider, but never recommend something likely to fail. Speeds above a filament's max volumetric speed are capped by the slicer, so raising them saves nothing; the hotend caps at ~32 mm³/s.
 - Materials: PLA prints cool and fast with strong cooling; PETG on textured PEI wants ~235-255 °C, 70-80 °C bed, 30-60% fan, and slower outer walls; don't iron PETG unless quality is the explicit goal. With mixed materials, mention the shared bed temperature and that PLA and PETG bond poorly (useful for support interfaces, bad for multi-material parts that must hold together).
 - Multi-color on the U1: no flushing between colors. The prime tower costs time and filament (see its share in the slice results); suggest trimming it rather than disabling it unless ooze is clearly not a concern.
@@ -120,7 +121,7 @@ function buildUserContent(p) {
         flatTopAreaCm2: o.flatTopAreaCm2, heightToBaseRatio: o.heightToBaseRatio, smallestDimensionMm: o.smallestDimensionMm,
         perObjectOverrides: o.overrides, modifierParts: o.modifierParts,
         orientationApplied: o.rotation ? 'yes (measurements above are for the new orientation)' : 'no',
-        orientationOptions: require('./orient').shortlist(o.orientationOptions || [], 5).map(x => ({ id: x.id, label: x.isCurrent ? 'As placed in the file' : x.label, overhangCm2: x.overhangCm2, bedContactCm2: x.contactCm2, heightMm: x.heightMm, unstable: x.unstable, fits: x.fits })),
+        orientationOptions: require('./orient').shortlist(o.orientationOptions || [], 5).map(x => ({ id: x.id, label: x.isCurrent ? 'As placed in the file' : x.label, overhangCm2: x.overhangCm2, visibleTopOnSupportsCm2: x.visibleTopCm2, visibleSidesOnSupportsCm2: x.visibleSideCm2, look: x.look && x.look.text, bedContactCm2: x.contactCm2, heightMm: x.heightMm, unstable: x.unstable, fits: x.fits })),
       })),
     },
     originalSlice: originalSlice ? {

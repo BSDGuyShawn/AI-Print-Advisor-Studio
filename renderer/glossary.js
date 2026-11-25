@@ -274,7 +274,7 @@ const TERMS = [
     short: 'A failed print where the model came loose and the printer kept going, leaving a tangle of loose plastic that looks like spaghetti.', more: 'It almost always starts with a first layer that didn’t stick.' },
   { id: 'orientation', title: 'Orientation', pic: 'orientation', match: ['orientation', 'orientations', 'orient', 'oriented'],
     short: 'How the model is turned before printing: which side faces down on the bed. The same model can need lots of supports one way and none another way.',
-    more: 'The app scores every way and suggests the “lowest risk” one.' },
+    more: 'The app scores every way and suggests the “lowest risk” one, keeping the top and sides people see off supports.' },
   { id: 'seam', title: 'Seam', pic: 'seam', match: ['seam', 'seams', 'z seam', 'z-seam'],
     short: 'Each layer’s outline starts and ends at one spot, leaving a tiny bump. Stacked up, these bumps form a faint vertical line called the seam.', more: 'The slicer can hide it in a corner or at the back.' },
   { id: 'ironing', title: 'Ironing', pic: 'ironing', match: ['ironing', 'ironed'],

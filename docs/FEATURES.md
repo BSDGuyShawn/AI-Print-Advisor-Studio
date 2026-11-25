@@ -10,6 +10,8 @@ Everything AI 3D Print Advisor Studio can do, in one list. New to 3D printing? S
 - **Overhang view**: red where the model would print over thin air, orange where it's borderline.
 - **Measurements**: size in mm and inches, volume, overhang area, how much touches the bed, how stable it is, number of colors, flat tops.
 - **Orientation finder**: scores every way to place the model and marks the **lowest risk** one. Click to try each.
+  Each option says what it does to the look (the visible top and sides printed smooth, or on supports), and the pick
+  keeps a display piece's top off supports instead of flipping it to save support underneath.
 - **Safety checks**: catches settings that wouldn't work (temperatures, cooling, supports, flow) and fixes many automatically.
 - **Heavy-model fix**: very detailed models that would slice slowly can be simplified with one click (undoable).
 - **"These parts fit together"**: keeps sizes exactly as designed for snap-fit and multi-part models.

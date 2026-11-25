@@ -257,6 +257,10 @@ dialog::backdrop { background: rgb(10 20 30 / .45); }
 .orient-opt input { margin: 2px 0 0; accent-color: var(--accent); }
 .orient-opt .t { font-weight: 600; }
 .orient-opt .m { grid-column: 2; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.orient-opt .look { grid-column: 2; display: block; font-size: 12px; margin-top: 2px; }
+.orient-opt .look.good { color: var(--ok); }
+.orient-opt .look.fair { color: var(--warn); }
+.orient-opt .look.bad { color: var(--danger); }
 .orient-opt.best .t::after { content: " · lowest risk"; color: var(--ok); font-weight: 500; }
 .orient-opt.unstable .m::after { content: " · needs support from the bed"; color: var(--warn); }
 .orient-opt[aria-checked="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
