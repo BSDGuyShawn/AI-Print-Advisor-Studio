@@ -3414,7 +3414,8 @@ api.onUpdateAvailable(info => {
   UPDATE.info = info; $('updateBtn').classList.remove('hidden');
   if (!busy.size && !document.querySelector('dialog[open]')) showUpdate(info);
 });
-api.onUpdateProgress(({ stage, pct }) => {
+api.onUpdateProgress(({ stage, pct, version }) => {
+  if (version) $('updTitle').textContent = `Installing version ${version}`;
   $('updProgress').classList.remove('hidden');
   $('updProgress').querySelector('.bar span').style.width = `${stage === 'download' ? pct : 100}%`;
   $('updProgress').querySelector('.label').textContent = stage === 'download' ? `Downloading… ${pct}%` : stage === 'unpack' ? 'Unpacking…' : 'Restarting with the new version…';

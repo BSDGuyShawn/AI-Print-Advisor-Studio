@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.37.5
+- **Updates go straight to the newest version.** Check for updates / Install and restart now always installs the
+  newest release, however many versions behind you are, instead of a version found earlier (at launch or the day
+  before) that a newer release has since replaced. The update window shows which version it's installing.
+
 ## 2.37.4
 - **Accent lights in the photo settings** too (under **⇲ Adjust**): the lights in the photo (Christmas tree lights,
   candle flames, the fire, lamps) are picked out and keep shining when you switch to **Evening** or **Night**, while

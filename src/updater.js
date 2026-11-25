@@ -21,7 +21,7 @@ const parts = (v) => String(v || '').replace(/^v/i, '').split(/[.-]/).slice(0, 3
 function newer(a, b) { const x = parts(a), y = parts(b); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i]; return false; }
 
 async function getJson(fetch, url) {
-  const r = await fetch(url, { headers: UA });
+  const r = await fetch(url, { headers: UA, cache: 'no-store' });
   if (!r.ok) throw new Error(r.status === 403 ? 'GitHub is limiting requests right now. Try again in an hour.' : `GitHub answered ${r.status}.`);
   return r.json();
 }
@@ -38,16 +38,30 @@ function changesSince(changelog, current) {
   return out.map(s => ({ ...s, text: s.text.trim() }));
 }
 
+const winZip = (rel) => (rel.assets || []).find(a => /win-x64\.zip$/i.test(a.name) && !/demo/i.test(a.name));
+// The newest release by version number, whatever is in between: every published (non-draft, non-pre-release)
+// release with a Windows download is a candidate, so an update always goes straight to the newest one.
+async function newestRelease(fetch) {
+  let list = [];
+  try { list = await getJson(fetch, `https://api.github.com/repos/${REPO}/releases?per_page=30`); } catch {}
+  const ok = (Array.isArray(list) ? list : []).filter(r => r && !r.draft && !r.prerelease && r.tag_name && winZip(r));
+  let best = ok.reduce((m, r) => (!m || newer(r.tag_name, m.tag_name) ? r : m), null);
+  // GitHub's own "latest" too, in case the list was cut short or unavailable
+  try { const l = await getJson(fetch, `https://api.github.com/repos/${REPO}/releases/latest`); if (l && l.tag_name && (!best || newer(l.tag_name, best.tag_name))) best = l; }
+  catch (e) { if (!best) throw e; }
+  return best || {};
+}
+
 async function check({ fetch, current }) {
-  const rel = await getJson(fetch, `https://api.github.com/repos/${REPO}/releases/latest`);
+  const rel = await newestRelease(fetch);
   const latest = String(rel.tag_name || '').replace(/^v/i, '');
-  const zip = (rel.assets || []).find(a => /win-x64\.zip$/i.test(a.name) && !/demo/i.test(a.name));
+  const zip = winZip(rel);
   const sums = (rel.assets || []).find(a => /^SHA256SUMS/i.test(a.name));
   const info = { current, latest, available: !!latest && newer(latest, current), page: rel.html_url, publishedAt: rel.published_at,
     zip: zip ? { name: zip.name, url: zip.browser_download_url, size: zip.size } : null, sumsUrl: sums ? sums.browser_download_url : null, notes: [] };
   if (!info.available) return info;
   try {
-    const r = await fetch(`https://raw.githubusercontent.com/${REPO}/${rel.tag_name}/CHANGELOG.md`, { headers: { 'User-Agent': UA['User-Agent'] } });
+    const r = await fetch(`https://raw.githubusercontent.com/${REPO}/${rel.tag_name}/CHANGELOG.md`, { headers: { 'User-Agent': UA['User-Agent'] }, cache: 'no-store' });
     if (r.ok) info.notes = changesSince(await r.text(), current);
   } catch {}
   if (!info.notes.length && rel.body) info.notes = [{ version: latest, text: String(rel.body).trim() }];
@@ -95,7 +109,7 @@ async function install({ fetch, info, execPath, title, pid, onProgress }) {
   try { await fsp.writeFile(probe, 'ok'); await fsp.unlink(probe); }
   catch { throw new Error(`The app can’t write to its folder (${L.root}), so it can’t update itself. Move the folder somewhere you own (e.g. Documents), or download the new version by hand.`); }
 
-  const sumsText = await (await fetch(info.sumsUrl, { headers: { 'User-Agent': UA['User-Agent'] } })).text();
+  const sumsText = await (await fetch(info.sumsUrl, { headers: { 'User-Agent': UA['User-Agent'] }, cache: 'no-store' })).text();
   const want = (sumsText.split(/\r?\n/).map(l => /^([0-9a-f]{64})\s+\*?(.+)$/i.exec(l.trim())).find(m => m && m[2].trim() === info.zip.name) || [])[1];
   if (!want) throw new Error('The release’s checksum list doesn’t include the download, so it wasn’t installed.');
 
@@ -169,4 +183,4 @@ function runHandOver(bat) {
   child.unref();
 }
 
-module.exports = { check, install, runHandOver, installLayout, newer, changesSince, REPO };
+module.exports = { check, install, runHandOver, installLayout, newer, changesSince, newestRelease, REPO };

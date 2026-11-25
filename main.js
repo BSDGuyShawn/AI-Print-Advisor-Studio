@@ -151,8 +151,11 @@ ipcMain.handle('update-check', async () => updateCheck());
 ipcMain.handle('update-skip', async (_e, version) => { const cfg = await readConfig(); cfg.updateSkip = version || null; await writeConfig(cfg); return true; });
 ipcMain.handle('update-install', async () => {
   if (UPD.installing) throw new Error('Already updating.');
-  const info = UPD.info && UPD.info.available ? UPD.info : await updateCheck();
+  // always ask GitHub again: a check from earlier (at launch, or yesterday) may name a release that has since been
+  // replaced by a newer one, and the update should go straight to the newest version
+  const info = await updateCheck();
   if (!info.available) throw new Error('You already have the newest version.');
+  if (win && !win.isDestroyed()) win.webContents.send('update-progress', { stage: 'download', pct: 0, version: info.latest });
   UPD.installing = true;
   try {
     const send = (stage, p) => win && !win.isDestroyed() && win.webContents.send('update-progress', { stage, pct: Math.round(100 * p) });
