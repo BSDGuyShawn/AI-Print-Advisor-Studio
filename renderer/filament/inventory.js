@@ -360,7 +360,7 @@ function render() {
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'view-' + ui.view));
   $('#filterBar').style.display = ['inventory','spools'].includes(ui.view) ? '' : 'none';
   if (['inventory','spools'].includes(ui.view)) renderFilters(fil);
-  ({ inventory:renderInventory, spools:renderSpools, dashboard:renderDashboard, settings:renderSettings })[ui.view](fil);
+  ({ inventory:renderInventory, spools:renderSpools, dashboard:renderDashboard, gaps:renderGaps, settings:renderSettings })[ui.view](fil);
 }
 
 function renderFilters(fil) {
@@ -1220,8 +1220,8 @@ function printLabels(ids) {
 // ======================================================================
 function clearFilters() { Object.assign(ui, { q:'', type:'All', brand:'', finish:'', fams:[], status:'stock', loc:'' }); persistUI(); render(); }
 function go(view) { ui.view = view; history.replaceState(null, "", "#" + view); persistUI(); render(); window.scrollTo(0, 0); }
-window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (['inventory','spools','dashboard','settings'].includes(v)) go(v); });
-if (['inventory','spools','dashboard','settings'].includes(location.hash.slice(1))) ui.view = location.hash.slice(1);
+window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (['inventory','spools','dashboard','gaps','settings'].includes(v)) go(v); });
+if (['inventory','spools','dashboard','gaps','settings'].includes(location.hash.slice(1))) ui.view = location.hash.slice(1);
 
 $('#q').addEventListener('input', e => { ui.q = e.target.value; persistUI(); render(); });
 $('#typeSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; ui.type = b.dataset.type; persistUI(); render(); });
@@ -1773,13 +1773,13 @@ async function findProductPages(list) {
   return { pages: call.input.products, cost };
 }
 // A store image -> small JPEG data URL kept with the filament (works offline, survives the store changing its site).
-async function photoFromUrl(src) {
+async function photoFromUrl(src, px = PHOTO_PX) {
   const u = new URL(src.startsWith('//') ? 'https:' + src : src);
   if (u.hostname === 'cdn.shopify.com' || u.hostname.endsWith('.shopify.com')) u.searchParams.set('width', '800');   // Shopify's image CDN: ask for a smaller copy
   const img = await api.filamentFetch({ url: u.href, as: 'image' });   // fetched by the app (no browser CORS limits)
   const bytes = Uint8Array.from(atob(img.base64), c => c.charCodeAt(0));
   const bmp = await createImageBitmap(new Blob([bytes], { type: img.type }));
-  const s = Math.min(1, PHOTO_PX / Math.max(bmp.width, bmp.height));
+  const s = Math.min(1, px / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas'); c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
   const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(bmp, 0, 0, c.width, c.height);
   bmp.close?.();
@@ -2018,6 +2018,208 @@ document.addEventListener('keydown', e => {
     e.preventDefault(); if (!['inventory','spools'].includes(ui.view)) go('inventory'); $('#q').focus();
   }
 });
+
+// ======================================================================
+// Color gaps: holes in the on-hand colors (renderer/filament/gaps.js, free) and, on request, products that fill
+// them (Claude searches Amazon first, then the makers' own stores; the app opens every link to check it and fetches
+// the product photo). The last report is kept in this browser so it isn't paid for twice.
+// ======================================================================
+const GAP_KEY = 'fil-gap-report', GAP_TOP = 10;
+const GAP = { busy: false, step: '', err: '' };
+let gapReport = null; try { gapReport = JSON.parse(localStorage.getItem(GAP_KEY) || 'null'); } catch {}
+const gapMat = () => ui.gapMat || 'PLA';
+const gapFins = () => Array.isArray(ui.gapFins) ? ui.gapFins : FINISHES.slice();
+const gapSig = () => JSON.stringify([gapMat(), [...gapFins()].sort()]);
+const gapOwned = fil => fil.filter(f => f.qty > 0 && f.type === gapMat() && gapFins().includes(f.finish));
+const gapFind = fil => ColorGaps.findGaps(gapOwned(fil).map(f => ({ hex: f.hex, name: `${f.brand} ${f.line} ${f.color}`.replace(/\s+/g, ' ') })), { max: 15 });
+function gapFinText() {
+  const fins = gapFins();
+  return fins.length === FINISHES.length ? 'any finish (plain/standard preferred)' : fins.length === 1 ? `${fins[0]} finish` : `one of these finishes: ${fins.join(', ')}`;
+}
+
+function renderGaps(fil) {
+  const owned = gapOwned(fil);
+  const res = gapFind(fil);
+  const mats = [...new Set([...FIL_TYPES.filter(t => t !== 'Other'), ...fil.filter(f => f.qty > 0).map(f => f.type)])];
+  const rep = gapReport && gapReport.sig === gapSig() ? gapReport : null;
+  const top = res.gaps.slice(0, GAP_TOP);
+  const topFill = top.reduce((t, g) => t + g.fills, 0);
+  const est = [0.08 * top.length, 0.25 * top.length];
+  const prodsFor = g => rep && (rep.items.find(it => it.hex === g.hex) || {}).products;
+  $('#view-gaps').innerHTML = `
+    <div class="section">
+      <h2>Color gaps <small>where the colors you have on hand leave holes, and which colors would fill the most</small></h2>
+      <div class="panel gap-filters">
+        <label>Material <select class="sel" id="gapMat">${mats.map(t => `<option ${t === gapMat() ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
+        <div class="gap-fins"><b>Finishes</b>
+          ${FINISHES.map(x => `<label class="gap-fin"><input type="checkbox" data-gapfin="${esc(x)}" ${gapFins().includes(x) ? 'checked' : ''}> ${esc(x)}</label>`).join('')}
+          <button class="btn small" data-gapall="1">All</button><button class="btn small" data-gapall="0">None</button>
+        </div>
+      </div>
+      <div class="panel gap-yours"><h3>Your ${esc(gapMat())} on hand <small>${owned.length} filament${owned.length === 1 ? '' : 's'} in the chosen finishes${res.owned > owned.length ? ` · ${res.owned} colors (multicolor spools count each color)` : ''}</small></h3>
+        <div class="gap-chips">${owned.length ? owned.map(f => `<span class="gap-chip" data-tip="${esc(`${f.brand} ${f.line} ${f.color} · ${f.finish}`)}">${itemSwatch(f, '')}</span>`).join('') : '<span class="muted">None on hand, so every color is a gap.</span>'}</div>
+      </div>
+      ${!res.gaps.length ? `<div class="empty" style="padding:40px 20px">No medium or large color gaps in your ${esc(gapMat())}: every color has something you own close to it.</div>` : `
+      <div class="panel gap-search">
+        <div><b>${res.gaps.length} gap${res.gaps.length === 1 ? '' : 's'} found.</b> The top ${top.length} would fill <b>${Math.round(topFill * 100)}%</b> of the color range you’re missing.</div>
+        ${GAP.busy ? `<div class="gap-busy"><span class="spin"></span> ${esc(GAP.step)}</div>`
+          : `<div class="row-btns"><button class="btn primary" id="gapFind">${rep ? 'Search again' : 'Find products'} for the top ${top.length}</button>
+             <span class="muted">Claude searches Amazon first, then the makers’ own stores: about ${fmt$(est[0])}–${fmt$(est[1])} with your API key. The app opens every link to check it.</span></div>`}
+        ${GAP.err ? `<div class="gap-err">${esc(GAP.err)}</div>` : ''}
+        ${rep ? `<div class="muted small">Products found ${esc(fmtDate(rep.at.slice(0, 10)))}${rep.cost ? ` · cost ${fmt$(rep.cost)}` : ''}. Prices change; check the store before buying.</div>` : ''}
+      </div>
+      <ol class="gap-list">${res.gaps.map((g, i) => gapRow(g, i, prodsFor(g), i < top.length)).join('')}</ol>`}
+    </div>`;
+}
+function gapRow(g, i, prods, inTop) {
+  const pct = Math.round(g.fills * 1000) / 10;
+  const near = g.nearest ? `Closest you have: <span class="dot" style="width:12px;height:12px;vertical-align:-1px;background:${esc(g.nearest.hex)}"></span> ${esc(g.nearest.name)} <span class="muted">(ΔE ${g.nearest.deltaE}: ${g.nearest.deltaE >= ColorGaps.LARGE ? 'a different color' : 'a noticeably different shade'})</span>` : 'You have nothing close.';
+  return `<li class="gap-row">
+    <div class="gap-head">
+      <span class="gap-sw" style="background:${esc(g.hex)}" data-tip="${esc(g.hex)}"></span>
+      <div class="grow">
+        <div><b>#${i + 1} · ${esc(g.words[0].toUpperCase() + g.words.slice(1))}</b> <span class="badge ${g.size === 'large' ? 'crit' : 'warn'}">${g.size === 'large' ? 'Large gap' : 'Medium gap'}</span></div>
+        <div class="gap-fill"><div class="track"><div class="fill" style="width:${Math.min(100, pct * 4)}%;background:${esc(g.hex)}"></div></div><span>Fills <b>${pct}%</b> of the missing color range</span></div>
+        <div class="muted small">${near}</div>
+      </div>
+    </div>
+    ${prods ? (prods.length ? `<div class="gap-prods">${prods.map(gapProduct).join('')}</div>` : '<div class="muted small gap-none">No product with a working link was found for this color.</div>')
+      : inTop ? '' : '<div class="muted small gap-none">Outside the top 10, so not searched.</div>'}
+  </li>`;
+}
+function gapProduct(p) {
+  const check = p.link === 'ok' ? `<span class="gap-ok" title="The app opened this page and it works">✓ Link checked</span>`
+    : `<span class="gap-unchk" title="The store blocks automatic checks, so the app couldn’t open it. The search found it.">Link not checked</span>`;
+  return `<div class="gap-prod">
+    ${p.photo ? `<button class="gap-thumb" data-gapimg="${esc(p.photo)}" title="Click to enlarge"><img src="${esc(p.photo)}" alt=""></button>` : `<span class="gap-thumb none">No photo</span>`}
+    <div class="grow">
+      <a href="${esc(p.url)}" target="_blank" rel="noopener"><b>${esc(p.title)}</b> ↗</a>
+      <div class="small">${esc(p.brand)}${p.color_name ? ` · ${esc(p.color_name)}` : ''}${p.finish ? ` · ${esc(p.finish)}` : ''}</div>
+      <div class="small"><b>${p.price_usd != null ? fmt$(p.price_usd) : 'Price not seen'}</b> at ${esc(p.store)} · <span class="muted">${esc({ exact: 'exact color', close: 'close color', approximate: 'nearest color found' }[p.match] || p.match)}</span>${p.unavailable ? ' · <span class="gap-err">shows as unavailable</span>' : ''}</div>
+      <div class="small">${check}${p.note ? ` <span class="muted">${esc(p.note)}</span>` : ''}</div>
+    </div>
+  </div>`;
+}
+
+const GAP_TOOL = {
+  name: 'report_gap_products', strict: true,
+  description: 'Report the products you found for each numbered color. Call this once, at the end, with every item number.',
+  input_schema: { type:'object', additionalProperties:false, required:['items'], properties:{
+    items:{ type:'array', items:{ type:'object', additionalProperties:false, required:['item', 'products'], properties:{
+      item:{ type:'integer' },
+      products:{ type:'array', items:{ type:'object', additionalProperties:false,
+        required:['title', 'brand', 'store', 'url', 'price_usd', 'color_name', 'finish', 'image_url', 'match', 'note'], properties:{
+          title:{ type:'string' }, brand:{ type:'string' }, store:{ type:'string' }, url:{ type:'string' }, price_usd:nullable('number'),
+          color_name:{ type:'string' }, finish:{ type:'string' }, image_url:nullable('string'),
+          match:{ type:'string', enum:['exact', 'close', 'approximate'] }, note:nullable('string') } } } } } } } },
+};
+const GAP_SYSTEM = `You help someone fill the gaps in their 3D-printer filament color collection. For each numbered color, find 1 to 3 real, currently sold 1.75 mm filament spools (1 kg preferred) in the given material and finish whose color is as close as possible to the target color.
+
+Where to look: Amazon first (amazon.com product pages). Then the manufacturers' own online stores (for example Bambu Lab, Polymaker, eSUN, Elegoo, SUNLU, Overture, Prusament, Jayo, Kingroon, Sovol, Creality) and other well-known filament shops. Use web search, and web fetch to open product pages and check them.
+
+Rules:
+- url must be the page of that exact product (the right color) that you actually saw in this task: a product page, never a search, category or review page. For Amazon use https://www.amazon.com/dp/<ASIN>.
+- price_usd: the price for one spool that you saw in this task (split multi-packs and say so in note), or null if you didn't see one. Never guess.
+- image_url: the product's main photo if you saw its address (on Amazon an https://m.media-amazon.com/images/I/... address; on a store, its image address), else null.
+- Check the color from the product's color name, photos and description; match says how close it is to the target (exact, close or approximate). The material and finish must be right.
+- Don't list the same product for two colors. Prefer well-known brands and well-reviewed listings.
+When you're done, call report_gap_products once with every item.`;
+
+// Open a product link the way a browser would: 'ok' (the page works), 'broken' (gone / not found) or 'unchecked'
+// (the store blocks automatic checks, e.g. Amazon's robot check).
+async function gapLink(url) {
+  let u; try { u = new URL(url); } catch { return { state: 'broken' }; }
+  if (u.protocol !== 'https:') return { state: 'broken' };
+  try {
+    const html = await api.filamentFetch({ url: u.href, as: 'text' });
+    if (/validateCaptcha|Type the characters you see|Robot Check|api-services-support@amazon\.com/i.test(html)) return { state: 'unchecked' };
+    if (/<title>[^<]*(page not found|404|not found)[^<]*<\/title>/i.test(html) || /Sorry! We couldn['’]t find that page/i.test(html)) return { state: 'broken' };
+    const amazon = /(^|\.)amazon\./i.test(u.hostname);
+    return { state: 'ok', html, unavailable: amazon && /id=["']availability["'][\s\S]{0,600}(Currently unavailable|We don['’]t know when or if this item will be back)/i.test(html) };
+  } catch (e) { return { state: /HTTP (404|410)\b/.test(String(e.message)) ? 'broken' : 'unchecked' }; }
+}
+// The product photo: the address Claude saw, else the page's own main picture (Amazon's hi-res image, og:image),
+// else a Shopify store's photo for that color. Kept as a small JPEG (800 px) so it can be enlarged.
+async function gapPhoto(p, html) {
+  const tries = [];
+  if (p.image_url) tries.push(p.image_url);
+  if (html) {
+    const m = /"hiRes"\s*:\s*"(https:[^"]+)"/.exec(html) || /data-old-hires=["'](https:[^"']+)["']/.exec(html) || /id=["']landingImage["'][^>]+src=["'](https:[^"']+)["']/.exec(html)
+      || /<meta[^>]+(?:property|name)=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i.exec(html) || /<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']og:image["']/i.exec(html);
+    if (m) { try { tries.push(new URL(m[1].replace(/&amp;/g, '&'), p.url).href); } catch {} }
+  }
+  for (const src of tries) { try { return await photoFromUrl(src, 800); } catch {} }
+  if (/\/products\//.test(p.url)) { try { const r = await storePhoto(p.url, p.color_name, p.color_name); if (r) return r.photo; } catch {} }
+  return null;
+}
+async function findGapProducts() {
+  if (GAP.busy) return;
+  const top = gapFind(allFilaments()).gaps.slice(0, GAP_TOP);
+  if (!top.length) return;
+  GAP.err = '';
+  if (!await refreshKey()) { GAP.err = 'Add your Anthropic API key in Settings first (the gear at the top right).'; render(); return; }
+  const sig = gapSig(), mat = gapMat(), finTxt = gapFinText();
+  GAP.busy = true; GAP.step = `Claude is searching Amazon and filament stores for ${top.length} colors (this takes a few minutes)…`; render();
+  try {
+    const messages = [{ role:'user', content: `Material: ${mat}. Finish: ${finTxt}.\nFind filament for each of these colors:\n`
+      + top.map((g, i) => `${i + 1}. ${g.words} (target ${g.hex})${g.nearest ? `; they already have ${g.nearest.name} (${g.nearest.hex}), so it must look clearly different from that` : ''}`).join('\n') }];
+    let resp, cost = 0;
+    for (let turn = 0; turn < 6; turn++) {   // long searches pause (pause_turn); send the work back to continue
+      resp = await callClaude({
+        model: CLAUDE_MODEL, max_tokens: 16000,
+        betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
+        output_config: { effort: 'medium' }, system: GAP_SYSTEM, messages,
+        tools: [{ type:'web_search_20260209', name:'web_search', max_uses: Math.min(30, top.length * 3 + 2) },
+                { type:'web_fetch_20260209', name:'web_fetch', max_uses: Math.min(30, top.length * 3) }, GAP_TOOL],
+      });
+      const u = resp.usage || {};
+      cost += ((u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0) * 0.1) * CLAUDE_PRICE.in / 1e6
+            + (u.output_tokens || 0) * CLAUDE_PRICE.out / 1e6 + (u.server_tool_use?.web_search_requests || 0) * SEARCH_PRICE;
+      if (resp.stop_reason !== 'pause_turn') break;
+      messages.push({ role:'assistant', content: resp.content });
+    }
+    if (resp.stop_reason === 'refusal') throw new Error('Claude declined this search.');
+    const call = resp.content.find(b => b.type === 'tool_use' && b.name === GAP_TOOL.name);
+    if (!call || !Array.isArray(call.input?.items)) throw new Error('Claude didn’t come back with products. Try again.');
+    const all = call.input.items.flatMap(it => (it.products || []).map(p => ({ ...p, item: it.item | 0 }))).filter(p => top[p.item - 1] && /^https:\/\//i.test(p.url || ''));
+    let done = 0;
+    GAP.step = `Checking ${all.length} links and fetching product photos…`; render();
+    const queue = all.slice();
+    await Promise.all(Array.from({ length: 4 }, async () => {
+      for (let p; (p = queue.shift());) {
+        const l = await gapLink(p.url);
+        p.link = l.state; p.unavailable = !!l.unavailable;
+        if (l.state !== 'broken') p.photo = await gapPhoto(p, l.html).catch(() => null);
+        GAP.step = `Checking links and fetching product photos (${++done} of ${all.length})…`; if (ui.view === 'gaps') render();
+      }
+    }));
+    const rank = p => (p.link === 'ok' ? 0 : 2) + (p.unavailable ? 1 : 0) + ({ exact: 0, close: 0.3, approximate: 0.6 }[p.match] ?? 0.6);
+    gapReport = { sig, at: new Date().toISOString(), cost: Math.round(cost * 100) / 100,
+      items: top.map((g, i) => ({ hex: g.hex, products: all.filter(p => p.item === i + 1 && p.link !== 'broken').sort((a, b) => rank(a) - rank(b))
+        .map(({ item, ...p }) => p) })) };
+    const broken = all.filter(p => p.link === 'broken').length;
+    try { localStorage.setItem(GAP_KEY, JSON.stringify(gapReport)); }
+    catch { try { localStorage.setItem(GAP_KEY, JSON.stringify({ ...gapReport, items: gapReport.items.map(it => ({ ...it, products: it.products.map(p => ({ ...p, photo: null })) })) })); } catch {} }
+    toast(`Found ${gapReport.items.reduce((t, it) => t + it.products.length, 0)} products${broken ? ` (${broken} with a broken link left out)` : ''} · cost ${fmt$(cost)}`, 6000);
+  } catch (e) { GAP.err = e.message || String(e); }
+  finally { GAP.busy = false; GAP.step = ''; if (ui.view === 'gaps') render(); }
+}
+$('#view-gaps').addEventListener('change', e => {
+  if (e.target.id === 'gapMat') { ui.gapMat = e.target.value; persistUI(); render(); }
+  else if (e.target.dataset.gapfin) {
+    const set = new Set(gapFins()); if (e.target.checked) set.add(e.target.dataset.gapfin); else set.delete(e.target.dataset.gapfin);
+    ui.gapFins = FINISHES.filter(x => set.has(x)); persistUI(); render();
+  }
+});
+$('#view-gaps').addEventListener('click', e => {
+  const all = e.target.closest('[data-gapall]');
+  if (all) { ui.gapFins = all.dataset.gapall === '1' ? FINISHES.slice() : []; persistUI(); render(); return; }
+  if (e.target.closest('#gapFind')) { findGapProducts(); return; }
+  const th = e.target.closest('[data-gapimg]');
+  if (th) { $('#gapBox img').src = th.dataset.gapimg; $('#gapBox').classList.add('open'); }
+});
+$('#gapBox').addEventListener('click', () => $('#gapBox').classList.remove('open'));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#gapBox').classList.remove('open'); });
 
 render();
 startTagScanning();

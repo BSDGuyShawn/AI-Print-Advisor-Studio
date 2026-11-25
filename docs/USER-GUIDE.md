@@ -265,6 +265,14 @@ Open a filament: **Prices** shows the **average per roll** (everything you paid 
 - **camelcamelcamel** and **Keepa** open Amazon's price history for the product you ordered (or a search, for filament you didn't buy on Amazon).
 - The **Dashboard** lists filaments found cheaper than you last paid (checks from the last 30 days) and can check everything running low at once.
 
+### Color gaps: which colors to buy next
+
+The **Color gaps** tab looks at the colors you have **on hand** (filament with at least one spool left) and finds where they leave medium or large holes: colors nothing you own comes close to. Pick the **material** (gaps are found per material: a red PETG doesn't fill a gap in your PLA) and tick the **finishes** to include (Matte, Silk, Galaxy, Gradient, Color Change and so on): only those count as owned, and only those are searched for. Gradient and multicolor spools count each of their colors.
+
+The gaps are ranked by **how much of the missing color range** each one would fill, with its size (medium or large) and the closest color you already have. Finding them is free and works offline. Each pick takes the ones before it into account, so the list doesn't suggest three nearly identical greens.
+
+**Find products for the top 10** has Claude search Amazon first, then the makers' own stores and other filament shops, for real 1.75 mm spools in those colors, using your API key (the estimated cost is shown on the button's line; the real cost after). The app then **opens every link itself**: products whose page is gone are left out, the rest say **✓ Link checked** (or **Link not checked** when the store blocks automatic checks). Each product shows its price as seen during the search, the store, how close its color is, and its **photo**: click the photo to enlarge it. The last report is kept, so reopening the tab costs nothing. Prices change; check the store before buying.
+
 ## 12. When a print fails: the troubleshooter
 
 1. Open the **Print history** tab (your printers must be added in Settings).

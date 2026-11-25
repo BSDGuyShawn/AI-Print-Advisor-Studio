@@ -62,6 +62,7 @@ Everything AI 3D Print Advisor Studio can do, in one list. New to 3D printing? S
 - **Add from a screenshot** of any order page, receipt or product page (read by Claude), with photos cut out automatically and **missing photos found online** from the brand's store.
 - **Manufacturer print settings** and Snapmaker Orca presets for many brands.
 - **Prices**: average cost per roll, a graph of what you paid for each roll, and **Check prices now** (Claude web search) for current prices and sales below what you last paid; camelcamelcamel and Keepa links for Amazon price history.
+- **Color gaps**: finds the medium and large holes in your on-hand colors (per material, filtered by finish), ranks the colors that would fill the most, and (Claude web search, Amazon first) finds products for the top 10 with checked links, prices and product photos.
 - **Dashboard**: totals, value, average per roll, what's running low, what's cheaper now, what's loaded in each printer.
 - **Labels** for spools (Avery sheet or label printer), **CSV export**, **backups** (daily automatic copies too).
 - **What to buy**: when a model needs colors you don't own, the closest ones you have and shop links.

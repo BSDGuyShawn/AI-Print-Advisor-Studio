@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.38.0
+- **Color gaps** (new tab on the Filament screen): finds where the colors you have on hand leave medium or large
+  holes, per material, with checkboxes for the finishes to include (Matte, Silk, Galaxy, Gradient, Color Change…).
+  The colors that would fill the most are ranked by how much of the missing color range each fills, with the
+  closest color you already have. Free and offline. **Find products for the top 10** has Claude search Amazon
+  first, then the makers' own stores (cost shown first, your API key); the app opens every link to check it, leaves
+  out broken ones, and shows each product's price, store, color match and photo (click to enlarge). The last
+  report is kept.
+
 ## 2.37.7
 - **Toolheads lock while you're not changing them.** Every change to a toolhead's material or color used to set
   the whole project up again straight away, which slowed the computer and made it hard to keep picking colors.

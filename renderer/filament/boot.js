@@ -25,6 +25,7 @@
     return;
   }
   try {
+    await script('gaps.js');
     await script('inventory.js');
     if (phone) await script('/phone/phone-ui.js');
   } catch (e) { fail(e.message || e); }

@@ -74,6 +74,29 @@ select.sel{padding:8px 10px;border:1px solid var(--border);border-radius:10px;ba
 
 main{padding:14px 0 60px}
 .view{display:none}.view.on{display:block}
+.gap-filters{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+.gap-filters select{margin-left:6px}
+.gap-fins{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+.gap-fin{display:inline-flex;gap:4px;align-items:center;font-size:14px}
+.gap-yours{margin-bottom:12px}.gap-chips{display:flex;flex-wrap:wrap;gap:4px}.gap-chip .dot{width:22px;height:22px}
+.gap-search{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}.gap-search .row-btns{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.gap-busy{display:flex;gap:8px;align-items:center}.gap-err{color:var(--danger)}
+.spin{width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;display:inline-block;animation:gapspin 1s linear infinite}
+@keyframes gapspin{to{transform:rotate(360deg)}}
+.gap-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px}
+.gap-row{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.gap-head{display:flex;gap:12px;align-items:flex-start}.gap-head .grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.gap-sw{width:52px;height:52px;border-radius:10px;border:1px solid var(--border);flex:none}
+.gap-fill{display:flex;gap:8px;align-items:center;font-size:13px}.gap-fill .track{flex:0 0 140px;height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden}.gap-fill .fill{height:100%}
+.gap-prods{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-top:10px}
+.gap-prod{display:flex;gap:10px;border:1px solid var(--border);border-radius:10px;padding:8px;background:var(--surface-2)}
+.gap-prod .grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}.gap-prod a{color:var(--text)}
+.gap-thumb{flex:none;width:84px;height:84px;border:1px solid var(--border);border-radius:8px;background:#fff;padding:0;cursor:zoom-in;overflow:hidden;display:grid;place-items:center}
+.gap-thumb img{width:100%;height:100%;object-fit:contain}.gap-thumb.none{cursor:default;font-size:11px;color:#888}
+.gap-ok{color:var(--petg);font-weight:600}.gap-unchk{color:var(--warn)}.gap-none{margin-top:8px}
+.gap-row .small,.gap-prod .small,.gap-search .small{font-size:13px}
+.gap-box{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:200;place-items:center;cursor:zoom-out}
+.gap-box.open{display:grid}.gap-box img{max-width:92vw;max-height:90vh;background:#fff;border-radius:10px}
 .section h2{font-size:22px;margin:20px 0 4px;display:flex;align-items:baseline;gap:10px}
 .section h2 small{font-size:14px;color:var(--muted);font-weight:500}
 .section h3{font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:18px 0 8px;display:flex;align-items:center;gap:8px}
@@ -326,6 +349,7 @@ table.review .note{font-size:11.5px;color:var(--warn);margin-top:3px}
         <a href="#inventory" data-view="inventory">Inventory</a>
         <a href="#spools" data-view="spools">Spools</a>
         <a href="#dashboard" data-view="dashboard">Dashboard</a>
+        <a href="#gaps" data-view="gaps">Color gaps</a>
         <a href="#settings" data-view="settings">Settings</a>
       </nav>
       <div class="stats" id="stats"></div>
@@ -372,6 +396,8 @@ table.review .note{font-size:11.5px;color:var(--warn);margin-top:3px}
   <section class="view" id="view-inventory"></section>
   <section class="view" id="view-spools"></section>
   <section class="view" id="view-dashboard"></section>
+  <section class="view" id="view-gaps"></section>
+  <div id="gapBox" class="gap-box" role="dialog" aria-label="Product photo"><img alt=""></div>
   <section class="view" id="view-settings"></section>
 </main>
 
