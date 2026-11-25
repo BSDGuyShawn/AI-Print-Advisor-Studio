@@ -73,15 +73,18 @@
       const d = $('#dlg');
       d.className = 'dlg' + (wide ? ' wide' : '');
       d.innerHTML = html;
+      // returnValue stays from the dialog before unless cleared: closing this one with Esc or the window would
+      // otherwise answer with the last one's "yes"
+      d.returnValue = '';
       d.onclose = () => { d.innerHTML = ''; resolve(d.returnValue); };
-      d.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => d.close(b.dataset.close)));
+      d.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', (e) => { if (e.isTrusted) d.close(b.dataset.close); }));
       d.showModal();
       if (onOpen) onOpen(d);
     });
   }
   async function confirmBox(title, body, okLabel = 'OK', danger = false) {
     const v = await dialog(`<div class="db"><h3>${esc(title)}</h3><div class="muted">${body}</div></div>
-      <div class="da"><button class="btn ghost" data-close="no">Keep going</button>
+      <div class="da"><button class="btn ghost" data-close="no" autofocus>Keep going</button>
       <button class="btn ${danger ? 'danger' : 'primary'}" data-close="yes">${esc(okLabel)}</button></div>`);
     return v === 'yes';
   }
@@ -322,7 +325,7 @@
   function controlsBind(box, pid) {
     box.addEventListener('click', async (ev) => {
       const b = ev.target.closest('button[data-act]');
-      if (!b || b.disabled) return;
+      if (!b || b.disabled || !ev.isTrusted) return;
       const p = store.printers[pid], a = b.dataset.act;
       const name = esc(jobName(p.status && p.status.print_stats && p.status.print_stats.filename));
       const t = {

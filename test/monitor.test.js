@@ -98,6 +98,30 @@ test('controls only when they make sense', async () => {
   await assert.rejects(w.control('explode'), /Unknown/);
 });
 
+test('watching never pauses, resumes or cancels by itself; a pause from elsewhere is said to be not from this app', async () => {
+  const logs = [];
+  const conn = new FakeConn();
+  const sent = [];
+  const w = new PrinterWatch({ printer: { id: 'p1', name: 'U1 #1', url: 'printer.test' }, dataDir: tmp(),
+    settings: () => ({ safe_bed_c: 40, snapshot_progress: 99, preview_minutes: 5, units: 'F', milestones: [] }),
+    notify: async (event, o) => { sent.push({ event, ...o }); }, previews: null, log: (m) => logs.push(m),
+    connectionFactory: () => conn, cameraFactory: () => new FakeCam() });
+  conn.set({ print_stats: { state: 'printing', filename: 'Deer.gcode', print_duration: 60, info: { current_layer: 5, total_layer: 100 } }, heater_bed: { temperature: 60 } });
+  await tick();
+  // the monitor window opening and closing (camera on and off), reconnecting, a whole print going by
+  w.camera.start(); w.camera.stop(); conn.emit('update', new Set(['print_stats']));
+  conn.set({ display_status: { progress: 0.5 } }); await tick();
+  conn.set({ print_stats: { state: 'paused' } }); await tick();
+  assert.deepStrictEqual(conn.calls.filter(c => c.startsWith('printer.print.')), [], 'no print command without the user');
+  assert.ok(logs.some(l => /paused by something other than this app/.test(l)));
+  assert.match(sent.find(s => s.event === 'paused').message, /not by this app/);
+  // the user's own, confirmed pause is said to be the app's
+  conn.set({ print_stats: { state: 'printing' } }); await tick();
+  await w.control('pause');
+  conn.set({ print_stats: { state: 'paused' } }); await tick();
+  assert.deepStrictEqual(conn.calls.filter(c => c.startsWith('printer.print.')), ['printer.print.pause']);
+  assert.ok(logs.some(l => /paused by this app \(the user confirmed Pause\)/.test(l)));
+});
 test('G-code preview: layers, colors per toolhead, how far the printer got', () => {
   const g = ['; filament_colour = #FF0000;#00FF00', 'G90', 'M83', 'T0', 'G1 Z0.2', 'G1 X0 Y0', 'G1 X10 Y0 E1', 'G1 X10 Y10 E1', 'T1', 'G1 Z0.4', 'G1 X0 Y10 E1', ';TYPE:Support', 'G1 X0 Y0 E1', 'G1 Z0.6 X5 Y5', 'G1 X6 Y6 E0.5'].join('\n');
   const p = parseGcode(g);

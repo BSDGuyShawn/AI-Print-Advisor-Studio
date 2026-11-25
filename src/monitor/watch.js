@@ -220,7 +220,12 @@ class PrinterWatch extends EventEmitter {
     if (bed != null) job.bed_peak_c = Math.round((bed <= safe ? bed : Math.max(bed, job.bed_peak_c || bed)) * 10) / 10;
 
     if (prev != null && prev !== st) {
-      if (st === 'paused') await this.notify('paused', `${name}: print paused`, jobTitle(fname));
+      if (st === 'paused') {
+        // say who paused it: this app only ever pauses after the user confirms in the Print Monitor
+        const ours = this.lastControl && this.lastControl.action === 'pause' && Date.now() - this.lastControl.ts < 120000;
+        this.log(`print monitor ${name}: print paused ${ours ? 'by this app (the user confirmed Pause)' : 'by something other than this app (the printer’s screen, another app or Home Assistant, a filament sensor…)'}`);
+        await this.notify('paused', `${name}: print paused`, `${jobTitle(fname)}${ours ? '' : ' (not by this app)'}`);
+      }
       else if (st === 'error') await this.notify('error', `${name}: printer error`, ps.message || 'The print stopped with an error. Check the printer.', { priority: 'high' });
       else if (st === 'cancelled') await this.notify('cancelled', `${name}: print cancelled`, jobTitle(fname));
       else if (st === 'complete') {
@@ -394,7 +399,8 @@ class PrinterWatch extends EventEmitter {
     if (!method) throw new Error('Unknown action.');
     const allowed = { pause: ['printing'], resume: ['paused'], cancel: ['printing', 'paused'] }[action];
     if (!allowed.includes(this.state)) throw new Error(`Can’t ${action} while the printer is ${this.state}.`);
-    this.log(`print monitor ${this.cfg.name}: ${action} requested`);
+    this.log(`print monitor ${this.cfg.name}: ${action} requested (confirmed by the user in the Print Monitor)`);
+    this.lastControl = { action, ts: Date.now() };
     return this.conn.call(method, undefined, 30000);
   }
 }

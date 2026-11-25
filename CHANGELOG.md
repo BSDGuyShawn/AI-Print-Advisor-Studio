@@ -6,6 +6,12 @@
   Now you click **✎ Change toolheads**, make all your changes (the 3D view recolors as you go), and click **✓ Done**:
   the project is set up once. **Cancel** puts them back as they were. Recommendations, Save, Slice and Send apply
   any unfinished changes first, so nothing runs with the old toolheads.
+- **Print Monitor: Pause, Resume and Cancel can only happen after you confirm.** Fixed a flaw in the confirmation
+  box: closing it with Esc (or the window) could count as the "yes" from an earlier box. Now only a real click on
+  the box's own Pause / Resume / Cancel button sends anything, "Keep going" is the default, and the controls ignore
+  anything but a real click. (The app's log showed the pause reported on 25 November wasn't sent by this app.)
+- **When a print pauses, the monitor says whether this app did it.** The alert and the log say "not by this app"
+  when the pause came from somewhere else (the printer's screen, another program or Home Assistant, a sensor).
 
 ## 2.37.6
 - **Clean-release supports** (new option under "What is this part for?"): prints the support interface in the

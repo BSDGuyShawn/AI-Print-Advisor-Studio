@@ -324,7 +324,7 @@ Add your printers in **Settings → Printers** (the address you'd type to open F
 
 - **The bar on the main screen** shows each printer: a thumbnail of the print, how far along it is, the time left and when it ends. Click one to open it in the Print Monitor.
 - **Print Monitor** (top bar, or the bar's button) shows every printer side by side with its camera, and a full page per printer: the live camera; the slicer's picture, the whole model from another angle and the model filling in layer by layer; progress and layers; when it started, the time printed, the time left, the estimated duration and when it ends; each toolhead's temperature and filament color (the one printing is marked ACTIVE); bed, enclosure, fans and speed; the filament used compared with everyday things; and the printer's lifetime totals.
-- **Pause, Resume and Cancel** each ask first. Cancel can't be undone.
+- **Pause, Resume and Cancel** each ask first, and nothing is sent unless you click the box's Pause, Resume or Cancel button (Esc or "Keep going" sends nothing). The app never pauses, resumes or cancels a print on its own. Cancel can't be undone. If a print pauses and this app didn't do it, the alert says "not by this app".
 - **Timelapses** plays and downloads the printer's timelapse videos. **Final photos** keeps a photo of every print, taken at 99 % (before the bed drops) on your PC.
 - **Time left** is the slicer's plan scaled to how fast this print is really going (like Home Assistant's and Mainsail's "Print ETA"), so it stays right when a print runs slower or faster than the slicer guessed. While the printer is heating, the slicer's estimate is shown.
 
