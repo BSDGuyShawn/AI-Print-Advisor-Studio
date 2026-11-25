@@ -1,5 +1,6 @@
 // Builds the request to Claude and validates the structured answer.
 const { FIT_RULE } = require('./fit');
+const { PROMPT_RULE: INTERFACE_RULE } = require('./interface');
 const { CATALOG, BY_KEY, validate, normalize } = require('./orca-settings');
 
 const PRINTER = {
@@ -90,6 +91,8 @@ How to decide:
 
 ${FIT_RULE}
 
+${INTERFACE_RULE}
+
 Keep print time reasonable: unless the slider is at the quality end or the stated purpose needs real strength, avoid changes that together more than double the print time. Heavy infill or many extra solid layers rarely help decorative pieces or snap-fit parts; say so instead of adding them.
 
 Allowed settings${compact ? '' : ' (curated ones first)'}:
@@ -110,6 +113,7 @@ function buildUserContent(p) {
     recipe: { name: recipe.name, about: recipe.about, appliedChanges: recipeChanges.map(c => `${c.key}=${c.value}`) },
     purpose: purpose || '(not specified)',
     partsFitTogether: !!p.assembly,
+    ...(p.supportInterface ? { supportInterface: p.supportInterface } : {}),
     materialsByToolhead: materials,
     projectPreparation: baseNotes,
     plate: {

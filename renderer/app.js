@@ -125,6 +125,7 @@ async function openFile(promise, restore = null, opts = {}) {
     if (state.tsCarry && state.tsCarry.filePath !== info.filePath) state.tsCarry = null;
     // a new model starts with an empty "What is this part for?" (a restored session brings its own back below)
     if (!restore) $('purpose').value = '';
+    if (!restore) { state.ifaceChoice = null; $('ifaceOpposite').checked = false; }
     Object.assign(state, { file: info, result: null, objects: null, objPlan: null, compare: null, rotations: {}, checks: [], orientObj: null, assemblyChoice: null, blockersOn: false, remixApplied: false, swapUndo: null });
     resetRemix(); swReset();
     state.slots = initialSlots(info.filaments);
@@ -138,6 +139,7 @@ async function openFile(promise, restore = null, opts = {}) {
       if (restore.slider != null) { $('slider').value = restore.slider; drawLayers(); }
       $('purpose').value = restore.purpose || '';
       state.assemblyChoice = restore.assemblyChoice ?? null;
+      state.ifaceChoice = restore.ifaceChoice ?? null;
       state.blockersOn = !!restore.blockersOn;
     }
     await prepare();
@@ -185,7 +187,7 @@ function sessionPayload() {
     comparePicks: state.comparePicks ? [...state.comparePicks] : null,
     compareIds: state.compare && state.compare.results ? state.compare.results.filter(r => r.ok).map(r => r.id) : [], tab,
     selectedVariant: state.selectedVariant || null,
-    assemblyChoice: state.assemblyChoice ?? null,
+    assemblyChoice: state.assemblyChoice ?? null, ifaceChoice: state.ifaceChoice ?? null,
     blockersOn: !!state.blockersOn,
   };
 }
@@ -1222,9 +1224,29 @@ function presetOptions(sel) {
   return Object.entries(groups).map(([g, list]) => `<optgroup label="${esc(g)}">${list.map(f => `<option value="${esc(f.name)}" ${f.name === sel ? 'selected' : ''}>${esc(f.name.replace(/ @U1.*$/, ''))}</option>`).join('')}</optgroup>`).join('');
 }
 const toolheadCount = () => Math.max(1, Number(state.info?.toolheads) || 4);
+// "Clean-release supports": the support interface in the opposite material (PLA under PETG, PETG under PLA), offered
+// when the model is PLA or PETG; usable once the other material is loaded in a toolhead (src/interface.js)
+const slotMaterials = () => state.slots.map(s => ({ toolhead: `T${s.slot}`, material: s.type }));
+async function refreshIface() {
+  const row = $('ifaceRow'), box = $('ifaceOpposite');
+  let plan = null;
+  try { plan = state.analysis ? await api.supportInterfacePlan({ materials: slotMaterials(), used: state.analysis.totals.extrudersUsed || [] }) : null; } catch {}
+  state.ifacePlan = plan;
+  if (!plan || (!plan.ok && !plan.modelFamily)) { row.classList.add('hidden'); return; }
+  row.classList.remove('hidden');
+  box.disabled = !plan.ok;
+  if (!plan.ok) box.checked = false;
+  else if (state.ifaceChoice != null) box.checked = state.ifaceChoice;
+  $('ifaceText').textContent = plan.ok
+    ? `${plan.interfaceFamily} on T${plan.slot} under the ${plan.modelFamily} model: the two don’t stick, so supports lift off and leave an almost flawless underside. The app sets wide, flat, solid support roofs with no gap (the model can’t grip the roof, so small tips would let it slide). Costs some tool changes and a prime tower.`
+    : plan.reason;
+}
+$('ifaceOpposite').addEventListener('change', () => { state.ifaceChoice = $('ifaceOpposite').checked; saveSession(); });
+const ifaceOn = () => !!(state.ifacePlan && state.ifacePlan.ok && $('ifaceOpposite').checked);
 function renderMaterials() {
   const used = new Set(state.analysis?.totals.extrudersUsed || [1]);
   const usePresets = state.info.filaments.length > 0;
+  refreshIface();
   $('materials').innerHTML = state.slots.map(s => `
     <div class="mat-row ${used.has(s.slot) ? '' : 'unused'}" data-slot="${s.slot}">
       <label class="swatch" style="background:${esc(s.color)}" title="Filament color"><input type="color" value="${esc(s.color)}"></label>
@@ -1238,7 +1260,7 @@ function renderMaterials() {
     row.querySelector('select').onchange = e => {
       if (usePresets) { slot.preset = e.target.value; slot.type = (state.info.filaments.find(f => f.name === slot.preset) || {}).type || slot.type; }
       else slot.type = e.target.value;
-      reprepare();
+      refreshIface(); reprepare();
     };
     row.querySelector('input[type=color]').oninput = e => { slot.color = e.target.value; row.querySelector('.swatch').style.background = slot.color; pushColors(); refreshMixRows(); };
     row.querySelector('input[type=color]').onchange = () => reprepare();
@@ -1616,7 +1638,7 @@ $('analyzeBtn').onclick = async () => {
     const used = state.analysis.totals.extrudersUsed || [];
     const materials = state.slots.map(s => ({ toolhead: `T${s.slot}`, material: s.type, preset: s.preset || null, color: s.color, usedOnThisPlate: used.includes(s.slot) }));
     setBusy('claude', 'Getting recommendations…');
-    let res = await api.runClaude({ plateIndex: state.plateIndex, slider: Number($('slider').value), materials, purpose: $('purpose').value.trim(), renders, assembly: $('fitTogether').checked });
+    let res = await api.runClaude({ plateIndex: state.plateIndex, slider: Number($('slider').value), materials, purpose: $('purpose').value.trim(), renders, assembly: $('fitTogether').checked, oppositeInterface: ifaceOn() });
     if (res && res.chat) {
       body.innerHTML = '<div class="working"><p>Waiting for the chatbot’s answer. Follow the steps in the window that just opened.</p></div>';
       res = await askChatbot(res);
@@ -2153,7 +2175,7 @@ async function runAllObjects() {
     const used = state.analysis.totals.extrudersUsed || [];
     const materials = state.slots.map(s => ({ toolhead: `T${s.slot}`, material: s.type, preset: s.preset || null, color: s.color, usedOnThisPlate: used.includes(s.slot) }));
     setBusy('claude', 'Analyzing every object…');
-    const res = await api.runClaudeObjects({ plateIndex: state.plateIndex, slider: Number($('slider').value), materials, purpose: $('purpose').value.trim(), assembly: $('fitTogether').checked });
+    const res = await api.runClaudeObjects({ plateIndex: state.plateIndex, slider: Number($('slider').value), materials, purpose: $('purpose').value.trim(), assembly: $('fitTogether').checked, oppositeInterface: ifaceOn() });
     setObjectsResult(res);
     const failed = res.results.filter(r => r.error);
     if (failed.length) toast(`${failed.length} object${failed.length === 1 ? '' : 's'} couldn’t be analyzed (${failed.map(r => r.group.name).join(', ')}); they keep the file’s settings.`, 9000);

@@ -22,6 +22,17 @@ const { U1Printer, withThumbnails, safeRemoteName } = require('./src/printer');
 const { parseConfigBlock, objectsFromGcode, headerInfo, regionWindow, supportPaths } = require('./src/gcodeinfo');
 const { describe } = require('./src/describe');
 const { looksLikeAssembly, guardFit, FIT_CRITICAL } = require('./src/fit');
+const Iface = require('./src/interface');
+// "Support interface in the opposite material": the toolheads as { slot, type }, and the choice for this plate
+const ifaceSlots = (materials) => (materials || []).map(m => ({ slot: parseInt(String(m.toolhead || '').replace(/\D/g, ''), 10), type: m.material }));
+function ifaceFor(args, analysis) {
+  if (!args.oppositeInterface) return null;
+  const pick = Iface.pickInterface(ifaceSlots(args.materials), analysis.totals.extrudersUsed || []);
+  if (!pick.ok) throw new Error(pick.reason);
+  return pick;
+}
+const ifacePayload = (p) => p ? { modelMaterial: p.modelFamily, interfaceMaterial: p.interfaceFamily, interfaceToolhead: `T${p.slot}` } : null;
+ipcMain.handle('support-interface-plan', (_e, { materials, used }) => Iface.pickInterface(ifaceSlots(materials), used || []));
 const { heuristicName, aiName } = require('./src/naming');
 const { analyzeGcode } = require('./src/gcode');
 const { troubleshoot, ISSUES, systemPrompt: tsSystemPrompt, buildContent: tsBuildContent } = require('./src/troubleshoot');
@@ -694,7 +705,8 @@ const fitNote = (dropped) => `Not changed because these parts must fit together:
 function finishRecommendation(ctx, plan) {
   // assemblies: the app itself refuses fit-critical changes, whatever the AI said
   const { kept, dropped } = guardFit(plan.settings || [], ctx.assembly);
-  plan = { ...plan, settings: kept };
+  // clean-release supports: the app's support settings, whatever the AI said
+  plan = { ...plan, settings: Iface.enforceInterface(kept, ctx.iface, S.base.settings) };
   if (dropped.length) plan.manual_steps = [...(plan.manual_steps || []), fitNote(dropped)];
   const { rows, unknown } = buildRows(plan, ctx.rChanges, S.base.settings);
   const orientationChoices = [];
@@ -745,6 +757,7 @@ ipcMain.handle('run-claude', async (_e, args) => { await S.ready;
   S.assembly = assembly;
   // quality presets can differ in walls/line widths between Snapmaker's profiles: not for assemblies
   if (assembly) { const g = guardFit(rChanges, true); rChanges.splice(0, rChanges.length, ...g.kept); }
+  const iface = ifaceFor(args, analysis);
 
   let originalSlice = null, sliceError = null;
   if (S.slicer && S.slicer.available) {
@@ -772,9 +785,9 @@ ipcMain.handle('run-claude', async (_e, args) => { await S.ready;
   const payload = {
     fileName: path.basename(S.filePath), analysis, settings: settingsSummary({ projectSettings: S.base.settings }),
     slider: args.slider, recipe, recipeChanges: rChanges, materials: args.materials, purpose: args.purpose, images, assembly,
-    originalSlice, history, baseNotes: S.base.notes,
+    originalSlice, history, baseNotes: S.base.notes, supportInterface: ifacePayload(iface),
   };
-  const ctx = { analysis, recipe, rChanges, originalSlice, sliceError, history, slider: args.slider, purpose: args.purpose, assembly };
+  const ctx = { analysis, recipe, rChanges, originalSlice, sliceError, history, slider: args.slider, purpose: args.purpose, assembly, iface };
   if (chatMode) {
     progress('Preparing the prompt for your chatbot…');
     return chatHandoff('recs', ctx, buildSystemPrompt({ compact: true }), buildUserContent(compactPayload(payload)));
@@ -817,6 +830,7 @@ ipcMain.handle('run-claude-objects', async (_e, args) => { await S.ready;
   const assembly = typeof args.assembly === 'boolean' ? args.assembly : projectLooksLikeAssembly(proj);
   S.assembly = assembly;
   if (assembly) { const g = guardFit(rChanges, true); rChanges.splice(0, rChanges.length, ...g.kept); }
+  const iface = ifaceFor(args, analyzePlate(proj, args.plateIndex || 1, S.rotations, { orient: false }));
   // one real slice per plate (shared by its objects), the print history once
   const slices = {}, sliceErrors = {};
   const plates = [...new Set(groups.map(g => g.lead.plate))];
@@ -848,12 +862,12 @@ ipcMain.handle('run-claude-objects', async (_e, args) => { await S.ready;
     const one = { ...analysis, objects: [focus] };
     const thumb = S.original.images.find(i => i.name === `Metadata/plate_${g.lead.plate}.png`);
     const images = thumb && thumb.base64 !== PLACEHOLDER_BASE64 ? [{ label: `Slicer thumbnail of plate ${g.lead.plate}`, mediaType: thumb.mediaType, base64: thumb.base64 }] : [];
-    const ctx = { analysis: one, recipe, rChanges, originalSlice: slices[g.lead.plate] || null, sliceError: sliceErrors[g.lead.plate] || null, history, slider: args.slider, purpose: args.purpose, assembly };
+    const ctx = { analysis: one, recipe, rChanges, originalSlice: slices[g.lead.plate] || null, sliceError: sliceErrors[g.lead.plate] || null, history, slider: args.slider, purpose: args.purpose, assembly, iface };
     progress(`Claude is analyzing ${g.name}${g.count > 1 ? ` (×${g.count})` : ''}: object ${++started} of ${groups.length}…`);
     try {
       const plan = await analyzeWithClaude({ apiKey, model, fileName: path.basename(S.filePath), analysis: one, settings: settingsSummary({ projectSettings: S.base.settings }),
         slider: args.slider, recipe, recipeChanges: rChanges, materials: args.materials, purpose: args.purpose, images, assembly,
-        originalSlice: ctx.originalSlice, history, baseNotes: S.base.notes, focus: { name: g.name, copies: g.count, others } });
+        originalSlice: ctx.originalSlice, history, baseNotes: S.base.notes, supportInterface: ifacePayload(iface), focus: { name: g.name, copies: g.count, others } });
       return { group: g, result: finishRecommendation(ctx, plan) };
     } catch (e) { return { group: g, error: e.message }; }
   });

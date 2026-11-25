@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld('advisor', {
   recentSessions: () => ipcRenderer.invoke('recent-sessions'),
   discoverPrinters: () => ipcRenderer.invoke('printers-discover'),
   setAssembly: (a) => ipcRenderer.invoke('set-assembly', a),
+  supportInterfacePlan: (a) => ipcRenderer.invoke('support-interface-plan', a),
   fitCritical: () => ipcRenderer.invoke('fit-critical'),
   printName: () => ipcRenderer.invoke('print-name'),
   blockerCheck: (a) => ipcRenderer.invoke('blocker-check', a),

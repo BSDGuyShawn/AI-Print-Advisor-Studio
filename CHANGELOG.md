@@ -1,6 +1,14 @@
 # Changelog
 
 ## 2.37.6
+- **Clean-release supports** (new option under "What is this part for?"): prints the support interface in the
+  opposite material (PETG under a PLA model, PLA under a PETG model), which doesn't stick to the model, so supports
+  lift off and leave an almost flawless underside. The app sets the supports up for it whatever the AI suggests:
+  no gap between roof and model (top and bottom Z distance 0), a solid interlaced roof of 3 layers (and 2 where
+  supports stand on the model), normal grid supports instead of trees (the model would slide off small tips), roofs
+  reaching 1.5 mm past each overhang, a denser support body so roofs don't sag, support for overhangs up to 40°, the
+  support body in the model's own material, and the prime tower on. It's offered for PLA and PETG models and needs
+  the other material loaded in a toolhead (it says so until then). Checked with a real Snapmaker Orca slice.
 - **Orientation keeps the visible top looking good.** Each orientation now has a **Look** line: whether the top and
   sides people see print smooth, as designed, or how much of them would be printed on supports (rough, support
   marks). Supports on the visible top or sides count much more than supports on the hidden underside, so the app no

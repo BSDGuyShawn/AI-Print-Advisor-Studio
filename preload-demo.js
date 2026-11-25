@@ -232,7 +232,7 @@ contextBridge.exposeInMainWorld('advisor', {
   sessionSave: async () => true, sessionGet: async () => null, sessionClear: async () => true,
   sessionExport: blocked('export'), sessionImport: blocked('files'), sessionOpened: async () => null, sessionForgetFile: async () => true, recentSessions: async () => [],
   discoverPrinters: blocked('printers', []),
-  setAssembly: async () => true,
+  setAssembly: async () => true, supportInterfacePlan: async () => null,
   fitCritical: () => replay('fit-critical', []).catch(() => []),
   printName: () => replay('print-name', []).catch(() => null),
   setPrintName: async (n) => { listeners.printName.forEach(cb => cb({ name: n })); return true; },

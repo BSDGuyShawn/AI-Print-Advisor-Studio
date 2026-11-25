@@ -111,6 +111,19 @@ Optionally, tell the app **what the part is for** ("a toy for my kid", "holds we
 
 If the parts snap or glue together, tick **These parts fit together** so the app keeps the designer's sizes exactly.
 
+**Clean-release supports** (PLA or PETG models): tick it to print the support interface, the layers that touch the
+model, in the opposite material: PETG under a PLA model, or PLA under a PETG model. The two don't stick to each
+other, so the supports lift off and the underside comes out almost as smooth as a top surface. Load the other
+material in a free toolhead first; the box explains what's missing until then. Because the model can't grip that
+roof either, the app sets the supports up for it, whatever the AI suggests:
+- no gap between roof and model (top and bottom Z distance 0) and a solid, interlaced roof of 3 layers;
+- normal grid supports, not tree supports (tree tips are small and the model could slide off them), reaching 1.5 mm
+  past each overhang, with a denser body so the roof doesn't sag;
+- support for overhangs up to 40° from flat, so large, gently sloping overhangs rest on the clean roof too;
+- the support body in the model's own material (only the contact layers use the other one), and the prime tower on.
+
+It costs some tool changes and a prime tower, so it's slower and uses a bit more filament.
+
 ---
 
 ## 7. Get recommended settings

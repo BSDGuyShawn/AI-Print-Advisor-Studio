@@ -62,6 +62,11 @@ function compatFixes({ baseSettings, changes = [], customLayering = [], usedSlot
   const ps = JSON.parse(JSON.stringify(baseSettings || {}));
   applyChanges(ps, changes);
   const fix = (key, value, reason) => { fixes.push({ key, value, slot: null, reason, source: 'compat' }); applyChanges(ps, [{ key, value }]); };
+  // supports printed with their own toolheads (e.g. an opposite-material interface) use those toolheads too
+  if (String(first(ps.enable_support)) === '1') {
+    const extra = [ps.support_filament, ps.support_interface_filament].map(v => parseInt(first(v), 10)).filter(n => n > 0);
+    usedSlots = [...new Set([...usedSlots, ...extra])].sort((a, b) => a - b);
+  }
 
   // 1. 100% infill only works with the patterns that are valid top-surface patterns
   const density = num(first(ps.sparse_infill_density));

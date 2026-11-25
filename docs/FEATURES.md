@@ -15,6 +15,9 @@ Everything AI 3D Print Advisor Studio can do, in one list. New to 3D printing? S
 - **Safety checks**: catches settings that wouldn't work (temperatures, cooling, supports, flow) and fixes many automatically.
 - **Heavy-model fix**: very detailed models that would slice slowly can be simplified with one click (undoable).
 - **"These parts fit together"**: keeps sizes exactly as designed for snap-fit and multi-part models.
+- **Clean-release supports**: the support interface in the opposite material (PETG under PLA, PLA under PETG), with
+  supports set up for it (no gap, solid interlaced roofs, wide normal supports, prime tower) so undersides come out
+  almost flawless.
 
 ## AI recommendations
 
