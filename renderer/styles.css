@@ -101,6 +101,13 @@ textarea { resize: vertical; font-size: 14px; }
 .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
 
 /* materials */
+.th-lock { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; }
+.th-lock .btn { padding: 4px 10px; font-size: 12px; }
+.th-lock .th-lock-text { flex: 1 1 100%; color: var(--muted); }
+.th-lock.editing { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.th-lock.editing .th-lock-text { color: inherit; }
+#materials.locked .mat-row select, #materials.locked .mat-row .swatch { opacity: .7; }
+#materials.locked .mat-row .swatch { cursor: not-allowed; }
 .mat-row { display: grid; grid-template-columns: 22px 34px 1fr 24px 24px; align-items: center; gap: 8px; margin-bottom: 6px; }
 .mat-row .sparkle-btn { border: 1px solid transparent; background: none; color: var(--muted); opacity: .45; cursor: pointer; font-size: 15px; line-height: 1; padding: 2px; border-radius: 4px; }
 .mat-row .sparkle-btn:hover { opacity: 1; border-color: var(--line); }

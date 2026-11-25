@@ -71,6 +71,12 @@
 
       <section class="block hidden" id="materialBlock">
         <h2>Toolheads and materials <button class="tip-btn" data-tip="toolheads" aria-label="What is this?">?</button></h2>
+        <div class="th-lock" id="thLock">
+          <span class="th-lock-text" id="thLockText">Locked: changes here set the project up again, so unlock first.</span>
+          <button class="btn small" id="thEditBtn" title="Unlock the toolheads to change materials and colors. Nothing is set up again until you click Done.">✎ Change toolheads</button>
+          <button class="btn small primary hidden" id="thDoneBtn" title="Lock the toolheads and set the project up once with your changes">✓ Done</button>
+          <button class="btn small hidden" id="thCancelBtn" title="Undo the changes made since you unlocked">Cancel</button>
+        </div>
         <div id="materials"></div>
         <div class="fil-cautions hidden" id="matCautions" role="note"></div>
         <p class="slot-warn hidden" id="slotWarn" role="status"></p>

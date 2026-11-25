@@ -980,6 +980,7 @@ async function closeModel() {
 }
 // ---------- export for Bambu Lab printers ----------
 async function openBambuExport(pre = null) {
+  await toolheadsReady();
   if (!state.file) { toast('Open a model first.', 3000); return; }
   const dlg = $('bambuDialog');
   $('bxStatus').textContent = 'Looking for Bambu Studio…'; $('bxPrinter').innerHTML = ''; $('bxExport').disabled = true;
@@ -1164,6 +1165,7 @@ function renderFileInfo() {
 $('plateSelect').onchange = e => { state.plateIndex = Number(e.target.value); state.compare = null; loadPlate(); };
 
 async function prepare() {
+  if (TH.editing) endToolheadEdit();
   $('prepStatus').textContent = state.info.available ? 'Preparing the project for your printer…' : '';
   try {
     const r = await withBusy('prepare', state.info.available ? 'Preparing the project for your printer…' : 'Reading the project…', () => api.prepare(state.slots.map(s => ({ slot: s.slot, type: s.type, preset: s.preset, color: s.color }))));
@@ -1187,7 +1189,7 @@ async function prepare() {
   await loadPlate();
   refreshRecipe();
 }
-const reprepare = debounce(async () => { state.compare = null; saveSession(); await prepare(); if (state.result) { toast('Toolheads changed. Get new recommendations to update the plan.', 5000); refreshChecks(); } }, 500);
+const reprepare = debounce(() => applyToolheads(), 500);
 
 async function loadPlate() {
   const a = await withBusy('measure', 'Measuring the model and scoring orientations…', () => api.analyzePlate({ plateIndex: state.plateIndex, rotations: state.rotations }));
@@ -1243,6 +1245,40 @@ async function refreshIface() {
 }
 $('ifaceOpposite').addEventListener('change', () => { state.ifaceChoice = $('ifaceOpposite').checked; saveSession(); });
 const ifaceOn = () => !!(state.ifacePlan && state.ifacePlan.ok && $('ifaceOpposite').checked);
+// Toolheads are locked by default: changing a material or color sets the whole project up again (slow on big models),
+// so the user unlocks them, makes every change (the 3D view recolors live), and clicks Done to set it up once.
+const TH = { editing: false, before: null };
+const thSnap = () => JSON.stringify(state.slots.map(s => ({ slot: s.slot, type: s.type, preset: s.preset, color: s.color })));
+function renderToolheadLock() {
+  const ed = TH.editing;
+  $('thLock').classList.toggle('editing', ed);
+  $('thLockText').textContent = ed
+    ? 'Unlocked: change materials and colors, add or remove toolheads. The project is set up once, when you click Done.'
+    : 'Locked, so the project isn’t set up again after every little change.';
+  $('thEditBtn').classList.toggle('hidden', ed);
+  $('thDoneBtn').classList.toggle('hidden', !ed);
+  $('thCancelBtn').classList.toggle('hidden', !ed);
+  $('materials').classList.toggle('locked', !ed);
+  $('materials').querySelectorAll('.mat-row[data-slot] select, .mat-row[data-slot] input[type=color], .mat-row[data-slot] .remove').forEach(el => { el.disabled = !ed; });
+  $('materials').querySelectorAll('.mat-row[data-slot] .swatch').forEach(el => { el.title = ed ? 'Filament color' : 'Click ✎ Change toolheads first'; });
+}
+function startToolheadEdit() { TH.editing = true; TH.before = thSnap(); renderMaterials(); }
+// stop editing; true when something changed (the caller sets the project up)
+function endToolheadEdit() { const changed = TH.before != null && TH.before !== thSnap(); TH.editing = false; TH.before = null; renderMaterials(); return changed; }
+// Before anything that uses the set-up project (recommendations, save, slice, send…): apply an open edit first.
+async function toolheadsReady() {
+  if (!TH.editing) return;
+  if (endToolheadEdit()) await applyToolheads();
+}
+async function applyToolheads() { state.compare = null; saveSession(); await prepare(); if (state.result) { toast('Toolheads changed. Get new recommendations to update the plan.', 5000); refreshChecks(); } }
+$('thEditBtn').onclick = () => startToolheadEdit();
+$('thDoneBtn').onclick = () => { if (endToolheadEdit()) applyToolheads(); };
+$('thCancelBtn').onclick = () => {
+  const before = TH.before ? JSON.parse(TH.before) : null;
+  TH.editing = false; TH.before = null;
+  if (before) state.slots = before.map(b => ({ ...(state.slots.find(s => s.slot === b.slot) || {}), ...b }));
+  renderMaterials();
+};
 function renderMaterials() {
   const used = new Set(state.analysis?.totals.extrudersUsed || [1]);
   const usePresets = state.info.filaments.length > 0;
@@ -1260,16 +1296,16 @@ function renderMaterials() {
     row.querySelector('select').onchange = e => {
       if (usePresets) { slot.preset = e.target.value; slot.type = (state.info.filaments.find(f => f.name === slot.preset) || {}).type || slot.type; }
       else slot.type = e.target.value;
-      refreshIface(); reprepare();
+      refreshIface();
     };
     row.querySelector('input[type=color]').oninput = e => { slot.color = e.target.value; row.querySelector('.swatch').style.background = slot.color; pushColors(); refreshMixRows(); };
-    row.querySelector('input[type=color]').onchange = () => reprepare();
     const rm = row.querySelector('.remove');
-    if (rm) rm.onclick = () => { state.slots = state.slots.filter(s => s !== slot); renderMaterials(); reprepare(); };
+    if (rm) rm.onclick = () => { state.slots = state.slots.filter(s => s !== slot); renderMaterials(); };
     row.querySelector('.sparkle-btn').onclick = (e) => openFinishMenu(e.currentTarget, slot);
   });
+  renderToolheadLock();
   renderCautions();
-  $('addSlotBtn').classList.toggle('hidden', state.slots.length >= MAX_FILAMENTS);
+  $('addSlotBtn').classList.toggle('hidden', !TH.editing || state.slots.length >= MAX_FILAMENTS);
   $('addSlotBtn').textContent = state.slots.length >= toolheadCount() ? 'Add a filament' : 'Add a toolhead';
   // more solid filaments than toolheads: allowed, with a warning
   const extra = state.slots.length - toolheadCount();
@@ -1283,7 +1319,7 @@ $('addSlotBtn').onclick = () => {
   if (!free) return;
   state.slots.push({ slot: free, type: 'PLA', preset: matchPreset('PLA'), color: DEFAULT_COLORS[(free - 1) % DEFAULT_COLORS.length] });
   state.slots.sort((x, y) => x.slot - y.slot);
-  renderMaterials(); reprepare();
+  renderMaterials();
 };
 // Snapmaker Orca color mixes in the file: shown under the toolheads (they're printed with those toolheads in turn)
 function mixRowsHtml() {
@@ -1625,6 +1661,7 @@ function renderStats() {
 // ---------- Claude ----------
 $('analyzeBtn').onclick = async () => {
   if (!state.file || state.busy) return;
+  await toolheadsReady();
   if (state.config.aiMode !== 'chat' && !state.config.hasKey) { openSettings(); return; }
   state.busy = true; $('analyzeBtn').disabled = true; showTab('recs');
   const started = Date.now();
@@ -1820,6 +1857,7 @@ function fileThumbs() { try { return viewer.thumbnails([512, 256, 128]); } catch
 
 // variantId: a version from Compare slices; none = the recommendations with the checked rows
 async function save3mf(variantId = null, opts = {}) {
+  await toolheadsReady();
   try {
     const def = variantId ? variantDef(variantId) : null;
     // "no AI": just the conversion and the automatic safety fixes, whatever recommendations are on screen
@@ -1837,6 +1875,7 @@ async function save3mf(variantId = null, opts = {}) {
   } catch (e) { if (opts.quiet) throw e; toast(cleanErr(e), 8000); }
 }
 async function exportPresets() {
+  await toolheadsReady();
   try {
     const r = await api.exportPresets({ changes: selectedChanges(), plateIndex: state.plateIndex, rotations: state.rotations });
     if (!r) return;
@@ -1881,6 +1920,7 @@ function renderVariantPicks() {
 $('sliceBtn').onclick = () => runCompare([...state.comparePicks].filter(p => p !== 'recommended' || state.result));
 
 async function runCompare(ids) {
+  await toolheadsReady();
   if (!state.file || !state.info.available) return;
   const variants = [];
   for (const id of ids) {
@@ -2247,6 +2287,7 @@ async function showSendPreview(job) {
   $('sdPvNote').textContent = `Drag to turn, scroll to zoom. This is the exact file that will be sent${data.thinned ? ' (drawn with fewer points to stay smooth)' : ''}.`;
 }
 async function openSend(variantId) {
+  await toolheadsReady();
   if (!state.file) return;
   { const d = variantDef(variantId); if (!(await fitConfirm([...d.changes, ...Object.values(d.objectChanges || {}).flat()]))) return; }
   if (!state.config.printers || !state.config.printers.length) { toast('Add your printers’ addresses in Settings first.', 5000); openSettings(); return; }
@@ -2850,7 +2891,7 @@ function wordsOn() {
 const sectionOf = (tip) => { const b = document.querySelector(`[data-tip="${tip}"]`); return b ? b.closest('section, .panel, .block') || b.parentElement.parentElement : null; };
 const GUIDE_STEPS = [
   { id: 'open', title: 'Open a 3D model', text: 'Drag a .3mf file onto the window, or click Open 3MF. Files from MakerWorld, Printables and Snapmaker Orca all work. Downloaded a model? It’s usually in your Downloads folder.', target: () => $('dropZone'), until: 'opened', skipIf: () => !!state.file },
-  { id: 'toolheads', title: 'Match your filament', text: 'Each toolhead (T1, T2…) should be set to the filament you’ll actually load. Pick the material (PLA is the most common) and click the color dot to match your spool. Parts of the model use the toolhead shown in the 3D view’s colors.', target: () => sectionOf('toolheads') },
+  { id: 'toolheads', title: 'Match your filament', text: 'Each toolhead (T1, T2…) should be set to the filament you’ll actually load. Click ✎ Change toolheads, pick the material (PLA is the most common), click the color dot to match your spool, then ✓ Done. Parts of the model use the toolhead shown in the 3D view’s colors.', target: () => sectionOf('toolheads') },
   { id: 'inspect', title: 'Look the model over', text: 'Drag on the model to rotate it and scroll to zoom. Click “Overhangs”: red areas would be printed over thin air and need supports. The Orientation list suggests the safest way to place it on the bed.', target: () => $('viewerTools') },
   { id: 'goal', title: 'Choose quality or speed', text: 'Slide toward Quality for smoother, better-looking prints, or toward Speed for faster ones. If you like, say what the part is for (e.g. “display piece” or “holds weight”); the advice takes it into account.', target: () => sectionOf('goal') },
   { id: 'ask', title: 'Get recommended settings', text: 'Click “Get recommended settings”. The app slices your model to measure it, then asks the AI which settings to change and why. It usually takes under a minute.', target: () => $('analyzeBtn'), until: 'analyzed', skipIf: () => !!state.result },
@@ -3161,7 +3202,7 @@ function firstSetup() {
 
 // "?" tips: plain-language explanations next to sections
 const TIPS = {
-  toolheads: 'A toolhead (T1, T2…) is a nozzle that melts and lays down one filament. Single-nozzle printers use T1 for everything. Set each to the filament you’ll load: PLA is easiest and most common, PETG is tougher and handles heat better, TPU is flexible.',
+  toolheads: 'A toolhead (T1, T2…) is a nozzle that melts and lays down one filament. Single-nozzle printers use T1 for everything. Set each to the filament you’ll load: PLA is easiest and most common, PETG is tougher and handles heat better, TPU is flexible. The toolheads are locked so the project isn’t set up again after every little change: click ✎ Change toolheads, make all your changes, then ✓ Done.',
   orientation: 'How the model sits on the bed changes a lot: parts printed over thin air (“overhangs”) need supports, and a model touching the bed with a large flat area sticks better and won’t tip over. Each choice also says what it does to the look: the top and sides people see should print smooth, not on supports, so a figure is never flipped upside down just to save support underneath. “Lowest risk” is the app’s pick.',
   goal: 'Quality prints thinner layers, so surfaces look smoother but the print takes longer. Speed prints thicker layers: much faster, with more visible lines. The middle is a good everyday choice.',
 };

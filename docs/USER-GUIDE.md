@@ -73,7 +73,7 @@ The model appears in the middle. **Drag** to turn it, **scroll** to zoom. Under 
 
 ## 4. Check the toolheads (colors)
 
-On the left, **Toolheads and materials** lists T1 to T4: each toolhead prints one filament. Set each one to the **material** you'll load (PLA is the most common and easiest) and click the **color dot** to match your spool.
+On the left, **Toolheads and materials** lists T1 to T4: each toolhead prints one filament. Click **✎ Change toolheads** to unlock them, set each one to the **material** you'll load (PLA is the most common and easiest), click the **color dot** to match your spool, then click **✓ Done**. The toolheads stay locked otherwise because every change sets the whole project up again, which is slow on big models; while they're unlocked the 3D view recolors as you go and the project is set up only once, when you click Done (**Cancel** puts them back as they were). If you go straight to recommendations, Save or Send while they're unlocked, your changes are applied first.
 
 **See how the filament will look:** the button next to each toolhead's color picks its **finish** for the 3D view: Normal, Galaxy / glitter (sparkly flakes), Silk (glossy, pearly sheen), Matte (flat, no shine), Translucent (see-through), Glow in the dark or Chrome (a mirror finish, the most reflective). It's guessed from the filament's name (e.g. "PLA Silk"), and you can change it. Click **⟳ Spin** above the 3D view to turn the model slowly under the lights, from different angles, so you see how each finish catches the light (drag the view to stop). With a glow-in-the-dark toolhead, **☾ Lights off** darkens the room so you can see it glow.
 

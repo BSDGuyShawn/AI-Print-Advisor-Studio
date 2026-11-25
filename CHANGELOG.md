@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.37.7
+- **Toolheads lock while you're not changing them.** Every change to a toolhead's material or color used to set
+  the whole project up again straight away, which slowed the computer and made it hard to keep picking colors.
+  Now you click **✎ Change toolheads**, make all your changes (the 3D view recolors as you go), and click **✓ Done**:
+  the project is set up once. **Cancel** puts them back as they were. Recommendations, Save, Slice and Send apply
+  any unfinished changes first, so nothing runs with the old toolheads.
+
 ## 2.37.6
 - **Clean-release supports** (new option under "What is this part for?"): prints the support interface in the
   opposite material (PETG under a PLA model, PLA under a PETG model), which doesn't stick to the model, so supports
